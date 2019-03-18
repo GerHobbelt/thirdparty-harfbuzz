@@ -57,7 +57,12 @@ retry:
 
   if (unlikely (!shapers))
   {
+#if !defined(__ORBIS__)
     char *env = getenv ("HB_SHAPER_LIST");
+#else
+    char *env = nullptr;
+#endif
+
     if (!env || !*env) {
       (void) hb_atomic_ptr_cmpexch (&static_shapers, nullptr, &all_shapers[0]);
       return (const hb_shaper_pair_t *) all_shapers;

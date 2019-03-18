@@ -47,9 +47,11 @@ _hb_options_init (void)
   hb_options_union_t u;
   u.i = 0;
   u.opts.initialized = 1;
-
+  
+#if !defined(__ORBIS__)
   char *c = getenv ("HB_OPTIONS");
   u.opts.uniscribe_bug_compatible = c && strstr (c, "uniscribe-bug-compatible");
+#endif
 
   /* This is idempotent and threadsafe. */
   _hb_options = u;
