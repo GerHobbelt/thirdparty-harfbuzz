@@ -59,6 +59,8 @@ if (HB_BUILD_UTILS)
   set (HB_HAVE_FREETYPE ON)
 endif ()
 
+option(HB_BUILD_TEST_EXECUTABLES "Builds the test executables" OFF)
+
 option(HB_HAVE_GOBJECT "Enable GObject Bindings" OFF)
 if (HB_HAVE_GOBJECT)
   set (HB_HAVE_GLIB ON)
@@ -110,6 +112,7 @@ macro (check_funcs) # Similar to AC_CHECK_FUNCS of autotools
     endif ()
   endforeach ()
 endmacro ()
+
 check_funcs(atexit mprotect sysconf getpagesize mmap isatty newlocale strtod_l)
 check_include_file(unistd.h HAVE_UNISTD_H)
 if (${HAVE_UNISTD_H})
@@ -271,7 +274,7 @@ set (subset_project_headers
   ${HB_SUBSET_headers}
 )
 
-
+include(CheckSymbolExists)
 ## Find and include needed header folders and libraries
 if (HB_HAVE_FREETYPE)
   if(HUNTER_ENABLED)
@@ -297,7 +300,20 @@ if (HB_HAVE_FREETYPE)
   set (CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES} ${FREETYPE_INCLUDE_DIRS})
   set (CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES} ${FREETYPE_LIBRARIES})
 
-  check_funcs(FT_Get_Var_Blend_Coordinates FT_Set_Var_Blend_Coordinates FT_Done_MM_Var)
+  check_symbol_exists(FT_Get_Var_Blend_Coordinates "freetype/ftmm.h" HAVE_FT_GET_VAR_BLEND_COORDINATES)
+  if (HAVE_FT_GET_VAR_BLEND_COORDINATES)
+    add_definitions(-DHAVE_FT_GET_VAR_BLEND_COORDINATES)
+  endif ()
+
+  check_function_exists(FT_Set_Var_Blend_Coordinates "freetype/ftmm.h" HAVE_FT_SET_VAR_BLEND_COORDINATES)
+  if (HAVE_FT_SET_VAR_BLEND_COORDINATES)
+    add_definitions(-DHAVE_FT_SET_VAR_BLEND_COORDINATES)
+  endif ()
+
+  check_function_exists(FT_Done_MM_Var "freetype/ftmm.h" HAVE_FT_DONE_MM_VAR)
+  if (HAVE_FT_DONE_MM_VAR)
+    add_definitions(-DHAVE_FT_DONE_MM_VAR)
+  endif ()
 endif ()
 
 if (HB_HAVE_GRAPHITE2)
@@ -881,18 +897,19 @@ if (UNIX AND CMAKE_GENERATOR STREQUAL "Ninja")
   endif ()
 endif ()
 
-
-## src/ executables
-foreach (prog main test test-would-substitute test-size-params test-buffer-serialize hb-ot-tag test-unicode-ranges)
-  set (prog_name ${prog})
-  if (${prog_name} STREQUAL "test")
-    # test can not be used as a valid executable name on cmake, lets special case it
-    set (prog_name test-test)
-  endif ()
-  add_executable(${prog_name} ${PROJECT_SOURCE_DIR}/src/${prog}.cc)
-  target_link_libraries(${prog_name} harfbuzz ${THIRD_PARTY_LIBS})
-endforeach ()
-set_target_properties(hb-ot-tag PROPERTIES COMPILE_FLAGS "-DMAIN")
+if (HB_BUILD_TEST_EXECUTABLES)
+  ## src/ executables
+  foreach (prog main test test-would-substitute test-size-params test-buffer-serialize hb-ot-tag test-unicode-ranges)
+    set (prog_name ${prog})
+    if (${prog_name} STREQUAL "test")
+      # test can not be used as a valid executable name on cmake, lets special case it
+      set (prog_name test-test)
+    endif ()
+    add_executable(${prog_name} ${PROJECT_SOURCE_DIR}/src/${prog}.cc)
+    target_link_libraries(${prog_name} harfbuzz ${THIRD_PARTY_LIBS})
+  endforeach ()
+  set_target_properties(hb-ot-tag PROPERTIES COMPILE_FLAGS "-DMAIN")
+endif()
 
 ## Tests
 if (UNIX OR MINGW)
