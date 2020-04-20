@@ -33,6 +33,8 @@
 #ifndef HB_NO_PRAGMA_GCC_DIAGNOSTIC
 #ifdef _MSC_VER
 #pragma warning( disable: 4068 ) /* Unknown pragma */
+#pragma warning( disable: 4244 ) // warning C4244: '=': conversion from 'T' to 'uint32_t', possible loss of data, etc.
+#pragma warning(disable : 4267)	 // possible loss of data (occurs when compiling for x64)
 #endif
 #if defined(__GNUC__) || defined(__clang__)
 /* Rules:
