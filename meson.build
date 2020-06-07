@@ -41,6 +41,10 @@ if cpp.get_id() == 'msvc'
   # noseh_link_args = ['/SAFESEH:NO']
 endif
 
+add_project_link_arguments(cpp.get_supported_link_arguments([
+  '-Bsymbolic-functions'
+]), language : 'c')
+
 add_project_arguments(cpp.get_supported_arguments([
   '-fno-rtti',
   '-fno-exceptions',
@@ -144,8 +148,6 @@ else
   cairo_ft_dep = dependency('', required: false)
 endif
 
-deps = []
-
 conf = configuration_data()
 incconfig = include_directories('.')
 
@@ -157,33 +159,24 @@ warn_cflags = [
 
 cpp_args = cpp.get_supported_arguments(warn_cflags)
 
-if m_dep.found()
-  deps += [m_dep]
-endif
-
 if glib_dep.found()
   conf.set('HAVE_GLIB', 1)
-  deps += [glib_dep]
 endif
 
 if gobject_dep.found()
   conf.set('HAVE_GOBJECT', 1)
-  deps += [gobject_dep]
 endif
 
 if cairo_dep.found()
   conf.set('HAVE_CAIRO', 1)
-  deps += [cairo_dep]
 endif
 
 if cairo_ft_dep.found()
   conf.set('HAVE_CAIRO_FT', 1)
-  deps += [cairo_ft_dep]
 endif
 
 if graphite2_dep.found()
   conf.set('HAVE_GRAPHITE2', 1)
-  deps += [graphite2_dep]
 endif
 
 if icu_dep.found()
@@ -200,7 +193,6 @@ endif
 
 if freetype_dep.found()
   conf.set('HAVE_FREETYPE', 1)
-  deps += [freetype_dep]
   check_freetype_funcs = [
     ['FT_Get_Var_Blend_Coordinates', {'deps': freetype_dep}],
     ['FT_Set_Var_Blend_Coordinates', {'deps': freetype_dep}],
@@ -219,15 +211,15 @@ endif
 
 if fontconfig_dep.found()
   conf.set('HAVE_FONTCONFIG', 1)
-  deps += [fontconfig_dep]
 endif
 
+gdi_uniscribe_deps = []
 # GDI (uniscribe) (windows)
 if host_machine.system() == 'windows' and not get_option('gdi').disabled()
   # TODO: make nicer once we have https://github.com/mesonbuild/meson/issues/3940
   if cpp.has_header('usp10.h') and cpp.has_header('windows.h')
     foreach usplib : ['usp10', 'gdi32', 'rpcrt4']
-      deps += [cpp.find_library(usplib, required: true)]
+      gdi_uniscribe_deps += cpp.find_library(usplib, required: true)
     endforeach
     conf.set('HAVE_UNISCRIBE', 1)
     conf.set('HAVE_GDI', 1)
@@ -237,9 +229,10 @@ if host_machine.system() == 'windows' and not get_option('gdi').disabled()
 endif
 
 # DirectWrite (windows)
+directwrite_dep = dependency('', required: false)
 if host_machine.system() == 'windows' and not get_option('directwrite').disabled()
   if cpp.has_header('dwrite_1.h')
-    deps += [cpp.find_library('dwrite', required: true)]
+    directwrite_dep = cpp.find_library('dwrite', required: true)
     conf.set('HAVE_DIRECTWRITE', 1)
   elif get_option('directwrite').enabled()
     error('DirectWrite was enabled explicitly, but required header is missing.')
@@ -247,10 +240,11 @@ if host_machine.system() == 'windows' and not get_option('directwrite').disabled
 endif
 
 # CoreText (macOS) - FIXME: untested
+coretext_deps = []
 if host_machine.system() == 'darwin' and not get_option('coretext').disabled()
   app_services_dep = dependency('appleframeworks', modules : ['ApplicationServices'], required: false)
   if cpp.has_type('CTFontRef', prefix: '#include <ApplicationServices/ApplicationServices.h>', dependencies: app_services_dep)
-    deps += [app_services_dep]
+    coretext_deps += [app_services_dep]
     conf.set('HAVE_CORETEXT', 1)
   # On iOS CoreText and CoreGraphics are stand-alone frameworks
   # Check for a different symbol to avoid getting cached result
@@ -259,7 +253,7 @@ if host_machine.system() == 'darwin' and not get_option('coretext').disabled()
     coregraphics_dep = dependency('appleframeworks', modules : ['CoreGraphics'], required: false)
     corefoundation_dep = dependency('appleframeworks', modules : ['CoreFoundation'], required: false)
     if cpp.has_type('CTRunRef', prefix: '#include <CoreText/CoreText.h>', dependencies: [coretext_dep, coregraphics_dep, corefoundation_dep])
-      deps += [coretext_dep, coregraphics_dep, corefoundation_dep]
+      coretext_deps += [coretext_dep, coregraphics_dep, corefoundation_dep]
       conf.set('HAVE_CORETEXT', 1)
     elif get_option('coretext').enabled()
       error('CoreText was enabled explicitly, but required headers or frameworks are missing.')
@@ -268,12 +262,12 @@ if host_machine.system() == 'darwin' and not get_option('coretext').disabled()
 endif
 
 # threads
+thread_dep = dependency('', required: false)
 if host_machine.system() != 'windows'
   thread_dep = dependency('threads', required: false)
 
   if thread_dep.found()
     conf.set('HAVE_PTHREAD', 1)
-    deps += [thread_dep]
   else
     check_headers += ['sched.h']
     check_funcs += ['sched_yield', {'link_with': 'rt'}]
@@ -293,6 +287,7 @@ foreach check : check_headers
   endif
 endforeach
 
+harfbuzz_extra_deps = []
 foreach check : check_funcs
   name = check[0]
   opts = check.get(1, {})
@@ -323,7 +318,7 @@ foreach check : check_funcs
   endif
 
   if found
-    deps += extra_deps
+    harfbuzz_extra_deps += extra_deps
     conf.set('HAVE_@0@'.format(name.to_upper()), 1)
   endif
 endforeach
@@ -365,7 +360,7 @@ summary({'Cairo': conf.get('HAVE_CAIRO', 0) == 1,
          'Fontconfig': conf.get('HAVE_FONTCONFIG', 0) == 1,
         }, bool_yn: true, section: 'Tools used for command-line utilities')
 summary({'Graphite2': conf.get('HAVE_GRAPHITE2', 0) == 1,
-        }, bool_yn: true, section: 'Additional shapers (the more the merrier)')
+        }, bool_yn: true, section: 'Additional shapers')
 summary({'CoreText': conf.get('HAVE_CORETEXT', 0) == 1,
          'DirectWrite': conf.get('HAVE_DIRECTWRITE', 0) == 1,
          'GDI': conf.get('HAVE_GDI', 0) == 1,
