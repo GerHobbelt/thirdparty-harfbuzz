@@ -240,6 +240,13 @@ struct hb_set_t
     fini_shallow ();
   }
 
+  template <typename T> bool propagate_error (T &&obj)
+  {
+    if (hb_deref (obj).in_error ())
+      successful = false;
+    return !successful;
+  }
+
   bool in_error () const { return !successful; }
 
   bool resize (unsigned int count)
