@@ -222,37 +222,17 @@ jobs:
       - run: pip3 install fonttools --upgrade
       - run: pip3 install git+https://github.com/mesonbuild/meson # use C linker, remove when meson 0.55 is released
       # a regular meson run
-      - run: meson build && ninja -Cbuild test
+      - run: meson build && ninja -j9 -Cbuild test
       # test a meson based dist
       - run: meson dist -Cbuild && rm -rf build
       # test experimental APIs
-      - run: meson build -Dexperimental_api=true -Dbenchmark=true -Dexperimental_api=true -Doptimization=2 && ninja -Cbuild test # or meson test -Cbuild
+      - run: meson build -Dexperimental_api=true -Dbenchmark=true -Dexperimental_api=true -Doptimization=2 && ninja -j9 -Cbuild test # or meson test -Cbuild
       # run benchmarks
       - run: build/perf/perf && meson test -Cbuild --benchmark && rm -rf build # or ninja -Cbuild benchmark
       # mingw
       - run: .ci/build-win32.sh
       - store_artifacts:
           path: harfbuzz-win32.zip
-
-  crosscompile-notest-djgpp:
-    docker:
-      # https://gist.github.com/ebraminio/8551fc74f27951e668102baa2f6b1175
-      - image: quay.io/ebraminio/djgpp
-    steps:
-      - checkout
-      - run: apt update && apt install -y ragel pkg-config libtool autoconf
-      - run: CFLAGS="-Wno-attributes" CXXFLAGS="-Wno-attributes" ./autogen.sh --prefix=/usr/local/djgpp --host=i586-pc-msdosdjgpp
-      - run: make -j32
-
-  crosscompile-notest-psvita:
-    docker:
-      - image: dockcross/base
-    steps:
-      - checkout
-      - run: git clone https://github.com/vitasdk/vdpm && cd vdpm && ./bootstrap-vitasdk.sh
-      - run: echo '#!/bin/true' > /usr/bin/ragel && chmod +x /usr/bin/ragel
-      - run: ./autogen.sh --prefix=/usr/local/vitasdk/arm-vita-eabi --host=arm-vita-eabi
-      - run: make -j32
 
 workflows:
   version: 2
@@ -279,10 +259,3 @@ workflows:
       - fedora-O0-debug-outoftreebuild
 
       - meson-gcc-mingw
-
-      # crosscompiles
-      # they can't be test thus are without tests
-      ## autotools
-      - crosscompile-notest-djgpp
-      - crosscompile-notest-psvita
-
