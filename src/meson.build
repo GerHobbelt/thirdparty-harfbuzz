@@ -292,14 +292,14 @@ ragel = find_program('ragel', required: false)
 if not ragel.found()
   warning('You have to install ragel if you are going to develop HarfBuzz itself')
 else
+  ragel_helper = find_program('gen-ragel-artifacts.py')
   foreach rl : hb_base_ragel_sources
     hh = rl.split('.')[0] + '.hh'
     custom_target('@0@'.format(hh),
       build_by_default: true,
       input: rl,
       output: hh,
-      command: [find_program('gen-ragel-artifacts.py'),
-                '@OUTPUT@', '@CURRENT_SOURCE_DIR@', '@INPUT@'],
+      command: [ragel_helper, '@OUTPUT@', '@CURRENT_SOURCE_DIR@', '@INPUT@'],
     )
   endforeach
 endif
@@ -617,7 +617,17 @@ if have_gobject
   )
 
   gir = find_program('g-ir-scanner', required: get_option('introspection'))
-  build_gir = gir.found() and not meson.is_cross_build()
+  build_gir = gir.found()
+
+  build_gir = build_gir and not meson.is_cross_build()
+  if not build_gir and get_option('introspection').enabled()
+    error('Introspection support is requested but it isn\'t available in cross builds')
+  endif
+
+  build_gir = build_gir and get_option('default_library') != 'static'
+  if not build_gir and get_option('introspection').enabled()
+    error('Introspection support is requested but the default library option should be shared or both')
+  endif
 
   if build_gir
     conf.set('HAVE_INTROSPECTION', 1)
