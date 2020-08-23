@@ -1,5 +1,5 @@
 /*
- * Copyright © 2011  Google, Inc.
+ * Copyright © 2020  Ebrahim Byagowi
  *
  *  This is part of HarfBuzz, a text shaping library.
  *
@@ -20,47 +20,34 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  THE SOFTWARE PROVIDED HEREUNDER IS
  * ON AN "AS IS" BASIS, AND THE COPYRIGHT HOLDER HAS NO OBLIGATION TO
  * PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
- *
- * Google Author(s): Behdad Esfahbod
  */
 
-#ifndef HB_H_IN
-#error "Include <hb.h> instead."
-#endif
+#include "hb-test.h"
 
-#ifndef HB_VERSION_H
-#define HB_VERSION_H
+#include <hb.h>
+#include <hb-ot.h>
 
-#include "hb-common.h"
+static void
+test_ot_layout_lookup_get_glyph_alternates (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("fonts/SourceSansPro-Regular.otf");
 
-HB_BEGIN_DECLS
+  hb_codepoint_t alternates[3];
+  unsigned alternates_count = 3;
+  g_assert_cmpuint (7, ==, hb_ot_layout_lookup_get_glyph_alternates (face, 1, 1091, 2, &alternates_count, alternates));
 
+  g_assert_cmpuint (3, ==, alternates_count);
+  g_assert_cmpuint (1606, ==, alternates[0]);
+  g_assert_cmpuint (1578, ==, alternates[1]);
+  g_assert_cmpuint (1592, ==, alternates[2]);
 
-#define HB_VERSION_MAJOR 2
-#define HB_VERSION_MINOR 6
-#define HB_VERSION_MICRO 8
+  hb_face_destroy (face);
+}
 
-#define HB_VERSION_STRING "2.6.8"
-
-#define HB_VERSION_ATLEAST(major,minor,micro) \
-	((major)*10000+(minor)*100+(micro) <= \
-	 HB_VERSION_MAJOR*10000+HB_VERSION_MINOR*100+HB_VERSION_MICRO)
-
-
-HB_EXTERN void
-hb_version (unsigned int *major,
-	    unsigned int *minor,
-	    unsigned int *micro);
-
-HB_EXTERN const char *
-hb_version_string (void);
-
-HB_EXTERN hb_bool_t
-hb_version_atleast (unsigned int major,
-		    unsigned int minor,
-		    unsigned int micro);
-
-
-HB_END_DECLS
-
-#endif /* HB_VERSION_H */
+int
+main (int argc, char **argv)
+{
+  hb_test_init (&argc, &argv);
+  hb_test_add (test_ot_layout_lookup_get_glyph_alternates);
+  return hb_test_run ();
+}

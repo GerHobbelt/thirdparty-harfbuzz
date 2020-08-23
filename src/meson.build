@@ -19,6 +19,7 @@ hb_base_sources = [
   'hb-algs.hh',
   'hb-array.hh',
   'hb-atomic.hh',
+  'hb-bimap.hh',
   'hb-blob.cc',
   'hb-blob.hh',
   'hb-buffer-serialize.cc',
@@ -46,7 +47,6 @@ hb_base_sources = [
   'hb-machinery.hh',
   'hb-map.cc',
   'hb-map.hh',
-  'hb-bimap.hh',
   'hb-meta.hh',
   'hb-mutex.hh',
   'hb-null.hh',
@@ -56,9 +56,9 @@ hb_base_sources = [
   'hb-open-file.hh',
   'hb-open-type.hh',
   'hb-ot-cff-common.hh',
+  'hb-ot-cff1-std-str.hh',
   'hb-ot-cff1-table.cc',
   'hb-ot-cff1-table.hh',
-  'hb-ot-cff1-std-str.hh',
   'hb-ot-cff2-table.cc',
   'hb-ot-cff2-table.hh',
   'hb-ot-cmap-table.hh',
@@ -68,9 +68,9 @@ hb_base_sources = [
   'hb-ot-color-sbix-table.hh',
   'hb-ot-color-svg-table.hh',
   'hb-ot-color.cc',
+  'hb-ot-face-table-list.hh',
   'hb-ot-face.cc',
   'hb-ot-face.hh',
-  'hb-ot-face-table-list.hh',
   'hb-ot-font.cc',
   'hb-ot-gasp-table.hh',
   'hb-ot-glyf-table.hh',
@@ -383,7 +383,7 @@ version = '0.' + '0'.join(meson.project_version().split('.')) + '.0'
 
 extra_hb_cpp_args = []
 if cpp.get_id() == 'msvc'
-  if get_option('default_library') == 'shared'
+  if get_option('default_library') != 'static'
     extra_hb_cpp_args += '-DHB_DLL_EXPORT'
   endif
   hb_so_version = ''
@@ -680,7 +680,7 @@ if get_option('tests').enabled()
     test(name, find_program(name + '.py'),
       env: env,
       depends: name == 'check-symbols' ? defs_list : [],
-      suite: ['src'],
+      suite: ['src'] + (name == 'check-static-inits' ? ['slow'] : []),
     )
   endforeach
 endif

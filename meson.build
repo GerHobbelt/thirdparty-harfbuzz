@@ -1,9 +1,9 @@
 project('harfbuzz', 'c', 'cpp',
   meson_version: '>= 0.53.0',
-  default_options : ['cpp_std=c++11'],
-  version: '2.6.7')
+  default_options: ['cpp_std=c++11'],
+  version: '2.6.8')
 
-warning('Meson is not our main build system yet, don\'t use it for packaging HarfBuzz for *nix distros for now')
+warning('Meson is not our main build system for building *nix packages yet we encourage packagers to test it and give us feedback about it.')
 
 hb_version_arr = meson.project_version().split('.')
 hb_version_major = hb_version_arr[0].to_int()
@@ -36,25 +36,25 @@ if cpp.get_id() == 'msvc'
       '/wd4305', # truncating type conversion (e.g. double -> float)
       cpp.get_supported_arguments(['/utf-8']), # set the input encoding to utf-8
   ]
-  add_project_arguments(msvc_args, language : ['c', 'cpp'])
+  add_project_arguments(msvc_args, language: ['c', 'cpp'])
   # Disable SAFESEH with MSVC for libs that use external deps that are built with MinGW
   # noseh_link_args = ['/SAFESEH:NO']
 endif
 
 add_project_link_arguments(cpp.get_supported_link_arguments([
   '-Bsymbolic-functions'
-]), language : 'c')
+]), language: 'c')
 
 add_project_arguments(cpp.get_supported_arguments([
   '-fno-rtti',
   '-fno-exceptions',
   '-fno-threadsafe-statics',
   '-fvisibility-inlines-hidden', # maybe shouldn't be applied for mingw
-]), language : 'cpp')
+]), language: 'cpp')
 
 if host_machine.cpu_family() == 'arm' and cpp.alignment('struct { char c; }') != 1
   if cpp.has_argument('-mstructure-size-boundary=8')
-    add_project_arguments('-mstructure-size-boundary=8', language : 'cpp')
+    add_project_arguments('-mstructure-size-boundary=8', language: 'cpp')
   endif
 endif
 
@@ -74,77 +74,91 @@ check_funcs = [
   ['roundf'],
 ]
 
-freetype_dep = dependency('freetype2', required: false)
+m_dep = cpp.find_library('m', required: false)
 
-if not freetype_dep.found() and cpp.get_id() == 'msvc'
-  if cpp.has_header('ft2build.h')
-    freetype_dep = cpp.find_library('freetype', required: false)
+if not get_option('freetype').disabled()
+  freetype_dep = dependency('freetype2', required: false)
+
+  if not freetype_dep.found() and cpp.get_id() == 'msvc'
+    if cpp.has_header('ft2build.h')
+      freetype_dep = cpp.find_library('freetype', required: false)
+    endif
   endif
-endif
 
-if not freetype_dep.found() and get_option('freetype').enabled()
-  freetype_dep = dependency('freetype2', fallback: ['freetype2', 'freetype_dep'])
+  if not freetype_dep.found() and get_option('freetype').enabled()
+    freetype_dep = dependency('freetype2', fallback: ['freetype2', 'freetype_dep'])
+  endif
+else
+  freetype_dep = dependency('', required: false)
 endif
 
 glib_dep = dependency('glib-2.0', required: get_option('glib'),
                       fallback: ['glib', 'libglib_dep'])
 gobject_dep = dependency('gobject-2.0', required: get_option('gobject'),
                          fallback: ['glib', 'libgobject_dep'])
-cairo_dep = dependency('cairo', required: false)
 fontconfig_dep = dependency('fontconfig', required: get_option('fontconfig'),
                             fallback: ['fontconfig', 'fontconfig_dep'])
 graphite2_dep = dependency('graphite2', required: get_option('graphite'))
-icu_dep = dependency('icu-uc', required: false)
-m_dep = cpp.find_library('m', required: false)
 
-if not icu_dep.found() and get_option('icu').enabled()
-  icu_dep = dependency('icu-uc', required: cpp.get_id() != 'msvc')
-endif
+if not get_option('icu').disabled()
+  icu_dep = dependency('icu-uc', required: false)
 
-if not icu_dep.found() and cpp.get_id() == 'msvc'
-  if cpp.has_header('unicode/uchar.h') and \
-     cpp.has_header('unicode/unorm2.h') and \
-     cpp.has_header('unicode/ustring.h') and \
-     cpp.has_header('unicode/utf16.h') and \
-     cpp.has_header('unicode/uversion.h') and \
-     cpp.has_header('unicode/uscript.h')
-    if get_option('buildtype') == 'debug'
-      icu_dep = cpp.find_library('icuucd', required: get_option('icu'))
-    else
-      icu_dep = cpp.find_library('icuuc', required: get_option('icu'))
-    endif
-  else
-    if get_option('icu').enabled()
-      error('ICU headers and libraries must be present to build ICU support')
-    endif
+  if not icu_dep.found() and get_option('icu').enabled()
+    icu_dep = dependency('icu-uc', required: cpp.get_id() != 'msvc')
   endif
-endif
 
-if not cairo_dep.found() and cpp.get_id() == 'msvc'
-  if cpp.has_header('cairo.h')
-    cairo_dep = cpp.find_library('cairo')
-  endif
-endif
-
-if not cairo_dep.found() and get_option('cairo').enabled()
-  cairo_dep = dependency('cairo', fallback: ['cairo', 'libcairo_dep'])
-endif
-
-# Ensure that cairo-ft is fetched from the same library as cairo itself
-if cairo_dep.found()
-  if cairo_dep.type_name() == 'pkgconfig'
-    cairo_ft_dep = dependency('cairo-ft', required: get_option('cairo'))
-  else
-    if cpp.has_header('cairo-ft.h') and \
-       cpp.has_function('cairo_ft_font_face_create_for_ft_face', dependencies: cairo_dep)
-      cairo_ft_dep = cairo_dep
+  if not icu_dep.found() and cpp.get_id() == 'msvc'
+    if cpp.has_header('unicode/uchar.h') and \
+       cpp.has_header('unicode/unorm2.h') and \
+       cpp.has_header('unicode/ustring.h') and \
+       cpp.has_header('unicode/utf16.h') and \
+       cpp.has_header('unicode/uversion.h') and \
+       cpp.has_header('unicode/uscript.h')
+      if get_option('buildtype') == 'debug'
+        icu_dep = cpp.find_library('icuucd', required: get_option('icu'))
+      else
+        icu_dep = cpp.find_library('icuuc', required: get_option('icu'))
+      endif
     else
-      # Not-found dependency
-      cairo_ft_dep = dependency('', required: false)
+      if get_option('icu').enabled()
+        error('ICU headers and libraries must be present to build ICU support')
+      endif
     endif
   endif
 else
-  # Not-found dependency
+  icu_dep = dependency('', required: false)
+endif
+
+if not get_option('cairo').disabled()
+  cairo_dep = dependency('cairo', required: false)
+
+  if not cairo_dep.found() and cpp.get_id() == 'msvc'
+    if cpp.has_header('cairo.h')
+      cairo_dep = cpp.find_library('cairo')
+    endif
+  endif
+
+  if not cairo_dep.found() and get_option('cairo').enabled()
+    cairo_dep = dependency('cairo', fallback: ['cairo', 'libcairo_dep'])
+  endif
+
+  # Ensure that cairo-ft is fetched from the same library as cairo itself
+  if cairo_dep.found()
+    if cairo_dep.type_name() == 'pkgconfig'
+      cairo_ft_dep = dependency('cairo-ft', required: get_option('cairo'))
+    else
+      if cpp.has_header('cairo-ft.h') and \
+         cpp.has_function('cairo_ft_font_face_create_for_ft_face', dependencies: cairo_dep)
+        cairo_ft_dep = cairo_dep
+      else
+        cairo_ft_dep = dependency('', required: false)
+      endif
+    endif
+  else
+    cairo_ft_dep = dependency('', required: false)
+  endif
+else
+  cairo_dep = dependency('', required: false)
   cairo_ft_dep = dependency('', required: false)
 endif
 
@@ -242,16 +256,16 @@ endif
 # CoreText (macOS) - FIXME: untested
 coretext_deps = []
 if host_machine.system() == 'darwin' and not get_option('coretext').disabled()
-  app_services_dep = dependency('appleframeworks', modules : ['ApplicationServices'], required: false)
+  app_services_dep = dependency('appleframeworks', modules: ['ApplicationServices'], required: false)
   if cpp.has_type('CTFontRef', prefix: '#include <ApplicationServices/ApplicationServices.h>', dependencies: app_services_dep)
     coretext_deps += [app_services_dep]
     conf.set('HAVE_CORETEXT', 1)
   # On iOS CoreText and CoreGraphics are stand-alone frameworks
   # Check for a different symbol to avoid getting cached result
   else
-    coretext_dep = dependency('appleframeworks', modules : ['CoreText'], required: false)
-    coregraphics_dep = dependency('appleframeworks', modules : ['CoreGraphics'], required: false)
-    corefoundation_dep = dependency('appleframeworks', modules : ['CoreFoundation'], required: false)
+    coretext_dep = dependency('appleframeworks', modules: ['CoreText'], required: false)
+    coregraphics_dep = dependency('appleframeworks', modules: ['CoreGraphics'], required: false)
+    corefoundation_dep = dependency('appleframeworks', modules: ['CoreFoundation'], required: false)
     if cpp.has_type('CTRunRef', prefix: '#include <CoreText/CoreText.h>', dependencies: [coretext_dep, coregraphics_dep, corefoundation_dep])
       coretext_deps += [coretext_dep, coregraphics_dep, corefoundation_dep]
       conf.set('HAVE_CORETEXT', 1)
@@ -340,6 +354,10 @@ endif
 
 if not get_option('gtk_doc').disabled()
   subdir('docs')
+endif
+
+if not meson.is_subproject()
+  meson.add_dist_script('write-tarball-revision.py')
 endif
 
 configure_file(output: 'config.h', configuration: conf)

@@ -1,6 +1,6 @@
 AC_PREREQ([2.64])
 AC_INIT([HarfBuzz],
-        [2.6.7],
+        [2.6.8],
         [https://github.com/harfbuzz/harfbuzz/issues/new],
         [harfbuzz],
         [http://harfbuzz.org/])
@@ -509,6 +509,17 @@ echo
 echo "C++ compiler version:"
 $CXX --version
 echo
+
+AC_MSG_NOTICE([
+
+Autotools still is our main and recommended build system for
+building *nix package out of the library yet we encourage
+packagers to experiment with our brand new meson port and
+give us feedback as our effort to migrate and unify all
+the other build systems we have tools to meson.
+
+])
+
 
 AC_MSG_NOTICE([
 
