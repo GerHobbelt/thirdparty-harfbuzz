@@ -696,8 +696,7 @@ struct glyf
     /* Note: Recursively calls itself.
      * all_points includes phantom points
      */
-    template<typename T>
-    bool get_points (T glyph_for_gid, hb_font_t *font, const accelerator_t &glyf_accelerator,
+    bool get_points (hb_font_t *font, const accelerator_t &glyf_accelerator,
 		     contour_point_vector_t &all_points /* OUT */,
 		     bool phantom_only = false,
 		     unsigned int depth = 0) const
@@ -751,7 +750,7 @@ struct glyf
 	for (auto &item : get_composite_iterator ())
 	{
 	  contour_point_vector_t comp_points;
-	  if (unlikely (!glyph_for_gid (item.glyphIndex).get_points (glyph_for_gid, font, glyf_accelerator, comp_points, phantom_only, depth + 1))
+	  if (unlikely (!glyf_accelerator.glyph_for_gid (item.glyphIndex).get_points (font, glyf_accelerator, comp_points, phantom_only, depth + 1))
 			|| comp_points.length < PHANTOM_COUNT)
 	    return false;
 
@@ -881,8 +880,7 @@ struct glyf
       contour_point_vector_t all_points;
 
       bool phantom_only = !consumer.is_consuming_contour_points ();
-      if (unlikely (!glyph_for_gid (gid).get_points ([this] (hb_codepoint_t gid) -> const Glyph { return this->glyph_for_gid (gid); },
-						     font, *this, all_points, phantom_only)))
+      if (unlikely (!glyph_for_gid (gid).get_points (font, *this, all_points, phantom_only)))
 	return false;
 
       if (consumer.is_consuming_contour_points ())
@@ -907,7 +905,6 @@ struct glyf
       hb_font_t *font;
       hb_glyph_extents_t *extents;
       contour_point_t *phantoms;
-      const accelerator_t *accelerator;
 
       struct contour_bounds_t
       {
@@ -943,10 +940,9 @@ struct glyf
 	float min_x, min_y, max_x, max_y;
       } bounds;
 
-      points_aggregator_t (hb_font_t *font_, const accelerator_t *accelerator_, hb_glyph_extents_t *extents_, contour_point_t *phantoms_)
+      points_aggregator_t (hb_font_t *font_, hb_glyph_extents_t *extents_, contour_point_t *phantoms_)
       {
 	font = font_;
-	accelerator = accelerator_;
 	extents = extents_;
 	phantoms = phantoms_;
 	if (extents) bounds = contour_bounds_t ();
@@ -969,7 +965,7 @@ struct glyf
 
       contour_point_t phantoms[PHANTOM_COUNT];
       if (likely (font->num_coords == gvar->get_axis_count ()))
-	success = get_points (font, gid, points_aggregator_t (font, this, nullptr, phantoms));
+	success = get_points (font, gid, points_aggregator_t (font, nullptr, phantoms));
 
       if (unlikely (!success))
 	return is_vertical ? vmtx->get_advance (gid) : hmtx->get_advance (gid);
@@ -987,7 +983,7 @@ struct glyf
       hb_glyph_extents_t extents;
 
       contour_point_t phantoms[PHANTOM_COUNT];
-      if (unlikely (!get_points (font, gid, points_aggregator_t (font, this, &extents, phantoms))))
+      if (unlikely (!get_points (font, gid, points_aggregator_t (font, &extents, phantoms))))
 	return is_vertical ? vmtx->get_side_bearing (gid) : hmtx->get_side_bearing (gid);
 
       return is_vertical
@@ -1003,7 +999,7 @@ struct glyf
 
 #ifndef HB_NO_VAR
       if (font->num_coords && font->num_coords == gvar->get_axis_count ())
-	return get_points (font, gid, points_aggregator_t (font, this, extents, nullptr));
+	return get_points (font, gid, points_aggregator_t (font, extents, nullptr));
 #endif
       return glyph_for_gid (gid).get_extents (font, *this, extents);
     }
