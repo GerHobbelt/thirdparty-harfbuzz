@@ -90,7 +90,26 @@ struct hb_subset_plan_t
 
  public:
 
-  bool in_error () const { return !successful; }
+  bool in_error () const
+  {
+    return !successful
+        || unicodes->in_error ()
+        || name_ids->in_error ()
+        || name_languages->in_error ()
+        || glyphs_requested->in_error ()
+        || drop_tables->in_error ()
+        || codepoint_to_glyph->in_error ()
+        || glyph_map->in_error ()
+        || reverse_glyph_map->in_error ()
+        || _glyphset->in_error ()
+        || _glyphset_gsub->in_error ()
+        || gsub_lookups->in_error ()
+        || gpos_lookups->in_error ()
+        || gsub_features->in_error ()
+        || gpos_features->in_error ()
+        || layout_variation_indices->in_error ()
+        || layout_variation_idx_map->in_error ();
+  }
 
   bool check_success(bool success)
   {

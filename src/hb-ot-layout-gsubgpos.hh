@@ -122,6 +122,9 @@ struct hb_closure_context_t :
   {
     hb_set_del_range (output, face->get_num_glyphs (), hb_set_get_max (output));	/* Remove invalid glyphs. */
     hb_set_union (glyphs, output);
+    glyphs->propagate_error (output);
+    glyphs->propagate_error (done_lookups);
+
     hb_set_clear (output);
   }
 
@@ -3278,6 +3281,8 @@ struct GSUBGPOS
 
     hb_set_union (lookup_indexes, &visited_lookups);
     hb_set_subtract (lookup_indexes, &inactive_lookups);
+    lookup_indexes->propagate_error (visited_lookups);
+    lookup_indexes->propagate_error (inactive_lookups);
   }
 
   template <typename TLookup>
