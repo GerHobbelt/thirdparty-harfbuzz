@@ -89,6 +89,9 @@ struct hb_closure_context_t :
 
   bool is_lookup_done (unsigned int lookup_index)
   {
+    if (done_lookups->in_error ())
+      return true;
+
     /* Have we visited this lookup with the current set of glyphs? */
     return done_lookups->get (lookup_index) == glyphs->get_population ();
   }
@@ -161,6 +164,9 @@ struct hb_closure_lookups_context_t :
   bool is_lookup_visited (unsigned lookup_index)
   {
     if (lookup_count++ > HB_MAX_LOOKUP_INDICES)
+      return true;
+
+    if (visited_lookups->in_error ())
       return true;
 
     return visited_lookups->has (lookup_index);
