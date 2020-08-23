@@ -405,6 +405,8 @@ if get_option('fuzzer_ldflags') != ''
   hb_gobject_sources += 'failing-alloc.c'
 endif
 
+darwin_versions = [hb_version_int, '@0@.0.0'.format(hb_version_int)]
+
 libharfbuzz = library('harfbuzz', hb_sources,
   include_directories: incconfig,
   dependencies: harfbuzz_deps,
@@ -412,6 +414,7 @@ libharfbuzz = library('harfbuzz', hb_sources,
   soversion: hb_so_version,
   version: version,
   install: true,
+  darwin_versions: darwin_versions,
   link_language: 'c',
 )
 
@@ -435,6 +438,7 @@ libharfbuzz_subset = library('harfbuzz-subset', hb_subset_sources,
   soversion: hb_so_version,
   version: version,
   install: true,
+  darwin_versions: darwin_versions,
   link_language: 'c',
 )
 
@@ -536,6 +540,7 @@ if have_icu and not have_icu_builtin
     soversion: hb_so_version,
     version: version,
     install: true,
+    darwin_versions: darwin_versions,
     # ICU links to stdc++ anyway so the default linker is good
     # link_language: 'c',
   )
@@ -556,16 +561,6 @@ if have_icu and not have_icu_builtin
 endif
 
 have_gobject = conf.get('HAVE_GOBJECT', 0) == 1
-
-cmake_config = configuration_data()
-cmake_config.set('libdir', '${prefix}/@0@'.format(get_option('libdir')))
-cmake_config.set('includedir', '${prefix}/@0@'.format(get_option('includedir')))
-cmake_config.set('HB_LIBTOOL_VERSION_INFO', hb_libtool_version_info)
-cmake_config.set('have_gobject', have_gobject ? 'true' : 'false')
-configure_file(input: 'harfbuzz-config.cmake.in',
-  output: 'harfbuzz-config.cmake',
-  configuration: cmake_config,
-  install_dir: get_option('libdir') / 'cmake' / 'harfbuzz')
 
 libharfbuzz_gobject_dep = null_dep
 if have_gobject
@@ -621,6 +616,7 @@ if have_gobject
     soversion: hb_so_version,
     version: version,
     install: true,
+    darwin_versions: darwin_versions,
     link_language: 'c',
   )
 
@@ -706,7 +702,10 @@ if get_option('tests').enabled()
   env.set('HBHEADERS', ' '.join(HBHEADERS))
 
   if cpp.get_id() != 'msvc' and not meson.is_cross_build() # ensure the local tools are usable
-    dist_check_script += ['check-libstdc++', 'check-static-inits', 'check-symbols']
+    if meson.version().version_compare('>=0.55')
+      dist_check_script += 'check-libstdc++'
+    endif
+    dist_check_script += ['check-static-inits', 'check-symbols']
   endif
 
   foreach name : dist_check_script

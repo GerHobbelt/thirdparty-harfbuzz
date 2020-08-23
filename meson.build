@@ -2,8 +2,10 @@ project('harfbuzz', 'c', 'cpp',
   meson_version: '>= 0.53.0',
   version: '2.7.0',
   default_options: [
+    'cpp_eh=none',          # Just to support msvc, we are passing -fno-rtti also anyway
+    'cpp_rtti=false',       # Just to support msvc, we are passing -fno-exceptions also anyway
     'cpp_std=c++11',
-    'wrap_mode=nofallback', # https://github.com/harfbuzz/harfbuzz/pull/2548
+    'wrap_mode=nofallback', # Use --wrap-mode=default to revert, https://github.com/harfbuzz/harfbuzz/pull/2548
   ],
 )
 
@@ -14,7 +16,6 @@ hb_version_micro = hb_version_arr[2].to_int()
 
 # libtool versioning
 hb_version_int = hb_version_major*10000 + hb_version_minor*100 + hb_version_micro
-hb_libtool_version_info = '@0@:0:@0@'.format(hb_version_int)
 
 pkgmod = import('pkgconfig')
 cpp = meson.get_compiler('cpp')
@@ -42,10 +43,10 @@ add_project_link_arguments(cpp.get_supported_link_arguments([
 ]), language: 'c')
 
 add_project_arguments(cpp.get_supported_arguments([
-  '-fno-rtti',
   '-fno-exceptions',
+  '-fno-rtti',
   '-fno-threadsafe-statics',
-  '-fvisibility-inlines-hidden', # maybe shouldn't be applied for mingw
+  '-fvisibility-inlines-hidden',
 ]), language: 'cpp')
 
 if host_machine.cpu_family() == 'arm' and cpp.alignment('struct { char c; }') != 1
