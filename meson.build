@@ -344,10 +344,10 @@ if not get_option('tests').disabled()
 endif
 
 if not get_option('benchmark').disabled() and \
-    ((get_option('wrap_mode') != 'nodownload' and \
-      host_machine.system() != 'windows' and \
-      not meson.is_subproject() and \
-      not meson.is_cross_build()) or get_option('benchmark').enabled())
+    get_option('wrap_mode') != 'nodownload' and \
+    host_machine.system() != 'windows' and \
+    not meson.is_subproject() and \
+    not meson.is_cross_build()
   subdir('perf')
 endif
 
@@ -376,8 +376,7 @@ summary({'Graphite2': conf.get('HAVE_GRAPHITE2', 0) == 1,
         }, bool_yn: true, section: 'Additional shapers')
 summary({'CoreText': conf.get('HAVE_CORETEXT', 0) == 1,
          'DirectWrite': conf.get('HAVE_DIRECTWRITE', 0) == 1,
-         'GDI': conf.get('HAVE_GDI', 0) == 1,
-         'Uniscribe': conf.get('HAVE_UNISCRIBE', 0) == 1,
+         'GDI/Uniscribe': (conf.get('HAVE_GDI', 0) == 1) and (conf.get('HAVE_UNISCRIBE', 0) == 1),
         }, bool_yn: true, section: 'Platform shapers (not normally needed)')
 summary({'Documentation': conf.get('HAVE_GTK_DOC', 0) == 1,
          'GObject bindings': conf.get('HAVE_GOBJECT', 0) == 1,
