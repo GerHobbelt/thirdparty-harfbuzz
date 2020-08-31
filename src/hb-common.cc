@@ -30,6 +30,9 @@
 #include "hb-machinery.hh"
 
 #include <locale.h>
+#if defined(_MSC_VER)
+#include <crtdbg.h>
+#endif
 
 #ifdef HB_NO_SETLOCALE
 #define setlocale(Category, Locale) "C"

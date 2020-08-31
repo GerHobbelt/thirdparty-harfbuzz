@@ -238,7 +238,7 @@ hb_shape_plan_create2 (hb_face_t                     *face,
 #ifndef HB_NO_OT_SHAPE
 bail3:
 #endif
-  shape_plan->key.free ();
+  shape_plan->key.free_ ();
 bail2:
   free (shape_plan);
 bail:
@@ -292,7 +292,7 @@ hb_shape_plan_destroy (hb_shape_plan_t *shape_plan)
 #ifndef HB_NO_OT_SHAPE
   shape_plan->ot.fini ();
 #endif
-  shape_plan->key.free ();
+  shape_plan->key.free_ ();
   free (shape_plan);
 }
 

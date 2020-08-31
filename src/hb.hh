@@ -202,6 +202,10 @@
 #include <winapifamily.h>
 #endif
 
+#ifdef _MSC_VER
+#include <crtdbg.h>
+#endif
+
 #define HB_PASTE1(a,b) a##b
 #define HB_PASTE(a,b) HB_PASTE1(a,b)
 
@@ -221,6 +225,10 @@ extern "C" void* hb_malloc_impl(size_t size);
 extern "C" void* hb_calloc_impl(size_t nmemb, size_t size);
 extern "C" void* hb_realloc_impl(void *ptr, size_t size);
 extern "C" void  hb_free_impl(void *ptr);
+#undef malloc
+#undef calloc
+#undef realloc
+#undef free
 #define malloc hb_malloc_impl
 #define calloc hb_calloc_impl
 #define realloc hb_realloc_impl
