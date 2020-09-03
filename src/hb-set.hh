@@ -31,7 +31,6 @@
 #include "hb-machinery.hh"
 
 
-
 /*
  * hb_set_t
  */
