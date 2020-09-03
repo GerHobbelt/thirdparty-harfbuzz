@@ -2540,7 +2540,7 @@ struct VariationStore
 
     return_trace (
         !c->serializer->in_error()
-        && bool (varstore_prime->dataSets));
+        && varstore_prime->dataSets);
   }
 
   unsigned int get_region_index_count (unsigned int ivs) const
