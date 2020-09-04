@@ -1,3 +1,11 @@
+hb_version_h = custom_target('hb-version.h',
+  build_by_default: true,
+  input: 'hb-version.h.in',
+  output: 'hb-version.h',
+  command: [find_program('gen-hb-version.py'), meson.project_version(),
+            '@OUTPUT@', '@CURRENT_SOURCE_DIR@', '@INPUT@'],
+)
+
 # Base and default-included sources and headers
 hb_base_sources = files(
   'hb-aat-layout-ankr-table.hh',
@@ -167,6 +175,7 @@ hb_base_sources = files(
   'hb-vector.hh',
   'hb.hh',
 )
+hb_base_sources += hb_version_h
 
 hb_base_ragel_generated_sources = files(
   'hb-buffer-deserialize-json.hh',
@@ -214,7 +223,6 @@ hb_base_headers = files(
   'hb-shape.h',
   'hb-style.h',
   'hb-unicode.h',
-  'hb-version.h',
   'hb.h',
 )
 
@@ -269,6 +277,7 @@ hb_subset_sources = files(
   'hb-subset.hh',
   'hb-subset.hh',
 )
+hb_subset_sources += hb_version_h
 
 hb_subset_headers = files('hb-subset.h')
 
@@ -279,14 +288,6 @@ hb_gobject_sources = files(
 hb_gobject_headers = files(
   'hb-gobject.h',
   'hb-gobject-structs.h',
-)
-
-custom_target('hb-version.h',
-  build_by_default: true,
-  input: 'hb-version.h.in',
-  output: 'hb-version.h',
-  command: [find_program('gen-hb-version.py'), meson.project_version(),
-            '@OUTPUT@', '@CURRENT_SOURCE_DIR@', '@INPUT@'],
 )
 
 ragel = find_program('ragel', required: false)
@@ -467,7 +468,7 @@ if get_option('tests').enabled()
       'test-ot-gsub-would-substitute': 'test-gsub-would-substitute.cc',
     }
     foreach name, source : noinst_programs
-      executable(name, source,
+      executable(name, source, hb_version_h,
         include_directories: incconfig,
         cpp_args: cpp_args,
         dependencies: libharfbuzz_dep,
@@ -483,7 +484,7 @@ if get_option('tests').enabled()
     'dump-use-data': ['dump-use-data.cc', 'hb-ot-shape-complex-use-table.cc'],
   }
   foreach name, source : check_programs
-    executable(name, source,
+    executable(name, source, hb_version_h,
       include_directories: incconfig,
       cpp_args: cpp_args,
       dependencies: libharfbuzz_dep,
@@ -506,7 +507,7 @@ if get_option('tests').enabled()
       # TODO: MSVC doesn't like tests having hb-static.cc, fix them
       continue
     endif
-    test(name, executable(name, source,
+    test(name, executable(name, source, hb_version_h,
       include_directories: incconfig,
       cpp_args: cpp_args + ['-DMAIN', '-UNDEBUG'],
       dependencies: libharfbuzz_dep,
