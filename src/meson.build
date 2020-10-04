@@ -1,10 +1,9 @@
-hb_version_h = custom_target('hb-version.h',
-  build_by_default: true,
-  input: 'hb-version.h.in',
-  output: 'hb-version.h',
-  command: [find_program('gen-hb-version.py'), meson.project_version(),
-            '@OUTPUT@', '@CURRENT_SOURCE_DIR@', '@INPUT@'],
-)
+hb_version_h = configure_file(
+               command: [find_program('gen-hb-version.py'), meson.project_version(), '@OUTPUT@', '@INPUT@'],
+               input: 'hb-version.h.in',
+               output: 'hb-version.h',
+               install: true,
+               install_dir: join_paths(get_option('includedir'), meson.project_name()))
 
 # Base and default-included sources and headers
 hb_base_sources = files(
@@ -225,6 +224,7 @@ hb_base_headers = files(
   'hb-unicode.h',
   'hb.h',
 )
+hb_base_headers += hb_version_h
 
 # Optional Sources and Headers with external deps
 
