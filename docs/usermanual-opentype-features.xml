@@ -152,11 +152,11 @@
       <literal>liga</literal> and <literal>rclt</literal>, features.
     </para>
     <para>
-      Additionally, when HarfBuzz encounters fraction slash
+      Additionally, when HarfBuzz encounters a fraction slash
       (<literal>U+2044</literal>), it looks backward and forward for decimal
-      digits (Unicode General Category = Nd), and enables
-      <literal>numr</literal> feature on the sequence before the fraction slash,
-      <literal>dnom</literal> feature on the sequence after the fraction slash,
+      digits (Unicode General Category = Nd), and enables features
+      <literal>numr</literal> on the sequence before the fraction slash,
+      <literal>dnom</literal> on the sequence after the fraction slash,
       and <literal>frac</literal> on the whole sequence including the fraction
       slash.
     </para>
