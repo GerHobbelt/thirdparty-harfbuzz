@@ -91,9 +91,15 @@ _closure_glyphs_lookups_features (hb_tag_t tag,
 			 &lookup_indices);
   _remap_indexes (&lookup_indices, gstar_lookups);
 
-  //closure features
+  // Collect and prune features
   hb_set_t feature_indices;
-  gstar->closure_features (gstar_lookups, &feature_indices);
+  hb_ot_layout_collect_features (face,
+                                 HB_OT_TAG_GSUB,
+                                 nullptr,
+                                 nullptr,
+                                 nullptr,
+                                 &feature_indices);
+  gstar->prune_features (gstar_lookups, &feature_indices);
   _remap_indexes (&feature_indices, gstar_features);
   gstar.destroy ();
 
@@ -231,7 +237,11 @@ _populate_gids_to_retain (hb_subset_plan_t* plan,
 
 #ifndef HB_NO_VAR
   if (close_over_gdef)
-    _collect_layout_variation_indices (plan->source, plan->_glyphset, plan->gpos_lookups, plan->layout_variation_indices, plan->layout_variation_idx_map);
+    _collect_layout_variation_indices (plan->source,
+                                       plan->_glyphset_gsub,
+                                       plan->gpos_lookups,
+                                       plan->layout_variation_indices,
+                                       plan->layout_variation_idx_map);
 #endif
 
 #ifndef HB_NO_SUBSET_CFF
