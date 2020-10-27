@@ -1,14 +1,11 @@
 FONTS:
-BalooBhai2-Regular.ttf
+gpos9_font2.otf
 
 PROFILES:
 keep-layout.txt
 keep-layout-retain-gids.txt
 
 SUBSETS:
-અમને
-તેની
-જાણ
-થાય
-તે
-પહેલાં
+A
+B
+AB
