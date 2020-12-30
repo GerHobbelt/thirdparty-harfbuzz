@@ -47,6 +47,8 @@ def expect (condition, message=None):
 			raise AssertionError
 		raise AssertionError (message)
 
+DEFAULT_LANGUAGE_SYSTEM = ''
+
 # from https://www-01.sil.org/iso639-3/iso-639-3.tab
 ISO_639_3_TO_1 = {
 	'aar': 'aa',
@@ -553,7 +555,7 @@ class BCP47Parser (object):
 						self.grandfathered.add (subtag.lower ())
 				elif line.startswith ('Description: '):
 					description = line.split (' ', 1)[1].replace (' (individual language)', '')
-					description = re.sub (' (\((individual |macro)language\)|languages)$', '',
+					description = re.sub (' (\(family\)|\((individual |macro)language\)|languages)$', '',
 							description)
 					if subtag in self.names:
 						self.names[subtag] += '\n' + description
@@ -712,6 +714,7 @@ ot.add_language ('qu', 'QUZ')
 ot.add_language ('qub', 'QWH')
 ot.add_language ('qud', 'QVI')
 ot.add_language ('qug', 'QVI')
+ot.add_language ('qul', 'QUH')
 ot.add_language ('qup', 'QVI')
 ot.add_language ('qur', 'QWH')
 ot.add_language ('qus', 'QUH')
@@ -758,14 +761,17 @@ ot.add_language ('xwo', 'TOD')
 ot.remove_language_ot ('ZHH')
 ot.remove_language_ot ('ZHP')
 ot.remove_language_ot ('ZHT')
+ot.remove_language_ot ('ZHTM')
 bcp_47.macrolanguages['zh'].remove ('lzh')
 bcp_47.macrolanguages['zh'].remove ('yue')
 ot.add_language ('zh-Hant-MO', 'ZHH')
+ot.add_language ('zh-Hant-MO', 'ZHTM')
 ot.add_language ('zh-Hant-HK', 'ZHH')
 ot.add_language ('zh-Hans', 'ZHS')
 ot.add_language ('zh-Hant', 'ZHT')
 ot.add_language ('zh-HK', 'ZHH')
 ot.add_language ('zh-MO', 'ZHH')
+ot.add_language ('zh-MO', 'ZHTM')
 ot.add_language ('zh-TW', 'ZHT')
 ot.add_language ('lzh', 'ZHT')
 ot.add_language ('lzh-Hans', 'ZHS')
@@ -797,6 +803,7 @@ def rank_delta (bcp_47, ot):
 disambiguation = {
 	'ALT': 'alt',
 	'ARK': 'rki',
+	'ATH': 'ath',
 	'BHI': 'bhb',
 	'BLN': 'bjt',
 	'BTI': 'beb',
@@ -821,15 +828,23 @@ disambiguation = {
 	'QVI': 'qvi',
 	'QWH': 'qwh',
 	'SIG': 'stv',
-	'TNE': 'yrk',
+	'SRB': 'sr',
 	'ZHH': 'zh-HK',
 	'ZHS': 'zh-Hans',
 	'ZHT': 'zh-Hant',
+	'ZHTM': 'zh-MO',
 }
 
 ot.inherit_from_macrolanguages ()
 bcp_47.remove_extra_macrolanguages ()
 ot.inherit_from_macrolanguages ()
+ot.names[DEFAULT_LANGUAGE_SYSTEM] = '*/'
+ot.ranks[DEFAULT_LANGUAGE_SYSTEM] = max (ot.ranks.values ()) + 1
+for tricky_ot_tag in filter (lambda tag: re.match ('[A-Z]{3}$', tag), ot.names):
+	possible_bcp_47_tag = tricky_ot_tag.lower ()
+	if possible_bcp_47_tag in bcp_47.names and not ot.from_bcp_47[possible_bcp_47_tag]:
+		ot.add_language (possible_bcp_47_tag, DEFAULT_LANGUAGE_SYSTEM)
+		bcp_47.macrolanguages[possible_bcp_47_tag] = set ()
 ot.sort_languages ()
 
 print ('/* == Start of generated table == */')
@@ -858,6 +873,8 @@ def hb_tag (tag):
 	Returns:
 		A snippet of C++ representing ``tag``.
 	"""
+	if tag == DEFAULT_LANGUAGE_SYSTEM:
+		return 'HB_TAG_NONE\t       '
 	return "HB_TAG('%s','%s','%s','%s')" % tuple (('%-4s' % tag)[:4])
 
 def get_variant_set (name):
@@ -906,14 +923,18 @@ for language, tags in sorted (ot.from_bcp_47.items ()):
 		print ('\t/* ', end='')
 		bcp_47_name = bcp_47.names.get (language, '')
 		bcp_47_name_candidates = bcp_47_name.split ('\n')
-		intersection = language_name_intersection (bcp_47_name, ot.names[tag])
+		ot_name = ot.names[tag]
 		scope = bcp_47.scopes.get (language, '')
-		if not intersection:
-			write ('%s%s -> %s' % (bcp_47_name_candidates[0], scope, ot.names[tag]))
+		if tag == DEFAULT_LANGUAGE_SYSTEM:
+			write (f'{bcp_47_name_candidates[0]}{scope} != {ot.names[language.upper ()]}')
 		else:
-			name = get_matching_language_name (intersection, bcp_47_name_candidates)
-			bcp_47.names[language] = name
-			write ('%s%s' % (name if len (name) > len (ot.names[tag]) else ot.names[tag], scope))
+			intersection = language_name_intersection (bcp_47_name, ot_name)
+			if not intersection:
+				write ('%s%s -> %s' % (bcp_47_name_candidates[0], scope, ot_name))
+			else:
+				name = get_matching_language_name (intersection, bcp_47_name_candidates)
+				bcp_47.names[language] = name
+				write ('%s%s' % (name if len (name) > len (ot_name) else ot_name, scope))
 		print (' */')
 
 print ('};')
@@ -1079,7 +1100,10 @@ def verify_disambiguation_dict ():
 	global disambiguation
 	global ot
 	for ot_tag, bcp_47_tags in ot.to_bcp_47.items ():
-		primary_tags = list (t for t in bcp_47_tags if t not in bcp_47.grandfathered and ot.from_bcp_47.get (t)[0] == ot_tag)
+		if ot_tag == DEFAULT_LANGUAGE_SYSTEM:
+			primary_tags = []
+		else:
+			primary_tags = list (t for t in bcp_47_tags if t not in bcp_47.grandfathered and ot.from_bcp_47.get (t)[0] == ot_tag)
 		if len (primary_tags) == 1:
 			expect (ot_tag not in disambiguation, 'unnecessary disambiguation for OT tag: %s' % ot_tag)
 			if '-' in primary_tags[0]:
