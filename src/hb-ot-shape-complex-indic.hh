@@ -29,12 +29,12 @@
 
 #include "hb.hh"
 
-#include "hb-ot-shape-complex.hh"
+#include "hb-ot-shape-complex-syllabic.hh"
 
 
 /* buffer var allocations */
-#define indic_category() complex_var_u8_0() /* indic_category_t */
-#define indic_position() complex_var_u8_1() /* indic_position_t */
+#define indic_category() complex_var_u8_category() /* indic_category_t */
+#define indic_position() complex_var_u8_auxiliary() /* indic_position_t */
 
 
 #define INDIC_TABLE_ELEMENT_TYPE uint16_t
@@ -325,7 +325,7 @@ set_indic_properties (hb_glyph_info_t &info)
 {
   hb_codepoint_t u = info.codepoint;
   unsigned int type = hb_indic_get_categories (u);
-  indic_category_t cat = (indic_category_t) (type & 0x7Fu);
+  indic_category_t cat = (indic_category_t) (type & 0xFFu);
   indic_position_t pos = (indic_position_t) (type >> 8);
 
 
