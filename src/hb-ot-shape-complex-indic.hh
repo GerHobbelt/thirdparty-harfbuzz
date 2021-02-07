@@ -37,8 +37,6 @@
 #define indic_position() complex_var_u8_auxiliary() /* indic_position_t */
 
 
-#define INDIC_TABLE_ELEMENT_TYPE uint16_t
-
 /* Cateories used in the OpenType spec:
  * https://docs.microsoft.com/en-us/typography/script-development/devanagari
  */
@@ -194,7 +192,7 @@ enum indic_matra_category_t {
     ) \
    )
 
-HB_INTERNAL INDIC_TABLE_ELEMENT_TYPE
+HB_INTERNAL uint16_t
 hb_indic_get_categories (hb_codepoint_t u);
 
 
@@ -307,17 +305,12 @@ static const hb_codepoint_t ra_chars[] = {
   0x0D30u, /* Malayalam */	/* No Reph, Logical Repha */
 
   0x0DBBu, /* Sinhala */	/* Reph formed only with ZWJ */
-
-  0x179Au, /* Khmer */
 };
 
 static inline bool
 is_ra (hb_codepoint_t u)
 {
-  for (unsigned int i = 0; i < ARRAY_LENGTH (ra_chars); i++)
-    if (u == ra_chars[i])
-      return true;
-  return false;
+  return hb_array (ra_chars).lfind (u);
 }
 
 static inline void
