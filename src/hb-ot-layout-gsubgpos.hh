@@ -149,7 +149,6 @@ struct hb_closure_lookups_context_t :
     if (is_lookup_visited (lookup_index))
       return;
 
-    set_lookup_visited (lookup_index);
     nesting_level_left--;
     recurse_func (this, lookup_index);
     nesting_level_left++;
@@ -1191,7 +1190,7 @@ static inline bool apply_lookup (hb_ot_apply_context_t *c,
 
     /* Don't recurse to ourself at same position.
      * Note that this test is too naive, it doesn't catch longer loops. */
-    if (idx == 0 && lookupRecord[i].lookupListIndex == c->lookup_index)
+    if (unlikely (idx == 0 && lookupRecord[i].lookupListIndex == c->lookup_index))
       continue;
 
     if (unlikely (!buffer->move_to (match_positions[idx])))
@@ -1229,7 +1228,8 @@ static inline bool apply_lookup (hb_ot_apply_context_t *c,
      *     mean that n match positions where removed, as there might
      *     have been marks and default-ignorables in the sequence.  We
      *     should instead drop match positions between current-position
-     *     and current-position + n instead.
+     *     and current-position + n instead. Though, am not sure which
+     *     one is better. Both cases have valid uses. Sigh.
      *
      * It should be possible to construct tests for both of these cases.
      */
@@ -2357,12 +2357,19 @@ struct ChainRule
 				       | hb_map (mapping));
 
     const ArrayOf<LookupRecord> &lookupRecord = StructAfter<ArrayOf<LookupRecord>> (lookahead);
-    HBUINT16 lookupCount;
-    lookupCount = lookupRecord.len;
-    if (!c->copy (lookupCount)) return_trace (nullptr);
 
-    for (unsigned i = 0; i < (unsigned) lookupCount; i++)
+    HBUINT16* lookupCount = c->embed (&(lookupRecord.len));
+    if (!lookupCount) return_trace (nullptr);
+
+    for (unsigned i = 0; i < lookupRecord.len; i++)
+    {
+      if (!lookup_map->has (lookupRecord[i].lookupListIndex))
+      {
+        (*lookupCount)--;
+        continue;
+      }
       if (!c->copy (lookupRecord[i], lookup_map)) return_trace (nullptr);
+    }
 
     return_trace (out);
   }
@@ -2754,8 +2761,8 @@ struct ChainContextFormat2
     + hb_iter (ruleSet)
     | hb_map (hb_add (this))
     | hb_enumerate
-    | hb_filter([&] (unsigned gid)
-    { return input_class_def.intersects_class (c->glyphs, gid); }, hb_first)
+    | hb_filter([&] (unsigned klass)
+    { return input_class_def.intersects_class (c->glyphs, klass); }, hb_first)
     | hb_map (hb_second)
     | hb_apply ([&] (const ChainRuleSet &_)
     { _.closure_lookups (c, lookup_context); })
