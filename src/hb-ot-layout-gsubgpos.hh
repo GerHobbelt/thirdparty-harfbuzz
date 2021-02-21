@@ -89,7 +89,7 @@ struct hb_closure_context_t :
 
   bool is_lookup_done (unsigned int lookup_index)
   {
-    if (done_lookups->in_error ())
+    if (unlikely (done_lookups->in_error ()))
       return true;
 
     /* Have we visited this lookup with the current set of glyphs? */
@@ -165,10 +165,10 @@ struct hb_closure_lookups_context_t :
 
   bool is_lookup_visited (unsigned lookup_index)
   {
-    if (lookup_count++ > HB_MAX_LOOKUP_INDICES)
+    if (unlikely (lookup_count++ > HB_MAX_LOOKUP_INDICES))
       return true;
 
-    if (visited_lookups->in_error ())
+    if (unlikely (visited_lookups->in_error ()))
       return true;
 
     return visited_lookups->has (lookup_index);
@@ -2841,19 +2841,17 @@ struct ChainContextFormat2
     out->coverage.serialize_subset (c, coverage, this);
 
     hb_map_t backtrack_klass_map;
-    out->backtrackClassDef.serialize_subset (c, backtrackClassDef, this, &backtrack_klass_map);
-    if (unlikely (!c->serializer->check_success (!backtrack_klass_map.in_error ())))
-      return_trace (false);
-
-    // subset inputClassDef based on glyphs survived in Coverage subsetting
     hb_map_t input_klass_map;
-    out->inputClassDef.serialize_subset (c, inputClassDef, this, &input_klass_map);
-    if (unlikely (!c->serializer->check_success (!input_klass_map.in_error ())))
-      return_trace (false);
-
     hb_map_t lookahead_klass_map;
+
+    out->backtrackClassDef.serialize_subset (c, backtrackClassDef, this, &backtrack_klass_map);
+    // TODO: subset inputClassDef based on glyphs survived in Coverage subsetting
+    out->inputClassDef.serialize_subset (c, inputClassDef, this, &input_klass_map);
     out->lookaheadClassDef.serialize_subset (c, lookaheadClassDef, this, &lookahead_klass_map);
-    if (unlikely (!c->serializer->check_success (!lookahead_klass_map.in_error ())))
+
+    if (unlikely (!c->serializer->propagate_error (backtrack_klass_map,
+						   input_klass_map,
+						   lookahead_klass_map)))
       return_trace (false);
 
     int non_zero_index = -1, index = 0;
@@ -3432,7 +3430,7 @@ struct GSUBGPOS
     hb_set_t alternate_feature_indices;
     if (version.to_int () >= 0x00010001u)
       (this+featureVars).closure_features (lookup_indices, &alternate_feature_indices);
-    if (alternate_feature_indices.in_error()) {
+    if (unlikely (alternate_feature_indices.in_error())) {
       feature_indices->successful = false;
       return;
     }
