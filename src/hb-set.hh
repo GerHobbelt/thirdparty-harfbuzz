@@ -263,17 +263,12 @@ struct hb_set_t
 
   void reset ()
   {
-    if (unlikely (hb_object_is_immutable (this)))
-      return;
-    clear ();
     successful = true;
+    clear ();
   }
 
   void clear ()
   {
-    if (unlikely (hb_object_is_immutable (this)))
-      return;
-
     if (resize (0))
       population = 0;
   }
@@ -285,6 +280,7 @@ struct hb_set_t
 	return false;
     return true;
   }
+  explicit operator bool () const { return !is_empty (); }
 
   void dirty () { population = UINT_MAX; }
 
