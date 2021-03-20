@@ -1786,7 +1786,7 @@ apply_forward (OT::hb_ot_apply_context_t *c,
     if (applied)
       ret = true;
     else
-      buffer->next_glyph ();
+      (void) buffer->next_glyph ();
   }
   return ret;
 }

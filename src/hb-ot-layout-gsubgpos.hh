@@ -662,7 +662,7 @@ struct hb_ot_apply_context_t :
   void replace_glyph (hb_codepoint_t glyph_index) const
   {
     _set_glyph_props (glyph_index);
-    buffer->replace_glyph (glyph_index);
+    (void) buffer->replace_glyph (glyph_index);
   }
   void replace_glyph_inplace (hb_codepoint_t glyph_index) const
   {
@@ -673,13 +673,13 @@ struct hb_ot_apply_context_t :
 				    unsigned int class_guess) const
   {
     _set_glyph_props (glyph_index, class_guess, true);
-    buffer->replace_glyph (glyph_index);
+    (void) buffer->replace_glyph (glyph_index);
   }
   void output_glyph_for_component (hb_codepoint_t glyph_index,
 				   unsigned int class_guess) const
   {
     _set_glyph_props (glyph_index, class_guess, false, true);
-    buffer->output_glyph (glyph_index);
+    (void) buffer->output_glyph (glyph_index);
   }
 };
 
@@ -1046,7 +1046,7 @@ static inline bool ligate_input (hb_ot_apply_context_t *c,
 				    hb_min (this_comp, last_num_components);
 	  _hb_glyph_info_set_lig_props_for_mark (&buffer->cur(), lig_id, new_lig_comp);
       }
-      buffer->next_glyph ();
+      (void) buffer->next_glyph ();
     }
 
     last_lig_id = _hb_glyph_info_get_lig_id (&buffer->cur());
@@ -1275,7 +1275,7 @@ static inline bool apply_lookup (hb_ot_apply_context_t *c,
       match_positions[next] += delta;
   }
 
-  buffer->move_to (end);
+  (void) buffer->move_to (end);
 
   return_trace (true);
 }
