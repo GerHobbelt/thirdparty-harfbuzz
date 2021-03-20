@@ -67,28 +67,31 @@ _remap_indexes (const hb_set_t *indexes,
 
 }
 
+template <typename GSTAR>
 static inline void
-_gsub_closure_glyphs_lookups_features (hb_face_t *face,
-				       hb_set_t *gids_to_retain,
-				       hb_map_t *gsub_lookups,
-				       hb_map_t *gsub_features,
-				       script_langsys_map *gsub_langsys)
+_closure_glyphs_lookups_features (hb_tag_t tag,
+                                  hb_face_t *face,
+                                  hb_set_t *gids_to_retain,
+                                  hb_map_t *gstar_lookups,
+                                  hb_map_t *gstar_features,
+                                  script_langsys_map *gstar_langsys)
 {
   hb_set_t lookup_indices;
   hb_ot_layout_collect_lookups (face,
-				HB_OT_TAG_GSUB,
+				tag,
 				nullptr,
 				nullptr,
 				nullptr,
 				&lookup_indices);
-  hb_ot_layout_lookups_substitute_closure (face,
-					   &lookup_indices,
-					   gids_to_retain);
-  hb_blob_ptr_t<OT::GSUB> gsub = hb_sanitize_context_t ().reference_table<OT::GSUB> (face);
-  gsub->closure_lookups (face,
+  if (tag == HB_OT_TAG_GSUB)
+    hb_ot_layout_lookups_substitute_closure (face,
+                                             &lookup_indices,
+                                             gids_to_retain);
+  hb_blob_ptr_t<GSTAR> gstar = hb_sanitize_context_t ().reference_table<GSTAR> (face);
+  gstar->closure_lookups (face,
 			 gids_to_retain,
 			 &lookup_indices);
-  _remap_indexes (&lookup_indices, gsub_lookups);
+  _remap_indexes (&lookup_indices, gstar_lookups);
 
   // Collect and prune features
   hb_set_t feature_indices;
@@ -99,56 +102,18 @@ _gsub_closure_glyphs_lookups_features (hb_face_t *face,
                                  nullptr,
                                  &feature_indices);
 
-  gsub->prune_features (gsub_lookups, &feature_indices);
+  gstar->prune_features (gstar_lookups, &feature_indices);
   hb_map_t duplicate_feature_map;
-  gsub->find_duplicate_features (gsub_lookups, &feature_indices, &duplicate_feature_map);
+  gstar->find_duplicate_features (gstar_lookups, &feature_indices, &duplicate_feature_map);
 
   feature_indices.clear ();
-  gsub->prune_langsys (&duplicate_feature_map, gsub_langsys, &feature_indices);
-  _remap_indexes (&feature_indices, gsub_features);
+  gstar->prune_langsys (&duplicate_feature_map, gstar_langsys, &feature_indices);
+  _remap_indexes (&feature_indices, gstar_features);
 
-  gsub.destroy ();
+  gstar.destroy ();
+  gids_to_retain->propagate_error (lookup_indices);
 }
 
-static inline void
-_gpos_closure_lookups_features (hb_face_t      *face,
-				const hb_set_t *gids_to_retain,
-				hb_map_t       *gpos_lookups,
-				hb_map_t       *gpos_features,
-				script_langsys_map *gpos_langsys)
-{
-  hb_set_t lookup_indices;
-  hb_ot_layout_collect_lookups (face,
-				HB_OT_TAG_GPOS,
-				nullptr,
-				nullptr,
-				nullptr,
-				&lookup_indices);
-  hb_blob_ptr_t<OT::GPOS> gpos = hb_sanitize_context_t ().reference_table<OT::GPOS> (face);
-  gpos->closure_lookups (face,
-			 gids_to_retain,
-			 &lookup_indices);
-  _remap_indexes (&lookup_indices, gpos_lookups);
-
-  // Collect and prune features
-  hb_set_t feature_indices;
-  hb_ot_layout_collect_features (face,
-                                 HB_OT_TAG_GPOS,
-                                 nullptr,
-                                 nullptr,
-                                 nullptr,
-                                 &feature_indices);
-
-  gpos->prune_features (gpos_lookups, &feature_indices);
-  hb_map_t duplicate_feature_map;
-  gpos->find_duplicate_features (gpos_lookups, &feature_indices, &duplicate_feature_map);
-
-  feature_indices.clear ();
-  gpos->prune_langsys (&duplicate_feature_map, gpos_langsys, &feature_indices);
-  _remap_indexes (&feature_indices, gpos_features);
-
-  gpos.destroy ();
-}
 #endif
 
 #ifndef HB_NO_VAR
@@ -247,10 +212,10 @@ _populate_gids_to_retain (hb_subset_plan_t* plan,
 #ifndef HB_NO_SUBSET_LAYOUT
   if (close_over_gsub)
     // closure all glyphs/lookups/features needed for GSUB substitutions.
-    _gsub_closure_glyphs_lookups_features (plan->source, plan->_glyphset_gsub, plan->gsub_lookups, plan->gsub_features, plan->gsub_langsys);
+    _closure_glyphs_lookups_features<OT::GSUB> (HB_OT_TAG_GSUB, plan->source, plan->_glyphset_gsub, plan->gsub_lookups, plan->gsub_features, plan->gsub_langsys);
 
   if (close_over_gpos)
-    _gpos_closure_lookups_features (plan->source, plan->_glyphset_gsub, plan->gpos_lookups, plan->gpos_features, plan->gpos_langsys);
+    _closure_glyphs_lookups_features<OT::GPOS> (HB_OT_TAG_GPOS, plan->source, plan->_glyphset_gsub, plan->gpos_lookups, plan->gpos_features, plan->gpos_langsys);
 #endif
   _remove_invalid_gids (plan->_glyphset_gsub, plan->source->get_num_glyphs ());
 
