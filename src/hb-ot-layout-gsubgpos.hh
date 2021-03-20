@@ -177,7 +177,6 @@ struct hb_closure_context_t :
     hb_set_del_range (output, face->get_num_glyphs (), hb_set_get_max (output));	/* Remove invalid glyphs. */
     hb_set_union (glyphs, output);
     glyphs->propagate_error (output);
-    glyphs->propagate_error (done_lookups);
 
     hb_set_clear (output);
     active_glyphs_stack.pop ();
