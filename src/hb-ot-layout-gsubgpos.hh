@@ -1252,10 +1252,11 @@ static void context_closure_recurse_lookups (hb_closure_context_t *c,
     unsigned seqIndex = lookupRecord[i].sequenceIndex;
     if (seqIndex >= inputCount) continue;
 
-    hb_set_t *pos_glyphs = hb_set_create ();
+    hb_set_t *pos_glyphs = nullptr;
 
     if (hb_set_is_empty (covered_seq_indicies) || !hb_set_has (covered_seq_indicies, seqIndex))
     {
+      pos_glyphs = hb_set_create ();
       if (seqIndex == 0)
       {
         switch (context_format) {
@@ -1285,7 +1286,8 @@ static void context_closure_recurse_lookups (hb_closure_context_t *c,
     }
 
     hb_set_add (covered_seq_indicies, seqIndex);
-    c->push_cur_active_glyphs (pos_glyphs);
+    if (pos_glyphs)
+      c->push_cur_active_glyphs (pos_glyphs);
 
     unsigned endIndex = inputCount;
     if (context_format == ContextFormat::CoverageBasedContext)
@@ -1293,8 +1295,10 @@ static void context_closure_recurse_lookups (hb_closure_context_t *c,
 
     c->recurse (lookupRecord[i].lookupListIndex, covered_seq_indicies, seqIndex, endIndex);
 
-    c->pop_cur_done_glyphs ();
-    hb_set_destroy (pos_glyphs);
+    if (pos_glyphs) {
+      c->pop_cur_done_glyphs ();
+      hb_set_destroy (pos_glyphs);
+    }
   }
 
   hb_set_destroy (covered_seq_indicies);
