@@ -108,15 +108,15 @@ struct hb_closure_context_t :
 
       if (!done_lookups_glyph_set->get (lookup_index))
       {
-        hb_set_t* empty_set = hb_set_create ();
-        done_lookups_glyph_set->set (lookup_index, empty_set);
-        if (!done_lookups_glyph_set->get (lookup_index)) {
-          hb_set_destroy (empty_set);
-          return true;
-        }
+	hb_set_t* empty_set = hb_set_create ();
+	if (unlikely (!done_lookups_glyph_set->set (lookup_index, empty_set)))
+	{
+	  hb_set_destroy (empty_set);
+	  return true;
+	}
       }
 
-      done_lookups_glyph_set->get (lookup_index)->clear ();
+      hb_set_clear (done_lookups_glyph_set->get (lookup_index));
     }
 
     hb_set_t *covered_glyph_set = done_lookups_glyph_set->get (lookup_index);
@@ -1250,7 +1250,7 @@ static void context_closure_recurse_lookups (hb_closure_context_t *c,
   for (unsigned int i = 0; i < lookupCount; i++)
   {
     unsigned seqIndex = lookupRecord[i].sequenceIndex;
-    if (seqIndex > inputCount) continue;
+    if (seqIndex >= inputCount) continue;
 
     hb_set_t *pos_glyphs = hb_set_create ();
 
