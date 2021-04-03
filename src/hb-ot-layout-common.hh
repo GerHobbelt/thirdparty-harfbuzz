@@ -384,7 +384,7 @@ struct Record
   }
 
   Tag		tag;		/* 4-byte Tag identifier */
-  OffsetTo<Type>
+  Offset16To<Type>
 		offset;		/* Offset from beginning of object holding
 				 * the Record */
   public:
@@ -392,11 +392,11 @@ struct Record
 };
 
 template <typename Type>
-struct RecordArrayOf : SortedArrayOf<Record<Type>>
+struct RecordArrayOf : SortedArray16Of<Record<Type>>
 {
-  const OffsetTo<Type>& get_offset (unsigned int i) const
+  const Offset16To<Type>& get_offset (unsigned int i) const
   { return (*this)[i].offset; }
-  OffsetTo<Type>& get_offset (unsigned int i)
+  Offset16To<Type>& get_offset (unsigned int i)
   { return (*this)[i].offset; }
   const Tag& get_tag (unsigned int i) const
   { return (*this)[i].tag; }
@@ -517,7 +517,7 @@ struct RangeRecord
 DECLARE_NULL_NAMESPACE_BYTES (OT, RangeRecord);
 
 
-struct IndexArray : ArrayOf<Index>
+struct IndexArray : Array16Of<Index>
 {
   bool intersects (const hb_map_t *indexes) const
   { return hb_any (*this, indexes); }
@@ -786,7 +786,7 @@ struct Script
   }
 
   protected:
-  OffsetTo<LangSys>
+  Offset16To<LangSys>
 		defaultLangSys;	/* Offset to DefaultLangSys table--from
 				 * beginning of Script table--may be Null */
   RecordArrayOf<LangSys>
@@ -1011,7 +1011,7 @@ struct FeatureParamsCharacterVariants
 					 * user-interface labels for the
 					 * feature parameters. (Must be zero
 					 * if numParameters is zero.) */
-  ArrayOf<HBUINT24>
+  Array16Of<HBUINT24>
 		characters;		/* Array of the Unicode Scalar Value
 					 * of the characters for which this
 					 * feature provides glyph variants.
@@ -1153,7 +1153,7 @@ struct Feature
       unsigned int new_offset_int = orig_offset -
 				    (((char *) this) - ((char *) closure->list_base));
 
-      OffsetTo<FeatureParams> new_offset;
+      Offset16To<FeatureParams> new_offset;
       /* Check that it would not overflow. */
       new_offset = new_offset_int;
       if (new_offset == new_offset_int &&
@@ -1165,7 +1165,7 @@ struct Feature
     return_trace (true);
   }
 
-  OffsetTo<FeatureParams>
+  Offset16To<FeatureParams>
 		 featureParams;	/* Offset to Feature Parameters table (if one
 				 * has been defined for the feature), relative
 				 * to the beginning of the Feature Table; = Null
@@ -1204,11 +1204,11 @@ struct Lookup
   unsigned int get_subtable_count () const { return subTable.len; }
 
   template <typename TSubTable>
-  const OffsetArrayOf<TSubTable>& get_subtables () const
-  { return reinterpret_cast<const OffsetArrayOf<TSubTable> &> (subTable); }
+  const Array16OfOffset16To<TSubTable>& get_subtables () const
+  { return reinterpret_cast<const Array16OfOffset16To<TSubTable> &> (subTable); }
   template <typename TSubTable>
-  OffsetArrayOf<TSubTable>& get_subtables ()
-  { return reinterpret_cast<OffsetArrayOf<TSubTable> &> (subTable); }
+  Array16OfOffset16To<TSubTable>& get_subtables ()
+  { return reinterpret_cast<Array16OfOffset16To<TSubTable> &> (subTable); }
 
   template <typename TSubTable>
   const TSubTable& get_subtable (unsigned int i) const
@@ -1286,7 +1286,7 @@ struct Lookup
     const hb_set_t *glyphset = c->plan->glyphset_gsub ();
     unsigned int lookup_type = get_type ();
     + hb_iter (get_subtables <TSubTable> ())
-    | hb_filter ([this, glyphset, lookup_type] (const OffsetTo<TSubTable> &_) { return (this+_).intersects (glyphset, lookup_type); })
+    | hb_filter ([this, glyphset, lookup_type] (const Offset16To<TSubTable> &_) { return (this+_).intersects (glyphset, lookup_type); })
     | hb_apply (subset_offset_array (c, out->get_subtables<TSubTable> (), this, lookup_type))
     ;
 
@@ -1334,7 +1334,7 @@ struct Lookup
   private:
   HBUINT16	lookupType;		/* Different enumerations for GSUB and GPOS */
   HBUINT16	lookupFlag;		/* Lookup qualifiers */
-  ArrayOf<Offset16>
+  Array16Of<Offset16>
 		subTable;		/* Array of SubTables */
 /*HBUINT16	markFilteringSetX[HB_VAR_ARRAY];*//* Index (base 0) into GDEF mark glyph sets
 					 * structure. This field is only present if bit
@@ -1343,10 +1343,10 @@ struct Lookup
   DEFINE_SIZE_ARRAY (6, subTable);
 };
 
-typedef OffsetListOf<Lookup> LookupList;
+typedef List16OfOffset16To<Lookup> LookupList;
 
 template <typename TLookup>
-struct LookupOffsetList : OffsetListOf<TLookup>
+struct LookupOffsetList : List16OfOffset16To<TLookup>
 {
   bool subset (hb_subset_context_t        *c,
 	       hb_subset_layout_context_t *l) const
@@ -1367,7 +1367,7 @@ struct LookupOffsetList : OffsetListOf<TLookup>
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    return_trace (OffsetListOf<TLookup>::sanitize (c, this));
+    return_trace (List16OfOffset16To<TLookup>::sanitize (c, this));
   }
 };
 
@@ -1447,7 +1447,7 @@ struct CoverageFormat1
 
   protected:
   HBUINT16	coverageFormat;	/* Format identifier--format = 1 */
-  SortedArrayOf<HBGlyphID>
+  SortedArray16Of<HBGlyphID>
 		glyphArray;	/* Array of GlyphIDs--in numerical order */
   public:
   DEFINE_SIZE_ARRAY (4, glyphArray);
@@ -1623,7 +1623,7 @@ struct CoverageFormat2
 
   protected:
   HBUINT16	coverageFormat;	/* Format identifier--format = 2 */
-  SortedArrayOf<RangeRecord>
+  SortedArray16Of<RangeRecord>
 		rangeRecord;	/* Array of glyph ranges--ordered by
 				 * Start GlyphID. rangeCount entries
 				 * long */
@@ -2044,7 +2044,7 @@ struct ClassDefFormat1
   protected:
   HBUINT16	classFormat;	/* Format identifier--format = 1 */
   HBGlyphID	startGlyph;	/* First GlyphID of the classValueArray */
-  ArrayOf<HBUINT16>
+  Array16Of<HBUINT16>
 		classValue;	/* Array of Class Values--one per GlyphID */
   public:
   DEFINE_SIZE_ARRAY (6, classValue);
@@ -2274,7 +2274,7 @@ struct ClassDefFormat2
 
   protected:
   HBUINT16	classFormat;	/* Format identifier--format = 2 */
-  SortedArrayOf<RangeRecord>
+  SortedArray16Of<RangeRecord>
 		rangeRecord;	/* Array of glyph ranges--ordered by
 				 * Start GlyphID */
   public:
@@ -2712,7 +2712,7 @@ struct VarData
   protected:
   HBUINT16		itemCount;
   HBUINT16		shortCount;
-  ArrayOf<HBUINT16>	regionIndices;
+  Array16Of<HBUINT16>	regionIndices;
 /*UnsizedArrayOf<HBUINT8>bytesX;*/
   public:
   DEFINE_SIZE_ARRAY (6, regionIndices);
@@ -2720,6 +2720,7 @@ struct VarData
 
 struct VariationStore
 {
+  private:
   float get_delta (unsigned int outer, unsigned int inner,
 		   const int *coords, unsigned int coord_count) const
   {
@@ -2735,6 +2736,7 @@ struct VariationStore
 					     this+regions);
   }
 
+  public:
   float get_delta (unsigned int index,
 		   const int *coords, unsigned int coord_count) const
   {
@@ -2778,7 +2780,7 @@ struct VariationStore
 		  .serialize (c, &(src+src->regions), region_map))) return_trace (false);
 
     /* TODO: The following code could be simplified when
-     * OffsetListOf::subset () can take a custom param to be passed to VarData::serialize ()
+     * List16OfOffset16To::subset () can take a custom param to be passed to VarData::serialize ()
      */
     dataSets.len = set_count;
     unsigned int set_index = 0;
@@ -2853,8 +2855,8 @@ struct VariationStore
 
   protected:
   HBUINT16				format;
-  LOffsetTo<VarRegionList>		regions;
-  LOffsetArrayOf<VarData>		dataSets;
+  Offset32To<VarRegionList>		regions;
+  Array16OfOffset32To<VarData>		dataSets;
   public:
   DEFINE_SIZE_ARRAY (8, dataSets);
 };
@@ -2967,7 +2969,7 @@ struct ConditionSet
   }
 
   protected:
-  LOffsetArrayOf<Condition>	conditions;
+  Array16OfOffset32To<Condition>	conditions;
   public:
   DEFINE_SIZE_ARRAY (2, conditions);
 };
@@ -3008,7 +3010,7 @@ struct FeatureTableSubstitutionRecord
 
   protected:
   HBUINT16		featureIndex;
-  LOffsetTo<Feature>	feature;
+  Offset32To<Feature>	feature;
   public:
   DEFINE_SIZE_STATIC (6);
 };
@@ -3070,7 +3072,7 @@ struct FeatureTableSubstitution
 
   protected:
   FixedVersion<>	version;	/* Version--0x00010000u */
-  ArrayOf<FeatureTableSubstitutionRecord>
+  Array16Of<FeatureTableSubstitutionRecord>
 			substitutions;
   public:
   DEFINE_SIZE_ARRAY (6, substitutions);
@@ -3114,9 +3116,9 @@ struct FeatureVariationRecord
   }
 
   protected:
-  LOffsetTo<ConditionSet>
+  Offset32To<ConditionSet>
 			conditions;
-  LOffsetTo<FeatureTableSubstitution>
+  Offset32To<FeatureTableSubstitution>
 			substitutions;
   public:
   DEFINE_SIZE_STATIC (8);
@@ -3196,7 +3198,7 @@ struct FeatureVariations
 
   protected:
   FixedVersion<>	version;	/* Version--0x00010000u */
-  LArrayOf<FeatureVariationRecord>
+  Array32Of<FeatureVariationRecord>
 			varRecords;
   public:
   DEFINE_SIZE_ARRAY_SIZED (8, varRecords);
@@ -3309,22 +3311,20 @@ struct VariationDevice
     if (unlikely (!out)) return_trace (nullptr);
     if (!layout_variation_idx_map || layout_variation_idx_map->is_empty ()) return_trace (out);
 
-    unsigned org_idx = (outerIndex << 16) + innerIndex;
-    if (!layout_variation_idx_map->has (org_idx))
+    /* TODO Just get() and bail if NO_VARIATION. Needs to setup the map to return that. */
+    if (!layout_variation_idx_map->has (varIdx))
     {
       c->revert (snap);
       return_trace (nullptr);
     }
-    unsigned new_idx = layout_variation_idx_map->get (org_idx);
-    out->outerIndex = new_idx >> 16;
-    out->innerIndex = new_idx & 0xFFFF;
+    unsigned new_idx = layout_variation_idx_map->get (varIdx);
+    out->varIdx = new_idx;
     return_trace (out);
   }
 
   void record_variation_index (hb_set_t *layout_variation_indices) const
   {
-    unsigned var_idx = (outerIndex << 16) + innerIndex;
-    layout_variation_indices->add (var_idx);
+    layout_variation_indices->add (varIdx);
   }
 
   bool sanitize (hb_sanitize_context_t *c) const
@@ -3337,12 +3337,11 @@ struct VariationDevice
 
   float get_delta (hb_font_t *font, const VariationStore &store) const
   {
-    return store.get_delta (outerIndex, innerIndex, font->coords, font->num_coords);
+    return store.get_delta (varIdx, font->coords, font->num_coords);
   }
 
   protected:
-  HBUINT16	outerIndex;
-  HBUINT16	innerIndex;
+  VarIdx	varIdx;
   HBUINT16	deltaFormat;	/* Format identifier for this table: 0x0x8000 */
   public:
   DEFINE_SIZE_STATIC (6);
