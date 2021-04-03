@@ -442,7 +442,7 @@ struct hb_serialize_context_t
 
   bool err (hb_serialize_error_t err_type)
   {
-    return bool ((errors = (errors | err_type)));
+    return !bool ((errors = (errors | err_type)));
   }
 
   template <typename Type>
