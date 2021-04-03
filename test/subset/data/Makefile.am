@@ -25,6 +25,7 @@ EXTRA_DIST += \
 	expected/layout.gsub5 \
 	expected/layout.gsub6 \
 	expected/layout.gsub8 \
+	expected/layout.khmer \
 	expected/layout.gdef \
 	expected/layout.context \
 	expected/layout.gdef-varstore \
@@ -35,6 +36,7 @@ EXTRA_DIST += \
 	expected/sbix \
 	expected/colr \
 	expected/cbdt \
+	expected/variable \
 	fonts \
 	profiles \
 	$(NULL)

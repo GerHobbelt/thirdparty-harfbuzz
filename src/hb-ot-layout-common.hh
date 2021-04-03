@@ -557,7 +557,7 @@ struct IndexArray : Array16Of<Index>
 
   void add_indexes_to (hb_set_t* output /* OUT */) const
   {
-    output->add_array (arrayZ, len);
+    output->add_array (as_array ());
   }
 };
 
@@ -1108,7 +1108,7 @@ struct Feature
     auto *out = c->serializer->start_embed (*this);
     if (unlikely (!out || !c->serializer->extend_min (out))) return_trace (false);
 
-    bool subset_featureParams = out->featureParams.serialize_subset (c, featureParams, this, tag);
+    out->featureParams.serialize_subset (c, featureParams, this, tag);
 
     auto it =
     + hb_iter (lookupIndex)
@@ -1117,8 +1117,9 @@ struct Feature
     ;
 
     out->lookupIndex.serialize (c->serializer, l, it);
-    return_trace (bool (it) || subset_featureParams
-		  || (tag && *tag == HB_TAG ('p', 'r', 'e', 'f')));
+    // The decision to keep or drop this feature is already made before we get here
+    // so always retain it.
+    return_trace (true);
   }
 
   bool sanitize (hb_sanitize_context_t *c,
@@ -1405,10 +1406,8 @@ struct CoverageFormat1
   bool intersects (const hb_set_t *glyphs) const
   {
     /* TODO Speed up, using hb_set_next() and bsearch()? */
-    unsigned int count = glyphArray.len;
-    const HBGlyphID *arr = glyphArray.arrayZ;
-    for (unsigned int i = 0; i < count; i++)
-      if (glyphs->has (arr[i]))
+    for (const auto& g : glyphArray.as_array ())
+      if (glyphs->has (g))
 	return true;
     return false;
   }
@@ -1425,7 +1424,7 @@ struct CoverageFormat1
 
   template <typename set_t>
   bool collect_coverage (set_t *glyphs) const
-  { return glyphs->add_sorted_array (glyphArray.arrayZ, glyphArray.len); }
+  { return glyphs->add_sorted_array (glyphArray.as_array ()); }
 
   public:
   /* Older compilers need this to be public. */
@@ -1521,20 +1520,16 @@ struct CoverageFormat2
   {
     /* TODO Speed up, using hb_set_next() and bsearch()? */
     /* TODO(iter) Rewrite as dagger. */
-    unsigned count = rangeRecord.len;
-    const RangeRecord *arr = rangeRecord.arrayZ;
-    for (unsigned i = 0; i < count; i++)
-      if (arr[i].intersects (glyphs))
+    for (const auto& range : rangeRecord.as_array ())
+      if (range.intersects (glyphs))
 	return true;
     return false;
   }
   bool intersects_coverage (const hb_set_t *glyphs, unsigned int index) const
   {
     /* TODO(iter) Rewrite as dagger. */
-    unsigned count = rangeRecord.len;
-    const RangeRecord *arr = rangeRecord.arrayZ;
-    for (unsigned i = 0; i < count; i++) {
-      const RangeRecord &range = arr[i];
+    for (const auto& range : rangeRecord.as_array ())
+    {
       if (range.value <= index &&
 	  index < (unsigned int) range.value + (range.last - range.first) &&
 	  range.intersects (glyphs))
@@ -1547,10 +1542,8 @@ struct CoverageFormat2
 
   void intersected_coverage_glyphs (const hb_set_t *glyphs, hb_set_t *intersect_glyphs) const
   {
-    unsigned count = rangeRecord.len;
-    for (unsigned i = 0; i < count; i++)
+    for (const auto& range : rangeRecord.as_array ())
     {
-      const RangeRecord &range = rangeRecord[i];
       if (!range.intersects (glyphs)) continue;
       for (hb_codepoint_t g = range.first; g <= range.last; g++)
         if (glyphs->has (g)) intersect_glyphs->add (g);
@@ -2959,7 +2952,8 @@ struct ConditionSet
     + conditions.iter ()
     | hb_apply (subset_offset_array (c, out->conditions, this))
     ;
-    return_trace (true);
+
+    return_trace (bool (out->conditions));
   }
 
   bool sanitize (hb_sanitize_context_t *c) const
@@ -2994,6 +2988,12 @@ struct FeatureTableSubstitutionRecord
   bool subset (hb_subset_layout_context_t *c, const void *base) const
   {
     TRACE_SUBSET (this);
+    if (!c->feature_index_map->has (featureIndex)) {
+      // Feature that is being substituted is not being retained, so we don't
+      // need this.
+      return_trace (false);
+    }
+
     auto *out = c->subset_context->serializer->embed (this);
     if (unlikely (!out)) return_trace (false);
 
@@ -3046,6 +3046,15 @@ struct FeatureTableSubstitution
       record.closure_features (this, lookup_indexes, feature_indexes);
   }
 
+  bool intersects_features (const hb_map_t *feature_index_map) const
+  {
+    for (const FeatureTableSubstitutionRecord& record : substitutions)
+    {
+      if (feature_index_map->has (record.featureIndex)) return true;
+    }
+    return false;
+  }
+
   bool subset (hb_subset_context_t        *c,
 	       hb_subset_layout_context_t *l) const
   {
@@ -3059,7 +3068,8 @@ struct FeatureTableSubstitution
     + substitutions.iter ()
     | hb_apply (subset_record_array (l, &(out->substitutions), this))
     ;
-    return_trace (true);
+
+    return_trace (bool (out->substitutions));
   }
 
   bool sanitize (hb_sanitize_context_t *c) const
@@ -3094,6 +3104,11 @@ struct FeatureVariationRecord
 			 hb_set_t       *feature_indexes /* OUT */) const
   {
     (base+substitutions).closure_features (lookup_indexes, feature_indexes);
+  }
+
+  bool intersects_features (const void *base, const hb_map_t *feature_index_map) const
+  {
+    return (base+substitutions).intersects_features (feature_index_map);
   }
 
   bool subset (hb_subset_layout_context_t *c, const void *base) const
@@ -3182,9 +3197,18 @@ struct FeatureVariations
     out->version.major = version.major;
     out->version.minor = version.minor;
 
-    + varRecords.iter ()
-    | hb_apply (subset_record_array (l, &(out->varRecords), this))
-    ;
+    int keep_up_to = -1;
+    for (int i = varRecords.len - 1; i >= 0; i--) {
+      if (varRecords[i].intersects_features (this, l->feature_index_map)) {
+        keep_up_to = i;
+        break;
+      }
+    }
+
+    unsigned count = (unsigned) (keep_up_to + 1);
+    for (unsigned i = 0; i < count; i++) {
+      subset_record_array (l, &(out->varRecords), this) (varRecords[i]);
+    }
     return_trace (bool (out->varRecords));
   }
 

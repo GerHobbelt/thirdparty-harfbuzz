@@ -20,6 +20,7 @@ tests = [
   'layout.gsub6',
   'layout.gsub8',
   'layout.gdef',
+  'layout.khmer',
   'layout.context',
   'layout.gdef-varstore',
   'layout.gdef-attachlist',
@@ -29,6 +30,7 @@ tests = [
   'sbix',
   'colr',
   'cbdt',
+  'variable',
 ]
 
 repack_tests = [

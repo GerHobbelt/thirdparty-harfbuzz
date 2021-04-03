@@ -26,9 +26,11 @@ TESTS = \
 	tests/layout.gsub5.tests \
 	tests/layout.gsub6.tests \
 	tests/layout.gsub8.tests \
+	tests/layout.khmer.tests \
 	tests/layout.notonastaliqurdu.tests \
 	tests/layout.tests \
 	tests/sbix.tests \
+	tests/variable.tests \
 	$(NULL)
 
 XFAIL_TESTS = \
