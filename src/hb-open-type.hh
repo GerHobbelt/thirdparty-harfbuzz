@@ -619,7 +619,20 @@ struct ArrayOf
   hb_array_t<Type> sub_array (unsigned int start_offset, unsigned int *count = nullptr /* IN/OUT */)
   { return as_array ().sub_array (start_offset, count); }
 
-  hb_success_t serialize (hb_serialize_context_t *c, unsigned items_len)
+  template <typename T>
+  Type &lsearch (const T &x, Type &not_found = Crap (Type))
+  { return *as_array ().lsearch (x, &not_found); }
+  template <typename T>
+  const Type &lsearch (const T &x, const Type &not_found = Null (Type)) const
+  { return *as_array ().lsearch (x, &not_found); }
+  template <typename T>
+  bool lfind (const T &x, unsigned *pos = nullptr) const
+  { return as_array ().lfind (x, pos); }
+
+  void qsort (unsigned int start = 0, unsigned int end = (unsigned int) -1)
+  { as_array ().qsort (start, end); }
+
+  HB_NODISCARD bool serialize (hb_serialize_context_t *c, unsigned items_len)
   {
     TRACE_SERIALIZE (this);
     if (unlikely (!c->extend_min (*this))) return_trace (false);
@@ -629,7 +642,7 @@ struct ArrayOf
   }
   template <typename Iterator,
 	    hb_requires (hb_is_source_of (Iterator, Type))>
-  hb_success_t serialize (hb_serialize_context_t *c, Iterator items)
+  HB_NODISCARD bool serialize (hb_serialize_context_t *c, Iterator items)
   {
     TRACE_SERIALIZE (this);
     unsigned count = items.len ();
@@ -675,19 +688,6 @@ struct ArrayOf
 	return_trace (false);
     return_trace (true);
   }
-
-  template <typename T>
-  Type &lsearch (const T &x, Type &not_found = Crap (Type))
-  { return *as_array ().lsearch (x, &not_found); }
-  template <typename T>
-  const Type &lsearch (const T &x, const Type &not_found = Null (Type)) const
-  { return *as_array ().lsearch (x, &not_found); }
-  template <typename T>
-  bool lfind (const T &x, unsigned *pos = nullptr) const
-  { return as_array ().lfind (x, pos); }
-
-  void qsort (unsigned int start = 0, unsigned int end = (unsigned int) -1)
-  { as_array ().qsort (start, end); }
 
   bool sanitize_shallow (hb_sanitize_context_t *c) const
   {
@@ -861,6 +861,7 @@ struct ArrayOfM1
   {
     TRACE_SANITIZE (this);
     if (unlikely (!sanitize_shallow (c))) return_trace (false);
+    if (!sizeof... (Ts) && hb_is_trivially_copyable (Type)) return_trace (true);
     unsigned int count = lenM1 + 1;
     for (unsigned int i = 0; i < count; i++)
       if (unlikely (!c->dispatch (arrayZ[i], hb_forward<Ts> (ds)...)))
