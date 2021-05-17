@@ -29,6 +29,7 @@ tests = [
   'cmap14',
   'sbix',
   'colr',
+  'colr_with_components',
   'cbdt',
   'variable',
 ]

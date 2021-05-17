@@ -35,6 +35,7 @@ EXTRA_DIST += \
 	expected/cmap14 \
 	expected/sbix \
 	expected/colr \
+	expected/colr_with_components \
 	expected/cbdt \
 	expected/variable \
 	fonts \

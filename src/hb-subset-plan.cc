@@ -35,6 +35,7 @@
 #include "hb-ot-layout-gsub-table.hh"
 #include "hb-ot-cff1-table.hh"
 #include "hb-ot-color-colr-table.hh"
+#include "hb-ot-color-colrv1-closure.hh"
 #include "hb-ot-var-fvar-table.hh"
 #include "hb-ot-stat-table.hh"
 
@@ -219,20 +220,35 @@ _populate_gids_to_retain (hb_subset_plan_t* plan,
 #endif
   _remove_invalid_gids (plan->_glyphset_gsub, plan->source->get_num_glyphs ());
 
+  // Collect all glyphs referenced by COLRv0
+  hb_set_t* cur_glyphset = plan->_glyphset_gsub;
+  hb_set_t glyphset_colrv0;
+  if (colr.is_valid ())
+  {
+    glyphset_colrv0.union_ (cur_glyphset);
+    for (hb_codepoint_t gid : cur_glyphset->iter ())
+      colr.closure_glyphs (gid, &glyphset_colrv0);
+    cur_glyphset = &glyphset_colrv0;
+  }
+
   // Populate a full set of glyphs to retain by adding all referenced
   // composite glyphs.
-  hb_codepoint_t gid = HB_SET_VALUE_INVALID;
-  while (plan->_glyphset_gsub->next (&gid))
+  for (hb_codepoint_t gid : cur_glyphset->iter ())
   {
     glyf.add_gid_and_children (gid, plan->_glyphset);
 #ifndef HB_NO_SUBSET_CFF
     if (cff.is_valid ())
       _add_cff_seac_components (cff, gid, plan->_glyphset);
 #endif
-    if (colr.is_valid ())
-      colr.closure_glyphs (gid, plan->_glyphset);
   }
 
+  _remove_invalid_gids (plan->_glyphset, plan->source->get_num_glyphs ());
+  
+  hb_set_t layer_indices, palette_indices;
+  colr.closure_forV1 (plan->_glyphset, &layer_indices, &palette_indices);
+  _remap_indexes (&layer_indices, plan->colrv1_layers);
+  _remap_indexes (&palette_indices, plan->colrv1_palettes);
+  colr.fini ();
   _remove_invalid_gids (plan->_glyphset, plan->source->get_num_glyphs ());
 
 #ifndef HB_NO_VAR
@@ -345,6 +361,8 @@ hb_subset_plan_create (hb_face_t         *face,
 
   plan->gsub_features = hb_map_create ();
   plan->gpos_features = hb_map_create ();
+  plan->colrv1_layers = hb_map_create ();
+  plan->colrv1_palettes = hb_map_create ();
   plan->layout_variation_indices = hb_set_create ();
   plan->layout_variation_idx_map = hb_map_create ();
 
@@ -395,6 +413,8 @@ hb_subset_plan_destroy (hb_subset_plan_t *plan)
   hb_map_destroy (plan->gpos_lookups);
   hb_map_destroy (plan->gsub_features);
   hb_map_destroy (plan->gpos_features);
+  hb_map_destroy (plan->colrv1_layers);
+  hb_map_destroy (plan->colrv1_palettes);
   hb_set_destroy (plan->layout_variation_indices);
   hb_map_destroy (plan->layout_variation_idx_map);
 
