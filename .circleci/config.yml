@@ -10,19 +10,6 @@ executors:
 
 jobs:
 
-  macos-10_13_6-aat-fonts:
-    macos:
-      xcode: "10.1.0"
-    steps:
-      - checkout
-      - run: HOMEBREW_NO_AUTO_UPDATE=1 brew install pkg-config ragel freetype glib cairo python3 ninja
-      - run: pip3 install meson --upgrade
-      - run: meson build
-      - run: meson compile -Cbuild
-      - run: meson test -Cbuild --print-errorlogs
-      - store_artifacts:
-          path: build/meson-logs/
-
   macos-10_14_4-aat-fonts:
     macos:
       xcode: "11.1.0"
@@ -76,7 +63,7 @@ jobs:
 
   fedora-valgrind:
     docker:
-      - image: fedora
+      - image: fedora:33
     steps:
       - checkout
       - run: dnf install -y pkg-config ragel valgrind gcc gcc-c++ meson git glib2-devel freetype-devel cairo-devel libicu-devel gobject-introspection-devel graphite2-devel redhat-rpm-config python python-pip || true
@@ -160,7 +147,6 @@ workflows:
 
   build:
     jobs:
-      - macos-10_13_6-aat-fonts
       - macos-10_14_4-aat-fonts
       - macos-10_15_3-aat-fonts
       - distcheck: # will be dropped with autotools removal
