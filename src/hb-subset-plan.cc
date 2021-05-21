@@ -56,7 +56,6 @@ _add_cff_seac_components (const OT::cff1::accelerator_t &cff,
 }
 #endif
 
-#ifndef HB_NO_SUBSET_LAYOUT
 static void
 _remap_indexes (const hb_set_t *indexes,
 		hb_map_t       *mapping /* OUT */)
@@ -68,6 +67,7 @@ _remap_indexes (const hb_set_t *indexes,
 
 }
 
+#ifndef HB_NO_SUBSET_LAYOUT
 template <typename GSTAR>
 static inline void
 _closure_glyphs_lookups_features (hb_tag_t tag,
