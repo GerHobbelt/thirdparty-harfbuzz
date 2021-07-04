@@ -1076,7 +1076,7 @@ struct hb_collect_features_context_t
       return true;
 
     visited_set.add (delta);
-    feature_indexes->propagate_error (visited_set);
+    feature_indices->propagate_error (visited_set);
 
     return false;
   }
