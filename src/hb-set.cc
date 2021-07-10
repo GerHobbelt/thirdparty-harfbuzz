@@ -109,7 +109,7 @@ hb_set_destroy (hb_set_t *set)
 
   set->fini_shallow ();
 
-  free (set);
+  hb_free (set);
 }
 
 /**
@@ -180,7 +180,7 @@ hb_set_allocation_successful (const hb_set_t  *set)
  *
  * Return value: Newly-allocated set.
  *
- * Since: REPLACEME
+ * Since: 2.8.2
  **/
 hb_set_t *
 hb_set_copy (const hb_set_t *set)
