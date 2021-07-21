@@ -1894,20 +1894,15 @@ apply_string (OT::hb_ot_apply_context_t *c,
       buffer->clear_output ();
 
     buffer->idx = 0;
+    apply_forward (c, accel);
 
-    bool ret;
-    ret = apply_forward (c, accel);
-    if (ret)
-    {
-      if (!Proxy::inplace)
-	buffer->swap_buffers ();
-      else
-	assert (!buffer->has_separate_output ());
-    }
+    if (!Proxy::inplace)
+      buffer->swap_buffers ();
   }
   else
   {
     /* in-place backward substitution/positioning */
+    assert (!buffer->have_output);
     buffer->idx = buffer->len - 1;
     apply_backward (c, accel);
   }
