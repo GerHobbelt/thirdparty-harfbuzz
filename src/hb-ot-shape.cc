@@ -1167,7 +1167,8 @@ hb_ot_shape_internal (hb_ot_shape_context_t *c)
   hb_ensure_native_direction (c->buffer);
 
   if (c->plan->shaper->preprocess_text &&
-    c->buffer->message(c->font, "start preprocess-text")) {
+      c->buffer->message(c->font, "start preprocess-text"))
+  {
     c->plan->shaper->preprocess_text (c->plan, c->buffer, c->font);
     (void) c->buffer->message(c->font, "end preprocess-text");
   }
