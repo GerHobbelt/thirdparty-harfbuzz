@@ -765,7 +765,7 @@ struct hb_set_t
 
     if (unlikely (i >= page_map.length || page_map_array[i].major != major))
     {
-      page_map.bfind (major, &i, HB_BFIND_NOT_FOUND_STORE_CLOSEST);
+      page_map.bfind (major, &i, HB_NOT_FOUND_STORE_CLOSEST);
       if (i >= page_map.length) {
         *codepoint = INVALID;
         return false;
@@ -809,7 +809,7 @@ struct hb_set_t
 
     page_map_t map = {get_major (*codepoint), 0};
     unsigned int i;
-    page_map.bfind (map, &i, HB_BFIND_NOT_FOUND_STORE_CLOSEST);
+    page_map.bfind (map, &i, HB_NOT_FOUND_STORE_CLOSEST);
     if (i < page_map.length && page_map[i].major == map.major)
     {
       if (pages[page_map[i].index].previous (codepoint))
@@ -940,7 +940,7 @@ struct hb_set_t
   {
     page_map_t map = {get_major (g), pages.length};
     unsigned int i;
-    if (!page_map.bfind (map, &i, HB_BFIND_NOT_FOUND_STORE_CLOSEST))
+    if (!page_map.bfind (map, &i, HB_NOT_FOUND_STORE_CLOSEST))
     {
       if (!resize (pages.length + 1))
 	return nullptr;
