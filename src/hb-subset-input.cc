@@ -30,12 +30,15 @@
 /**
  * hb_subset_input_create_or_fail:
  *
- * Return value: New subset input.
+ * Creates a new subset input object.
+ *
+ * Return value: (transfer full): New subset input, or %NULL if failed. Destroy
+ * with hb_subset_input_destroy().
  *
  * Since: 1.8.0
  **/
 hb_subset_input_t *
-hb_subset_input_create_or_fail ()
+hb_subset_input_create_or_fail (void)
 {
   hb_subset_input_t *input = hb_object_create<hb_subset_input_t>();
 
@@ -57,6 +60,7 @@ hb_subset_input_create_or_fail ()
   input->name_legacy = false;
   input->overlaps_flag = false;
   input->notdef_outline = false;
+  input->glyph_names = false;
   input->no_prune_unicode_ranges = false;
   input->retain_all_layout_features = false;
   input->passthrough_unrecognized = false;
@@ -198,7 +202,9 @@ hb_subset_input_create_or_fail ()
  * hb_subset_input_reference: (skip)
  * @input: a #hb_subset_input_t object.
  *
- * Return value:
+ * Increases the reference count on @input.
+ *
+ * Return value: @input.
  *
  * Since: 1.8.0
  **/
@@ -211,6 +217,9 @@ hb_subset_input_reference (hb_subset_input_t *input)
 /**
  * hb_subset_input_destroy:
  * @input: a #hb_subset_input_t object.
+ *
+ * Decreases the reference count on @input, and if it reaches zero, destroys
+ * @input, freeing all memory.
  *
  * Since: 1.8.0
  **/
@@ -234,7 +243,11 @@ hb_subset_input_destroy (hb_subset_input_t *input)
  * hb_subset_input_unicode_set:
  * @input: a #hb_subset_input_t object.
  *
- * Return value: pointer to the set of unicode codepoints to retain.
+ * Gets the set of Unicode code points to retain, the caller should modify the
+ * set as needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of Unicode code
+ * points.
  *
  * Since: 1.8.0
  **/
@@ -248,7 +261,10 @@ hb_subset_input_unicode_set (hb_subset_input_t *input)
  * hb_subset_input_glyph_set:
  * @input: a #hb_subset_input_t object.
  *
- * Return value: pointer to the set of glyph ids to retain.
+ * Gets the set of glyph IDs to retain, the caller should modify the set as
+ * needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of glyph IDs.
  *
  * Since: 1.8.0
  **/
@@ -262,7 +278,10 @@ hb_subset_input_glyph_set (hb_subset_input_t *input)
  * hb_subset_input_nameid_set:
  * @input: a #hb_subset_input_t object.
  *
- * Return value: pointer to the set of name ids to retain.
+ * Gets the set of name table name IDs to retain, the caller should modify the
+ * set as needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of name IDs.
  *
  * Since: REPLACE
  **/
@@ -276,7 +295,10 @@ hb_subset_input_nameid_set (hb_subset_input_t *input)
  * hb_subset_input_namelangid_set:
  * @input: a #hb_subset_input_t object.
  *
- * Return value: pointer to the set of name language ids to retain.
+ * Gets the set of name table language IDs to retain, the caller should modify
+ * the set as needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of language IDs.
  *
  * Since: REPLACE
  **/
@@ -291,7 +313,10 @@ hb_subset_input_namelangid_set (hb_subset_input_t *input)
  * hb_subset_input_layout_features_set:
  * @input: a #hb_subset_input_t object.
  *
- * Return value: pointer to the set of feature tags to retain.
+ * Gets the set of layout feature tags to retain, the caller should modify the
+ * set as needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of feature tags.
  *
  * Since: REPLACE
  **/
@@ -301,26 +326,14 @@ hb_subset_input_layout_features_set (hb_subset_input_t *input)
   return input->layout_features;
 }
 
-HB_EXTERN void
-hb_subset_input_set_retain_all_features (hb_subset_input_t *input,
-					 hb_bool_t value)
-{
-  input->retain_all_layout_features = value;
-}
-
-HB_EXTERN hb_bool_t
-hb_subset_input_get_retain_all_features (hb_subset_input_t *input)
-{
-  return input->retain_all_layout_features;
-}
-
-
 /**
- * hb_subset_input_drop_tabes_set:
+ * hb_subset_input_drop_tables_set:
  * @input: a #hb_subset_input_t object.
  *
- * Return value: pointer to the set of table tags which specifies tables
- *		 to be dropped.
+ * Gets the set of table tags to drop, the caller should modify the set as
+ * needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of table tags.
  *
  * Since: REPLACE
  **/
@@ -331,11 +344,13 @@ hb_subset_input_drop_tables_set (hb_subset_input_t *input)
 }
 
 /**
- * hb_subset_input_no_subset_tabes_set:
+ * hb_subset_input_no_subset_tables_set:
  * @input: a #hb_subset_input_t object.
  *
- * Return value: pointer to the set of table tags which specifies tables
- *		 that should not have subsetting applied to them.
+ * Gets the set of table tags which specifies tables that should not be
+ * subsetted, the caller should modify the set as needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of table tags.
  *
  * Since: REPLACE
  **/
@@ -350,6 +365,8 @@ hb_subset_input_no_subset_tables_set (hb_subset_input_t *input)
  * hb_subset_input_get_flag:
  * @input: a #hb_subset_input_t object.
  * @flag: which flag to check.
+ *
+ * Get the value of the specified flag.
  *
  * Return value: value of the specified flag.
  *
@@ -375,8 +392,12 @@ hb_subset_input_get_flag (hb_subset_input_t *input,
       return input->passthrough_unrecognized;
     case HB_SUBSET_FLAG_NOTDEF_OUTLINE:
       return input->notdef_outline;
+    case HB_SUBSET_FLAG_GLYPH_NAMES:
+      return input->glyph_names;
     case HB_SUBSET_FLAG_NO_PRUNE_UNICODE_RANGES:
       return input->no_prune_unicode_ranges;
+    case HB_SUBSET_FLAG_RETAIN_ALL_FEATURES:
+      return input->retain_all_layout_features;
     default:
       return false;
   }
@@ -420,8 +441,14 @@ hb_subset_input_set_flag (hb_subset_input_t *input,
     case HB_SUBSET_FLAG_NOTDEF_OUTLINE:
       input->notdef_outline = value;
       break;
+    case HB_SUBSET_FLAG_GLYPH_NAMES:
+      input->glyph_names = value;
+      break;
     case HB_SUBSET_FLAG_NO_PRUNE_UNICODE_RANGES:
       input->no_prune_unicode_ranges = value;
+      break;
+    case HB_SUBSET_FLAG_RETAIN_ALL_FEATURES:
+      input->retain_all_layout_features = value;
       break;
     default:
       // Do nothing.

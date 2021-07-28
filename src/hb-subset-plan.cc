@@ -403,13 +403,14 @@ _nameid_closure (hb_face_t *face,
 /**
  * hb_subset_plan_create:
  * @face: font face to create the plan for.
- * @input: a subset input.
+ * @input: a #hb_subset_input_t input.
  *
  * Computes a plan for subsetting the supplied face according
  * to a provided input. The plan describes
  * which tables and glyphs should be retained.
  *
- * Return value: New subset plan.
+ * Return value: (transfer full): New subset plan. Destroy with
+ * hb_subset_plan_destroy().
  *
  * Since: 1.7.5
  **/
@@ -428,6 +429,7 @@ hb_subset_plan_create (hb_face_t	 *face,
   plan->name_legacy = input->name_legacy;
   plan->overlaps_flag = input->overlaps_flag;
   plan->notdef_outline = input->notdef_outline;
+  plan->glyph_names = input->glyph_names;
   plan->prune_unicode_ranges = !input->no_prune_unicode_ranges;
   plan->retain_all_layout_features = input->retain_all_layout_features;
   plan->passthrough_unrecognized = input->passthrough_unrecognized;
@@ -487,6 +489,10 @@ hb_subset_plan_create (hb_face_t	 *face,
 
 /**
  * hb_subset_plan_destroy:
+ * @plan: a #hb_subset_plan_t
+ *
+ * Decreases the reference count on @plan, and if it reaches zero, destroys
+ * @plan, freeing all memory.
  *
  * Since: 1.7.5
  **/
