@@ -258,11 +258,19 @@ parse_features (const char *name G_GNUC_UNUSED,
 {
   shape_options_t *shape_opts = (shape_options_t *) data;
   char *s = (char *) arg;
+  size_t l = strlen (s);
   char *p;
 
   shape_opts->num_features = 0;
   g_free (shape_opts->features);
   shape_opts->features = nullptr;
+
+  /* if the string is quoted, strip the quotes */
+  if (s[0] == s[l - 1] && (s[0] == '\"' || s[0] == '\''))
+  {
+    s[l - 1] = '\0';
+    s++;
+  }
 
   if (!*s)
     return true;
@@ -763,7 +771,7 @@ font_options_t::get_font () const
 
 
 const char *
-text_options_t::get_line (unsigned int *len)
+text_options_t::get_line (unsigned int *len, char eol)
 {
   if (text) {
     if (!line)
@@ -780,7 +788,7 @@ text_options_t::get_line (unsigned int *len)
     }
 
     const char *ret = line;
-    const char *p = (const char *) memchr (line, '\n', line_len);
+    const char *p = (const char *) memchr (line, eol, line_len);
     unsigned int ret_len;
     if (!p) {
       ret_len = line_len;
@@ -816,7 +824,7 @@ text_options_t::get_line (unsigned int *len)
   char buf[BUFSIZ];
   while (fgets (buf, sizeof (buf), fp)) {
     unsigned int bytes = strlen (buf);
-    if (bytes && buf[bytes - 1] == '\n') {
+    if (bytes && buf[bytes - 1] == eol) {
       bytes--;
       g_string_append_len (gs, buf, bytes);
       break;

@@ -38,6 +38,7 @@ EXTRA_DIST += \
 	expected/colr \
 	expected/colr_with_components \
 	expected/colrv1.notoemoji \
+	expected/colrv1 \
 	expected/cbdt \
 	expected/variable \
 	fonts \
