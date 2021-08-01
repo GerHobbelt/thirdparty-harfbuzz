@@ -681,6 +681,7 @@ output_options_t::add_options (option_parser_t *parser)
 }
 
 
+font_options_t::cache_t font_options_t::cache {};
 
 hb_font_t *
 font_options_t::get_font () const
@@ -704,14 +705,39 @@ font_options_t::get_font () const
 #endif
   }
 
-  blob = hb_blob_create_from_file_or_fail (font_path);
+  if (cache.font_path && 0 == strcmp (cache.font_path, font_path))
+    blob = hb_blob_reference (cache.blob);
+  else
+  {
+    blob = hb_blob_create_from_file_or_fail (font_path);
 
-  if (!blob)
-    fail (false, "%s: Failed reading file", font_path);
+    if (!blob)
+      fail (false, "%s: Failed reading file", font_path);
 
-  /* Create the face */
-  hb_face_t *face = hb_face_create (blob, face_index);
-  hb_blob_destroy (blob);
+    /* Update caches. */
+
+    hb_face_destroy (cache.face);
+    cache.face = nullptr;
+    cache.face_index = (unsigned) -1;
+
+    free ((char *) cache.font_path);
+    cache.font_path = strdup (font_path);
+    hb_blob_destroy (cache.blob);
+    cache.blob = hb_blob_reference (blob);
+  }
+
+  hb_face_t *face = nullptr;
+  if (cache.face_index == face_index)
+    face = hb_face_reference (cache.face);
+  else
+  {
+    face = hb_face_create (blob, face_index);
+    hb_blob_destroy (blob);
+
+    cache.face_index = face_index;
+    hb_face_destroy (cache.face);
+    cache.face = hb_face_reference (face);
+  }
 
 
   font = hb_font_create (face);
