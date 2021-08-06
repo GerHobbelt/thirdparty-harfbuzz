@@ -752,16 +752,21 @@ hb_face_builder_create ()
 hb_bool_t
 hb_face_builder_add_table (hb_face_t *face, hb_tag_t tag, hb_blob_t *blob)
 {
+  if (tag == HB_MAP_VALUE_INVALID)
+    return false;
+
   if (unlikely (face->destroy != (hb_destroy_func_t) _hb_face_builder_data_destroy))
     return false;
 
   hb_face_builder_data_t *data = (hb_face_builder_data_t *) face->user_data;
 
+  hb_blob_t* previous = data->tables.get (tag);
   if (!data->tables.set (tag, hb_blob_reference (blob)))
   {
     hb_blob_destroy (blob);
     return false;
   }
 
+  hb_blob_destroy (previous);
   return true;
 }
