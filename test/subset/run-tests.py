@@ -11,14 +11,14 @@ import sys
 import tempfile
 import shutil
 import io
+import hashlib
 
 from subset_test_suite import SubsetTestSuite
 
 try:
 	from fontTools.ttLib import TTFont
 except ImportError:
-	print ("fonttools is not present, skipping test.")
-	sys.exit (77)
+    TTFont = None
 
 ots_sanitize = shutil.which ("ots-sanitize")
 
@@ -43,7 +43,7 @@ def fail_test (test, cli_args, message):
 	print ('  test.profile_path %s' % os.path.abspath (test.profile_path))
 	print ('  test.unicodes	    %s' % test.unicodes ())
 	expected_file = os.path.join (test_suite.get_output_directory (),
-				      test.get_font_ttx_name ())
+				      test.get_font_name ())
 	print ('  expected_file	    %s' % os.path.abspath (expected_file))
 	return 1
 
@@ -62,41 +62,50 @@ def run_test (test, should_check_ots):
 	if ret != "success":
 		return fail_test (test, cli_args, "%s failed" % ' '.join (cli_args))
 
-	expected_file = os.path.join (test_suite.get_output_directory (), test.get_font_ttx_name ())
-	with open(expected_file, encoding="utf-8") as expected_ttx:
-		expected_ttx_text = normalize (expected_ttx.read ())
+	expected_file = os.path.join (test_suite.get_output_directory (), test.get_font_name ())
+	with open (expected_file, "rb") as fp:
+		expected_hash = hashlib.sha224(fp.read()).hexdigest()
+	with open (out_file, "rb") as fp:
+		actual_hash = hashlib.sha224(fp.read()).hexdigest()
 
-	actual_ttx = io.StringIO ()
-	try:
-		with TTFont (out_file) as font:
-			font.saveXML (actual_ttx, newlinestr="\n")
-	except Exception as e:
-		print (e)
-		return fail_test (test, cli_args, "ttx failed to parse the actual result")
+	if expected_hash == actual_hash:
+		if should_check_ots:
+			print ("Checking output with ots-sanitize.")
+			if not check_ots (out_file):
+				return fail_test (test, cli_args, 'ots for subsetted file fails.')
+		return 0
 
-	actual_ttx_text = normalize (actual_ttx.getvalue ())
-	actual_ttx.close ()
+	if TTFont is None:
+		print ("fonttools is not present, skipping TTX diff.")
+		return fail_test (test, cli_args, "hash for expected and actual does not match.")
 
-	if not actual_ttx_text == expected_ttx_text:
-		for line in unified_diff (expected_ttx_text.splitlines (1), actual_ttx_text.splitlines (1)):
+	with io.StringIO () as fp:
+		try:
+			with TTFont (expected_file) as font:
+				font.saveXML (fp)
+		except Exception as e:
+			print (e)
+			return fail_test (test, cli_args, "ttx failed to parse the expected result")
+		expected_ttx = fp.getvalue ()
+
+	with io.StringIO () as fp:
+		try:
+			with TTFont (out_file) as font:
+				font.saveXML (fp)
+		except Exception as e:
+			print (e)
+			return fail_test (test, cli_args, "ttx failed to parse the actual result")
+		actual_ttx = fp.getvalue ()
+
+	if actual_ttx != expected_ttx:
+		for line in unified_diff (expected_ttx.splitlines (1), actual_ttx.splitlines (1)):
 			sys.stdout.write (line)
 		sys.stdout.flush ()
 		return fail_test (test, cli_args, 'ttx for expected and actual does not match.')
 
-	if should_check_ots:
-		print ("Checking output with ots-sanitize.")
-		if not check_ots (out_file):
-			return fail_test (test, cli_args, 'ots for subsetted file fails.')
+	return fail_test (test, cli_args, 'hash for expected and actual does not match, '
+	                                  'but the ttx matches. Expected file needs to be updated?')
 
-	return 0
-
-CHECKSUMADJUSTMENT_RE = re.compile('checkSumAdjustment value=["]0x([0-9a-fA-F])+["]')
-TTLIBVERSION_RE = re.compile(' ttLibVersion=".*"')
-
-def normalize (ttx_string):
-	ttx_string = CHECKSUMADJUSTMENT_RE.sub ("", ttx_string, count=1)
-	ttx_string = TTLIBVERSION_RE.sub ("", ttx_string, count=1)
-	return ttx_string
 
 def has_ots ():
 	if not ots_sanitize:
