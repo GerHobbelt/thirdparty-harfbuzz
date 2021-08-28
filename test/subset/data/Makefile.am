@@ -40,6 +40,7 @@ EXTRA_DIST += \
 	expected/colr_with_components \
 	expected/cbdt \
 	expected/variable \
+	expected/glyph_names \
 	fonts \
 	profiles \
 	$(NULL)
