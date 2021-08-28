@@ -23,9 +23,8 @@
       Release notes are posted with each new release to provide an
       overview of the changes. The project <ulink url="https://github.com/harfbuzz/harfbuzz/issues">tracks bug
       reports and other issues</ulink> on GitHub. Discussion and
-      questions are welcome on the <ulink
-      url="http://freedesktop.org/mailman/listinfo/harfbuzz/">HarfBuzz
-      mailing list</ulink>.
+      questions are welcome on <ulink
+      url="https://github.com/harfbuzz/harfbuzz/discussions">GitHub</ulink> as well.
     </para>
     <para>
       The API included in the <filename
