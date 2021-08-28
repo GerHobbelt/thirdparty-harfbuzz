@@ -78,8 +78,8 @@ struct hb_bit_set_t
 
   bool resize (unsigned int count)
   {
-    if (unlikely (count > pages.length && !successful)) return false;
-    if (!pages.resize (count) || !page_map.resize (count))
+    if (unlikely (!successful)) return false;
+    if (unlikely (!pages.resize (count) || !page_map.resize (count)))
     {
       pages.resize (page_map.length);
       successful = false;
@@ -96,7 +96,8 @@ struct hb_bit_set_t
 
   void clear ()
   {
-    if (resize (0))
+    resize (0);
+    if (likely (successful))
       population = 0;
   }
   bool is_empty () const
@@ -327,7 +328,7 @@ struct hb_bit_set_t
   {
     if (unlikely (!successful)) return;
     unsigned int count = other.pages.length;
-    if (!resize (count))
+    if (unlikely (!resize (count)))
       return;
     population = other.population;
 
@@ -507,7 +508,7 @@ struct hb_bit_set_t
       compact (compact_workspace, write_index);
     }
 
-    if (!resize (count))
+    if (unlikely (!resize (count)))
       return;
 
     newCount = count;
@@ -563,11 +564,7 @@ struct hb_bit_set_t
 	page_at (count).v = other.page_at (b).v;
       }
     assert (!count);
-    if (pages.length > newCount)
-      // This resize() doesn't need to be checked because we can't get here
-      // if the set is currently in_error() and this only resizes downwards
-      // which will always succeed if the set is not in_error().
-      resize (newCount);
+    resize (newCount);
   }
 
   void union_ (const hb_bit_set_t &other) { process (hb_bitwise_or, other); }
@@ -781,7 +778,7 @@ struct hb_bit_set_t
       if (!insert)
         return nullptr;
 
-      if (!resize (pages.length + 1))
+      if (unlikely (!resize (pages.length + 1)))
 	return nullptr;
 
       pages[map.index].init0 ();
