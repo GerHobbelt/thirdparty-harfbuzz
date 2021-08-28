@@ -8,7 +8,7 @@ if [[ -z $GITHUB_TOKEN ]]; then
 	exit
 fi
 
-if ! hash ghr; then
+if ! hash ghr 2> /dev/null; then
 	_GHR_VER=v0.14.0
 	_GHR=ghr_${_GHR_VER}_linux_amd64
 	mkdir -p $HOME/.local/bin
