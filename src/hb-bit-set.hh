@@ -595,16 +595,18 @@ struct hb_bit_set_t
     }
 
     const auto* pages_array = pages.arrayZ;
-    const page_map_t &current = page_map_array[i];
-    if (likely (current.major == major))
     {
-      if (pages_array[current.index].next (codepoint))
+      const page_map_t& current = page_map_array[i];
+      if (likely(current.major == major))
       {
-        *codepoint += current.major * page_t::PAGE_BITS;
-        last_page_lookup = i;
-        return true;
+	if (pages_array[current.index].next(codepoint))
+	{
+	  *codepoint += current.major * page_t::PAGE_BITS;
+	  last_page_lookup = i;
+	  return true;
+	}
+	i++;
       }
-      i++;
     }
 
     for (; i < page_map.length; i++)
