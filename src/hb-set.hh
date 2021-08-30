@@ -57,8 +57,8 @@ struct hb_sparseset_t
   template <typename T> bool propagate_error (T &&obj)
   {
     if (hb_deref (obj).in_error ())
-      successful = false;
-    return !successful;
+      s.successful = false;
+    return s.successful;
   }
 
   explicit operator bool () const { return !is_empty (); }
