@@ -59,13 +59,6 @@ struct hb_sparseset_t
     fini_shallow ();
   }
 
-  template <typename T> bool propagate_error (T &&obj)
-  {
-    if (hb_deref (obj).in_error ())
-      s.successful = false;
-    return s.successful;
-  }
-
   explicit operator bool () const { return !is_empty (); }
 
   void err () { s.err (); }

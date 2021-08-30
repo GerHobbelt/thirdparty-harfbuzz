@@ -14,7 +14,6 @@ tests = [
   'layout.gpos5',
   'layout.gpos6',
   'layout.gpos8',
-  'layout.gpos9',
   'layout.gpos8.amiri',
   'layout.gpos9',
   'layout.gsub3',

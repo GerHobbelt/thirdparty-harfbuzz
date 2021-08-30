@@ -185,8 +185,6 @@ struct hb_closure_context_t :
   {
     hb_set_del_range (output, face->get_num_glyphs (), HB_SET_VALUE_INVALID);	/* Remove invalid glyphs. */
     hb_set_union (glyphs, output);
-    glyphs->propagate_error (output);
-
     hb_set_clear (output);
     active_glyphs_stack.pop ();
     active_glyphs_stack.fini ();
@@ -3598,8 +3596,6 @@ struct GSUBGPOS
 
     hb_set_union (lookup_indexes, &visited_lookups);
     hb_set_subtract (lookup_indexes, &inactive_lookups);
-    lookup_indexes->propagate_error (visited_lookups);
-    lookup_indexes->propagate_error (inactive_lookups);
   }
 
   void prune_langsys (const hb_map_t *duplicate_feature_map,
@@ -3806,16 +3802,18 @@ struct GSUBGPOS
     void fini ()
     {
       for (unsigned int i = 0; i < this->lookup_count; i++)
-	this->accels[i].fini ();
+        this->accels[i].fini ();
       hb_free (this->accels);
       this->table.destroy ();
     }
 
     hb_array_t<const hb_ot_layout_lookup_accelerator_t> get_accels () const
-    { return hb_array (accels, lookup_count); }
+    { 
+      return hb_array (accels, lookup_count); 
+    }
 
     hb_blob_ptr_t<T> table;
-    protected:
+  protected:
     unsigned int lookup_count;
     hb_ot_layout_lookup_accelerator_t *accels;
   };

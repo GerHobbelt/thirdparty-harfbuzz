@@ -22,6 +22,7 @@ EXTRA_DIST += \
 	expected/layout.gpos5 \
 	expected/layout.gpos6 \
 	expected/layout.gpos8 \
+	expected/layout.gpos8.amiri \
 	expected/layout.gpos9 \
 	expected/layout.gsub3 \
 	expected/layout.gsub5 \

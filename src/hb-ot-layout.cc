@@ -1076,8 +1076,6 @@ struct hb_collect_features_context_t
       return true;
 
     visited_set.add (delta);
-    feature_indices->propagate_error (visited_set);
-
     return false;
   }
 
@@ -1238,7 +1236,6 @@ hb_ot_layout_collect_lookups (hb_face_t      *face,
 
   hb_set_t feature_indexes;
   hb_ot_layout_collect_features (face, table_tag, scripts, languages, features, &feature_indexes);
-  if (lookup_indexes->propagate_error (feature_indexes)) return;
 
   for (hb_codepoint_t feature_index = HB_SET_VALUE_INVALID;
        hb_set_next (&feature_indexes, &feature_index);)
