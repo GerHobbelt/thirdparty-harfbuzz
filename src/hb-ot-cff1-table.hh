@@ -391,8 +391,6 @@ struct Charset1_2 {
 	return (hb_codepoint_t)ranges[i].first + glyph;
       glyph -= (ranges[i].nLeft + 1);
     }
-
-    return 0;
   }
 
   hb_codepoint_t get_glyph (hb_codepoint_t sid, unsigned int num_glyphs) const
@@ -407,8 +405,6 @@ struct Charset1_2 {
 	return glyph + (sid - ranges[i].first);
       glyph += (ranges[i].nLeft + 1);
     }
-
-    return 0;
   }
 
   unsigned int get_size (unsigned int num_glyphs) const
