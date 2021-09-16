@@ -283,8 +283,7 @@ struct hb_language_item_t {
 
 static hb_atomic_ptr_t <hb_language_item_t> langs;
 
-#if HB_USE_ATEXIT
-static void
+static inline void
 free_langs ()
 {
 retry:
@@ -299,7 +298,6 @@ retry:
     first_lang = next;
   }
 }
-#endif
 
 static hb_language_item_t *
 lang_find_or_insert (const char *key)
@@ -330,10 +328,8 @@ retry:
     goto retry;
   }
 
-#if HB_USE_ATEXIT
   if (!first_lang)
-    atexit (free_langs); /* First person registers atexit() callback. */
-#endif
+    hb_atexit (free_langs); /* First person registers atexit() callback. */
 
   return lang;
 }

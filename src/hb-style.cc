@@ -49,13 +49,13 @@
 static inline float
 _hb_angle_to_ratio (float a)
 {
-  return tanf (a * (M_PI / 180.f));
+  return tanf (a * float (M_PI / 180.));
 }
 #if 0
 static inline float
 _hb_ratio_to_angle (float r)
 {
-  return atanf (r) * (180.f / M_PI);
+  return atanf (r) * float (180. / M_PI);
 }
 #endif
 
@@ -109,7 +109,7 @@ hb_style_get_value (hb_font_t *font, hb_tag_t tag)
     return face->table.OS2->v5 ().get_optical_size (&lower, &upper)
 	   ? (float) (lower + upper) / 2.f
 	   : hb_ot_layout_get_size_params (face, &design, nullptr, nullptr, nullptr, nullptr)
-	   ? design / 10.
+	   ? design / 10.f
 	   : 12.f;
   }
   case HB_STYLE_TAG_SLANT_ANGLE:
