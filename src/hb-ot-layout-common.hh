@@ -237,9 +237,9 @@ struct subset_offset_array_t
   template <typename T>
   bool operator () (T&& offset)
   {
+    auto snap = subset_context->serializer->snapshot ();
     auto *o = out.serialize_append (subset_context->serializer);
     if (unlikely (!o)) return false;
-    auto snap = subset_context->serializer->snapshot ();
     bool ret = o->serialize_subset (subset_context, offset, base);
     if (!ret)
     {
@@ -268,9 +268,9 @@ struct subset_offset_array_arg_t
   template <typename T>
   bool operator () (T&& offset)
   {
+    auto snap = subset_context->serializer->snapshot ();
     auto *o = out.serialize_append (subset_context->serializer);
     if (unlikely (!o)) return false;
-    auto snap = subset_context->serializer->snapshot ();
     bool ret = o->serialize_subset (subset_context, offset, base, arg);
     if (!ret)
     {
@@ -345,6 +345,43 @@ struct
   { return subset_record_array_t<OutputArray> (c, out, base); }
 }
 HB_FUNCOBJ (subset_record_array);
+
+
+template<typename OutputArray>
+struct serialize_math_record_array_t
+{
+  serialize_math_record_array_t (hb_serialize_context_t *serialize_context_,
+                         OutputArray& out_,
+                         const void *base_) : serialize_context (serialize_context_),
+                                              out (out_), base (base_) {}
+
+  template <typename T>
+  bool operator () (T&& record)
+  {
+    if (!serialize_context->copy (record, base)) return false;
+    out.len++;
+    return true;
+  }
+
+  private:
+  hb_serialize_context_t *serialize_context;
+  OutputArray &out;
+  const void *base;
+};
+
+/*
+ * Helper to serialize an array of MATH records.
+ */
+struct
+{
+  template<typename OutputArray>
+  serialize_math_record_array_t<OutputArray>
+  operator () (hb_serialize_context_t *serialize_context, OutputArray& out,
+               const void *base) const
+  { return serialize_math_record_array_t<OutputArray> (serialize_context, out, base); }
+
+}
+HB_FUNCOBJ (serialize_math_record_array);
 
 /*
  *
