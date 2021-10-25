@@ -85,7 +85,7 @@ synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB_UNUSED,
   /* Bubble-sort or something equally good!
    * May not be good-enough for presidential candidate interviews, but good-enough for us... */
   hb_stable_sort (&glyphs[0], num_glyphs,
-		  (int(*)(const OT::HBUINT16*, const OT::HBUINT16 *)) OT::HBGlyphID::cmp,
+		  (int(*)(const OT::HBUINT16*, const OT::HBUINT16 *)) OT::HBGlyphID16::cmp,
 		  &substitutes[0]);
 
 
@@ -133,7 +133,7 @@ synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UNUSED,
     num_first_glyphs++;
   }
   hb_stable_sort (&first_glyphs[0], num_first_glyphs,
-		  (int(*)(const OT::HBUINT16*, const OT::HBUINT16 *)) OT::HBGlyphID::cmp,
+		  (int(*)(const OT::HBUINT16*, const OT::HBUINT16 *)) OT::HBGlyphID16::cmp,
 		  &first_glyphs_indirection[0]);
 
   /* Now that the first-glyphs are sorted, walk again, populate ligatures. */
