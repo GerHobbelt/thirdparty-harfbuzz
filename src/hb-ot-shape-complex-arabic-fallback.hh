@@ -53,8 +53,8 @@ synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB_UNUSED,
 			  const uint16_t table[][4],
 			  hb_codepoint_t table_first,
 			  hb_codepoint_t table_last,
-			  OT::HBGlyphID *glyphs,
-			  OT::HBGlyphID *substitutes,
+			  OT::HBGlyphID16 *glyphs,
+			  OT::HBGlyphID16 *substitutes,
 			  char *buf,
 			  size_t buf_len)
 {
@@ -103,12 +103,12 @@ synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB_UNUSED,
 static OT::SubstLookup *
 synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UNUSED,
 			    hb_font_t *font,
-			    OT::HBGlyphID *first_glyphs,
+			    OT::HBGlyphID16 *first_glyphs,
 			    unsigned int *first_glyphs_indirection,
 			    unsigned int *ligature_per_first_glyph_count_list,
-			    OT::HBGlyphID *ligature_list,
+			    OT::HBGlyphID16 *ligature_list,
 			    unsigned int *component_count_list,
-			    OT::HBGlyphID *component_list,
+			    OT::HBGlyphID16 *component_list,
 			    const struct ligature_set_t *table,
 			    unsigned int table_len,
 			    char *buf,
@@ -185,8 +185,8 @@ arabic_fallback_synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB_UNUS
 					  hb_font_t *font,
 					  unsigned int feature_index)
 {
-  OT::HBGlyphID glyphs[SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1];
-  OT::HBGlyphID substitutes[SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1];
+  OT::HBGlyphID16 glyphs[SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1];
+  OT::HBGlyphID16 substitutes[SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1];
   /* Each glyph takes four bytes max, and there's some overhead. */
   char buf[(SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1) * 4 + 128];
 
@@ -206,14 +206,14 @@ static OT::SubstLookup *
 arabic_fallback_synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UNUSED,
 					    hb_font_t *font)
 {
-  OT::HBGlyphID first_glyphs[ARRAY_LENGTH_CONST (ligature_table)];
+  OT::HBGlyphID16 first_glyphs[ARRAY_LENGTH_CONST (ligature_table)];
   unsigned int first_glyphs_indirection[ARRAY_LENGTH_CONST (ligature_table)];
   unsigned int ligature_per_first_glyph_count_list[ARRAY_LENGTH_CONST (first_glyphs)];
 
   /* We know that all our ligatures are 2-component */
-  OT::HBGlyphID ligature_list[ARRAY_LENGTH_CONST (first_glyphs) * ARRAY_LENGTH_CONST(ligature_table[0].ligatures)];
+  OT::HBGlyphID16 ligature_list[ARRAY_LENGTH_CONST (first_glyphs) * ARRAY_LENGTH_CONST(ligature_table[0].ligatures)];
   unsigned int component_count_list[ARRAY_LENGTH_CONST (ligature_list)];
-  OT::HBGlyphID component_list[ARRAY_LENGTH_CONST (ligature_list) * 1/* One extra component per ligature */];
+  OT::HBGlyphID16 component_list[ARRAY_LENGTH_CONST (ligature_list) * 1/* One extra component per ligature */];
 
   /* 16 bytes per ligature ought to be enough... */
   char buf[ARRAY_LENGTH_CONST (ligature_list) * 16 + 128];
@@ -261,8 +261,8 @@ arabic_fallback_pua1_synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB
 					       hb_font_t *font,
 					       unsigned int feature_index)
 {
-  OT::HBGlyphID glyphs[SHAPING_TABLE_PUA1_LEN];
-  OT::HBGlyphID substitutes[SHAPING_TABLE_PUA1_LEN];
+  OT::HBGlyphID16 glyphs[SHAPING_TABLE_PUA1_LEN];
+  OT::HBGlyphID16 substitutes[SHAPING_TABLE_PUA1_LEN];
   /* Each glyph takes four bytes max, and there's some overhead. */
   char buf[SHAPING_TABLE_PUA1_LEN * 4 + 128];
 
@@ -283,8 +283,8 @@ arabic_fallback_pua2_synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB
 					       hb_font_t *font,
 					       unsigned int feature_index)
 {
-  OT::HBGlyphID glyphs[SHAPING_TABLE_PUA2_LEN];
-  OT::HBGlyphID substitutes[SHAPING_TABLE_PUA2_LEN];
+  OT::HBGlyphID16 glyphs[SHAPING_TABLE_PUA2_LEN];
+  OT::HBGlyphID16 substitutes[SHAPING_TABLE_PUA2_LEN];
   /* Each glyph takes four bytes max, and there's some overhead. */
   char buf[SHAPING_TABLE_PUA2_LEN * 4 + 128];
 
@@ -304,14 +304,14 @@ static OT::SubstLookup *
 arabic_fallback_pua1_synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UNUSED,
 						 hb_font_t *font)
 {
-  OT::HBGlyphID first_glyphs[ARRAY_LENGTH_CONST (ligature_table_pua1)];
+  OT::HBGlyphID16 first_glyphs[ARRAY_LENGTH_CONST (ligature_table_pua1)];
   unsigned int first_glyphs_indirection[ARRAY_LENGTH_CONST (ligature_table_pua1)];
   unsigned int ligature_per_first_glyph_count_list[ARRAY_LENGTH_CONST (first_glyphs)];
 
   /* We know that all our ligatures are 2-component */
-  OT::HBGlyphID ligature_list[ARRAY_LENGTH_CONST (first_glyphs) * ARRAY_LENGTH_CONST(ligature_table_pua1[0].ligatures)];
+  OT::HBGlyphID16 ligature_list[ARRAY_LENGTH_CONST (first_glyphs) * ARRAY_LENGTH_CONST(ligature_table_pua1[0].ligatures)];
   unsigned int component_count_list[ARRAY_LENGTH_CONST (ligature_list)];
-  OT::HBGlyphID component_list[ARRAY_LENGTH_CONST (ligature_list) * 1/* One extra component per ligature */];
+  OT::HBGlyphID16 component_list[ARRAY_LENGTH_CONST (ligature_list) * 1/* One extra component per ligature */];
 
   /* 16 bytes per ligature ought to be enough... */
   char buf[ARRAY_LENGTH_CONST (ligature_list) * 16 + 128];
@@ -335,14 +335,14 @@ static OT::SubstLookup *
 arabic_fallback_pua2_synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UNUSED,
 						 hb_font_t *font)
 {
-  OT::HBGlyphID first_glyphs[ARRAY_LENGTH_CONST (ligature_table_pua2)];
+  OT::HBGlyphID16 first_glyphs[ARRAY_LENGTH_CONST (ligature_table_pua2)];
   unsigned int first_glyphs_indirection[ARRAY_LENGTH_CONST (ligature_table_pua2)];
   unsigned int ligature_per_first_glyph_count_list[ARRAY_LENGTH_CONST (first_glyphs)];
 
   /* We know that all our ligatures are 2-component */
-  OT::HBGlyphID ligature_list[ARRAY_LENGTH_CONST (first_glyphs) * ARRAY_LENGTH_CONST(ligature_table_pua2[0].ligatures)];
+  OT::HBGlyphID16 ligature_list[ARRAY_LENGTH_CONST (first_glyphs) * ARRAY_LENGTH_CONST(ligature_table_pua2[0].ligatures)];
   unsigned int component_count_list[ARRAY_LENGTH_CONST (ligature_list)];
-  OT::HBGlyphID component_list[ARRAY_LENGTH_CONST (ligature_list) * 1/* One extra component per ligature */];
+  OT::HBGlyphID16 component_list[ARRAY_LENGTH_CONST (ligature_list) * 1/* One extra component per ligature */];
 
   /* 16 bytes per ligature ought to be enough... */
   char buf[ARRAY_LENGTH_CONST (ligature_list) * 16 + 128];
