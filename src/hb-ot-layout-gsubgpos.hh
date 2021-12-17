@@ -81,6 +81,9 @@ struct hb_closure_context_t :
     nesting_level_left++;
   }
 
+  void reset_lookup_visit_count ()
+  { lookup_count = 0; }
+
   bool lookup_limit_exceeded ()
   { return lookup_count > HB_MAX_LOOKUP_VISIT_COUNT; }
 
@@ -211,7 +214,11 @@ struct hb_closure_lookups_context_t :
       return;
 
     /* Return if new lookup was recursed to before. */
-    if (is_lookup_visited (lookup_index))
+    if (lookup_limit_exceeded ()
+        || visited_lookups->in_error ()
+        || visited_lookups->has (lookup_index))
+      // Don't increment lookup count here, that will be done in the call to closure_lookups()
+      // made by recurse_func.
       return;
 
     nesting_level_left--;
