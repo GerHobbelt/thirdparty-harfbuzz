@@ -115,8 +115,8 @@ struct graph_t
       // it's parent where possible.
 
       int64_t modified_distance =
-          hb_min (hb_max(distance + distance_modifier (), 0), 0x7FFFFFFFFF);
-      return (modified_distance << 22) | (0x003FFFFF & order);
+          hb_min (hb_max(distance + distance_modifier (), 0), 0x7FFFFFFFFFF);
+      return (modified_distance << 18) | (0x003FFFF & order);
     }
 
     int64_t distance_modifier () const
@@ -204,27 +204,46 @@ struct graph_t
   /*
    * serialize graph into the provided serialization buffer.
    */
-  void serialize (hb_serialize_context_t* c) const
+  hb_blob_t* serialize () const
   {
-    c->start_serialize<void> ();
+    hb_vector_t<char> buffer;
+    size_t size = serialized_length ();
+    if (!buffer.alloc (size)) {
+      DEBUG_MSG (SUBSET_REPACK, nullptr, "Unable to allocate output buffer.");
+      return nullptr;
+    }
+    hb_serialize_context_t c((void *) buffer, size);
+
+    c.start_serialize<void> ();
     for (unsigned i = 0; i < vertices_.length; i++) {
-      c->push ();
+      c.push ();
 
       size_t size = vertices_[i].obj.tail - vertices_[i].obj.head;
-      char* start = c->allocate_size <char> (size);
-      if (!start) return;
+      char* start = c.allocate_size <char> (size);
+      if (!start) {
+        DEBUG_MSG (SUBSET_REPACK, nullptr, "Buffer out of space.");
+        return nullptr;
+      }
 
       memcpy (start, vertices_[i].obj.head, size);
 
       // Only real links needs to be serialized.
       for (const auto& link : vertices_[i].obj.real_links)
-        serialize_link (link, start, c);
+        serialize_link (link, start, &c);
 
       // All duplications are already encoded in the graph, so don't
       // enable sharing during packing.
-      c->pop_pack (false);
+      c.pop_pack (false);
     }
-    c->end_serialize ();
+    c.end_serialize ();
+
+    if (c.in_error ()) {
+      DEBUG_MSG (SUBSET_REPACK, nullptr, "Error during serialization. Err flag: %d",
+                 c.errors);
+      return nullptr;
+    }
+
+    return c.copy_blob ();
   }
 
   /*
@@ -693,12 +712,17 @@ struct graph_t
     return num_roots_for_space_.length;
   }
 
-  void move_to_new_space (unsigned index)
+  void move_to_new_space (const hb_set_t& indices)
   {
-    auto& node = vertices_[index];
-    num_roots_for_space_.push (1);
-    num_roots_for_space_[node.space] = num_roots_for_space_[node.space] - 1;
-    node.space = num_roots_for_space_.length - 1;
+    num_roots_for_space_.push (0);
+    unsigned new_space = num_roots_for_space_.length - 1;
+
+    for (unsigned index : indices) {
+      auto& node = vertices_[index];
+      num_roots_for_space_[node.space] = num_roots_for_space_[node.space] - 1;
+      num_roots_for_space_[new_space] = num_roots_for_space_[new_space] + 1;
+      node.space = new_space;
+    }
   }
 
   unsigned space_for (unsigned index, unsigned* root = nullptr) const
@@ -724,6 +748,15 @@ struct graph_t
   void err_other_error () { this->successful = false; }
 
  private:
+
+  size_t serialized_length () const {
+    size_t total_size = 0;
+    for (unsigned i = 0; i < vertices_.length; i++) {
+      size_t size = vertices_[i].obj.tail - vertices_[i].obj.head;
+      total_size += size;
+    }
+    return total_size;
+  }
 
   /*
    * Returns the numbers of incoming edges that are 32bits wide.
@@ -1052,27 +1085,50 @@ struct graph_t
 static bool _try_isolating_subgraphs (const hb_vector_t<graph_t::overflow_record_t>& overflows,
                                       graph_t& sorted_graph)
 {
+  unsigned space = 0;
+  hb_set_t roots_to_isolate;
+
   for (int i = overflows.length - 1; i >= 0; i--)
   {
     const graph_t::overflow_record_t& r = overflows[i];
-    unsigned root = 0;
-    unsigned space = sorted_graph.space_for (r.parent, &root);
-    if (!space) continue;
-    if (sorted_graph.num_roots_for_space (space) <= 1) continue;
 
-    DEBUG_MSG (SUBSET_REPACK, nullptr, "Overflow in space %d moving subgraph %d to space %d.",
-               space,
-               root,
-               sorted_graph.next_space ());
+    unsigned root;
+    unsigned overflow_space = sorted_graph.space_for (r.parent, &root);
+    if (!overflow_space) continue;
+    if (sorted_graph.num_roots_for_space (overflow_space) <= 1) continue;
 
-    hb_set_t roots;
-    roots.add (root);
-    sorted_graph.isolate_subgraph (roots);
-    for (unsigned new_root : roots)
-      sorted_graph.move_to_new_space (new_root);
-    return true;
+    if (!space) {
+      space = overflow_space;
+    }
+
+    if (space == overflow_space)
+      roots_to_isolate.add(root);
   }
-  return false;
+
+  if (!roots_to_isolate) return false;
+
+  unsigned maximum_to_move = hb_max ((sorted_graph.num_roots_for_space (space) / 2u), 1u);
+  if (roots_to_isolate.get_population () > maximum_to_move) {
+    // Only move at most half of the roots in a space at a time.
+    unsigned extra = roots_to_isolate.get_population () - maximum_to_move;
+    while (extra--) {
+      unsigned root = HB_SET_VALUE_INVALID;
+      roots_to_isolate.previous (&root);
+      roots_to_isolate.del (root);
+    }
+  }
+
+  DEBUG_MSG (SUBSET_REPACK, nullptr,
+             "Overflow in space %d (%d roots). Moving %d roots to space %d.",
+             space,
+             sorted_graph.num_roots_for_space (space),
+             roots_to_isolate.get_population (),
+             sorted_graph.next_space ());
+
+  sorted_graph.isolate_subgraph (roots_to_isolate);
+  sorted_graph.move_to_new_space (roots_to_isolate);
+
+  return true;
 }
 
 static bool _process_overflows (const hb_vector_t<graph_t::overflow_record_t>& overflows,
@@ -1135,10 +1191,9 @@ static bool _process_overflows (const hb_vector_t<graph_t::overflow_record_t>& o
  * For a detailed writeup describing how the algorithm operates see:
  * docs/repacker.md
  */
-inline void
+inline hb_blob_t*
 hb_resolve_overflows (const hb_vector_t<hb_serialize_context_t::object_t *>& packed,
                       hb_tag_t table_tag,
-                      hb_serialize_context_t* c,
                       unsigned max_rounds = 10) {
   // Kahn sort is ~twice as fast as shortest distance sort and works for many fonts
   // so try it first to save time.
@@ -1146,8 +1201,7 @@ hb_resolve_overflows (const hb_vector_t<hb_serialize_context_t::object_t *>& pac
   sorted_graph.sort_kahn ();
   if (!sorted_graph.will_overflow ())
   {
-    sorted_graph.serialize (c);
-    return;
+    return sorted_graph.serialize ();
   }
 
   sorted_graph.sort_shortest_distance ();
@@ -1186,17 +1240,17 @@ hb_resolve_overflows (const hb_vector_t<hb_serialize_context_t::object_t *>& pac
 
   if (sorted_graph.in_error ())
   {
-    c->err (HB_SERIALIZE_ERROR_OTHER);
-    return;
+    DEBUG_MSG (SUBSET_REPACK, nullptr, "Sorted graph in error state.");
+    return nullptr;
   }
 
   if (sorted_graph.will_overflow ())
   {
-    c->err (HB_SERIALIZE_ERROR_OFFSET_OVERFLOW);
     DEBUG_MSG (SUBSET_REPACK, nullptr, "Offset overflow resolution failed.");
-    return;
+    return nullptr;
   }
-  sorted_graph.serialize (c);
+
+  return sorted_graph.serialize ();
 }
 
 #endif /* HB_REPACKER_HH */
