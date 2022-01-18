@@ -41,9 +41,6 @@ template <typename K, typename V,
 	  v_invalid_t vINVALID = hb_is_pointer (V) ? 0 : std::is_signed<V>::value ? hb_int_min (V) : (V) -1>
 struct hb_hashmap_t
 {
-  static constexpr K INVALID_KEY   = kINVALID;
-  static constexpr V INVALID_VALUE = vINVALID;
-
   hb_hashmap_t ()  { init (); }
   ~hb_hashmap_t () { fini (); }
 
@@ -64,8 +61,6 @@ struct hb_hashmap_t
     hb_copy (o, *this);
   }
 
-  static_assert (std::is_trivially_copyable<K>::value, "");
-  static_assert (std::is_trivially_copyable<V>::value, "");
   static_assert (std::is_trivially_destructible<K>::value, "");
   static_assert (std::is_trivially_destructible<V>::value, "");
 
@@ -75,25 +70,32 @@ struct hb_hashmap_t
     V value;
     uint32_t hash;
 
-    void clear () { key = kINVALID; value = vINVALID; hash = 0; }
+    void clear ()
+    {
+      new (hb_addressof (key)) K ();
+      key = hb_coerce<K> (kINVALID);
+      new (hb_addressof (value)) V ();
+      value = hb_coerce<V> (vINVALID);
+      hash = 0;
+    }
 
     bool operator == (const K &o) { return hb_deref (key) == hb_deref (o); }
     bool operator == (const item_t &o) { return *this == o.key; }
     bool is_unused () const
     {
-      const K inv = kINVALID;
+      const K inv = hb_coerce<K> (kINVALID);
       return key == inv;
     }
     bool is_tombstone () const
     {
-      const K kinv = kINVALID;
-      const V vinv = vINVALID;
+      const K kinv = hb_coerce<K> (kINVALID);
+      const V vinv = hb_coerce<V> (vINVALID);
       return key != kinv && value == vinv;
     }
     bool is_real () const
     {
-      const K kinv = kINVALID;
-      const V vinv = vINVALID;
+      const K kinv = hb_coerce<K> (kINVALID);
+      const V vinv = hb_coerce<V> (vINVALID);
       return key != kinv && value != vinv;
     }
     hb_pair_t<K, V> get_pair() const { return hb_pair_t<K, V> (key, value); }
@@ -192,22 +194,22 @@ struct hb_hashmap_t
 
   V get (K key) const
   {
-    if (unlikely (!items)) return vINVALID;
+    if (unlikely (!items)) return hb_coerce<V> (vINVALID);
     unsigned int i = bucket_for (key);
-    return items[i].is_real () && items[i] == key ? items[i].value : vINVALID;
+    return items[i].is_real () && items[i] == key ? items[i].value : hb_coerce<V> (vINVALID);
   }
 
-  void del (K key) { set (key, vINVALID); }
+  void del (K key) { set (key, hb_coerce<V> (vINVALID)); }
 
   /* Has interface. */
-  static constexpr V SENTINEL = vINVALID;
   typedef V value_t;
   value_t operator [] (K k) const { return get (k); }
   bool has (K k, V *vp = nullptr) const
   {
     V v = (*this)[k];
     if (vp) *vp = v;
-    return v != SENTINEL;
+    const V vinv = hb_coerce<V> (vINVALID);
+    return v != vinv;
   }
   /* Projection. */
   V operator () (K k) const { return get (k); }
@@ -262,12 +264,12 @@ struct hb_hashmap_t
   bool set_with_hash (K key, uint32_t hash, VV&& value)
   {
     if (unlikely (!successful)) return false;
-    const K kinv = kINVALID;
+    const K kinv = hb_coerce<K> (kINVALID);
     if (unlikely (key == kinv)) return true;
     if (unlikely ((occupancy + occupancy / 2) >= mask && !resize ())) return false;
     unsigned int i = bucket_for_hash (key, hash);
 
-    const V vinv = vINVALID;
+    const V vinv = hb_coerce<V> (vINVALID);
     if (value == vinv && items[i].key != key)
       return true; /* Trying to delete non-existent key. */
 
