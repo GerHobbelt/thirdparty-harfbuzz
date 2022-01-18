@@ -214,7 +214,7 @@ HB_FUNCOBJ (hb_bool);
 template <typename T>
 T hb_coerce (const T v) { return v; }
 template <typename T, typename V,
-	  hb_enable_if (!hb_is_same (hb_decay<T>, hb_decay<V>) && hb_is_pointer(V))>
+	  hb_enable_if (!hb_is_same (hb_decay<T>, hb_decay<V>) && std::is_pointer<V>::value)>
 T hb_coerce (const V v) { return *v; }
 
 struct
@@ -880,7 +880,7 @@ hb_bsearch_impl (unsigned *pos, /* Out */
 #pragma GCC diagnostic ignored "-Wcast-align"
     V* p = (V*) (((const char *) base) + (mid * stride));
 #pragma GCC diagnostic pop
-    int c = compar ((const void *) hb_addressof (key), (const void *) p, ds...);
+    int c = compar ((const void *) std::addressof (key), (const void *) p, ds...);
     if (c < 0)
       max = mid - 1;
     else if (c > 0)

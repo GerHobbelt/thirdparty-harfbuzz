@@ -37,8 +37,8 @@
 template <typename K, typename V,
 	  typename k_invalid_t = K,
 	  typename v_invalid_t = V,
-	  k_invalid_t kINVALID = hb_is_pointer (K) ? 0 : std::is_signed<K>::value ? hb_int_min (K) : (K) -1,
-	  v_invalid_t vINVALID = hb_is_pointer (V) ? 0 : std::is_signed<V>::value ? hb_int_min (V) : (V) -1>
+	  k_invalid_t kINVALID = std::is_pointer<K>::value ? 0 : std::is_signed<K>::value ? hb_int_min (K) : (K) -1,
+	  v_invalid_t vINVALID = std::is_pointer<V>::value ? 0 : std::is_signed<V>::value ? hb_int_min (V) : (V) -1>
 struct hb_hashmap_t
 {
   hb_hashmap_t ()  { init (); }
@@ -61,9 +61,6 @@ struct hb_hashmap_t
     hb_copy (o, *this);
   }
 
-  static_assert (std::is_trivially_destructible<K>::value, "");
-  static_assert (std::is_trivially_destructible<V>::value, "");
-
   struct item_t
   {
     K key;
@@ -72,9 +69,9 @@ struct hb_hashmap_t
 
     void clear ()
     {
-      new (hb_addressof (key)) K ();
+      new (std::addressof (key)) K ();
       key = hb_coerce<K> (kINVALID);
-      new (hb_addressof (value)) V ();
+      new (std::addressof (value)) V ();
       value = hb_coerce<V> (vINVALID);
       hash = 0;
     }
@@ -134,8 +131,13 @@ struct hb_hashmap_t
   }
   void fini_shallow ()
   {
-    hb_free (items);
-    items = nullptr;
+    if (unlikely (!items)) {
+      unsigned size = mask + 1;
+      for (unsigned i = 0; i < size; i++)
+        items[i].~item_t ();
+      hb_free (items);
+      items = nullptr;
+    }
     population = occupancy = 0;
   }
   void fini ()
@@ -179,10 +181,15 @@ struct hb_hashmap_t
     /* Insert back old items. */
     if (old_items)
       for (unsigned int i = 0; i < old_size; i++)
+      {
 	if (old_items[i].is_real ())
+	{
 	  set_with_hash (old_items[i].key,
 			 old_items[i].hash,
 			 std::move (old_items[i].value));
+	}
+	old_items[i].~item_t ();
+      }
 
     hb_free (old_items);
 
