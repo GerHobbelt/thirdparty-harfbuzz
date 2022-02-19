@@ -1140,8 +1140,8 @@ struct cff1
     {
       sc.end_processing ();
       topDict.fini ();
-      fontDicts.fini_deep ();
-      privateDicts.fini_deep ();
+      fontDicts.fini ();
+      privateDicts.fini ();
       hb_blob_destroy (blob);
       blob = nullptr;
     }
