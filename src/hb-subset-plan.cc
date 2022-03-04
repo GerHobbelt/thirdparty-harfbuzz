@@ -470,7 +470,7 @@ _nameid_closure (hb_face_t *face,
  * hb_subset_plan_destroy(). If there is a failure creating the plan
  * nullptr will be returned.
  *
- * Since: REPLACEME
+ * Since: 4.0.0
  **/
 hb_subset_plan_t *
 hb_subset_plan_create_or_fail (hb_face_t	 *face,
@@ -548,7 +548,7 @@ hb_subset_plan_create_or_fail (hb_face_t	 *face,
  * Decreases the reference count on @plan, and if it reaches zero, destroys
  * @plan, freeing all memory.
  *
- * Since: REPLACEME
+ * Since: 4.0.0
  **/
 void
 hb_subset_plan_destroy (hb_subset_plan_t *plan)
@@ -607,11 +607,13 @@ hb_subset_plan_destroy (hb_subset_plan_t *plan)
  * hb_subset_plan_old_to_new_glyph_mapping:
  * @plan: a subsetting plan.
  *
- * Return value:
- * the mapping between glyphs in the original font to glyphs
- * in the subset that will be produced by @plan.
+ * Returns the mapping between glyphs in the original font to glyphs in the
+ * subset that will be produced by @plan
  *
- * Since: REPLACEME
+ * Return value: (transfer none):
+ * A pointer to the #hb_map_t of the mapping.
+ *
+ * Since: 4.0.0
  **/
 const hb_map_t*
 hb_subset_plan_old_to_new_glyph_mapping (const hb_subset_plan_t *plan)
@@ -620,13 +622,16 @@ hb_subset_plan_old_to_new_glyph_mapping (const hb_subset_plan_t *plan)
 }
 
 /**
- * hb_subset_plan_old_to_new_glyph_mapping:
+ * hb_subset_plan_new_to_old_glyph_mapping:
  * @plan: a subsetting plan.
  *
  * Returns the mapping between glyphs in the subset that will be produced by
  * @plan and the glyph in the original font.
  *
- * Since: REPLACEME
+ * Return value: (transfer none):
+ * A pointer to the #hb_map_t of the mapping.
+ *
+ * Since: 4.0.0
  **/
 const hb_map_t*
 hb_subset_plan_new_to_old_glyph_mapping (const hb_subset_plan_t *plan)
@@ -635,16 +640,19 @@ hb_subset_plan_new_to_old_glyph_mapping (const hb_subset_plan_t *plan)
 }
 
 /**
- * hb_subset_plan_old_to_new_glyph_mapping:
+ * hb_subset_plan_unicode_to_old_glyph_mapping:
  * @plan: a subsetting plan.
  *
  * Returns the mapping between codepoints in the original font and the
  * associated glyph id in the original font.
  *
- * Since: REPLACEME
+ * Return value: (transfer none):
+ * A pointer to the #hb_map_t of the mapping.
+ *
+ * Since: 4.0.0
  **/
 const hb_map_t*
-hb_subset_plan_codepoint_to_old_glyph_mapping (const hb_subset_plan_t *plan)
+hb_subset_plan_unicode_to_old_glyph_mapping (const hb_subset_plan_t *plan)
 {
   return plan->codepoint_to_glyph;
 }
@@ -657,7 +665,7 @@ hb_subset_plan_codepoint_to_old_glyph_mapping (const hb_subset_plan_t *plan)
  *
  * Return value: @plan.
  *
- * Since: REPLACEME
+ * Since: 4.0.0
  **/
 hb_subset_plan_t *
 hb_subset_plan_reference (hb_subset_plan_t *plan)
@@ -677,7 +685,7 @@ hb_subset_plan_reference (hb_subset_plan_t *plan)
  *
  * Return value: %true if success, %false otherwise
  *
- * Since: REPLACEME
+ * Since: 4.0.0
  **/
 hb_bool_t
 hb_subset_plan_set_user_data (hb_subset_plan_t   *plan,
@@ -699,7 +707,7 @@ hb_subset_plan_set_user_data (hb_subset_plan_t   *plan,
  *
  * Return value: (transfer none): A pointer to the user data
  *
- * Since: REPLACEME
+ * Since: 4.0.0
  **/
 void *
 hb_subset_plan_get_user_data (const hb_subset_plan_t *plan,
