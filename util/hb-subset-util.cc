@@ -834,8 +834,12 @@ subset_main_t::add_options ()
   option_parser_t::add_options ();
 }
 
-int
-main (int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_subset_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
   return batch_main<subset_main_t, true> (argc, argv);
 }

@@ -507,8 +507,12 @@ print_layout_info_using_private_api (hb_blob_t *blob)
 /* end of private API use */
 #endif
 
-int
-main (int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_harfbuzz_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
   if (argc != 2)
   {

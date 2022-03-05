@@ -33,8 +33,8 @@
 #include "shape-format.hh"
 #include "text-options.hh"
 
-const unsigned DEFAULT_FONT_SIZE = FONT_SIZE_UPEM;
-const unsigned SUBPIXEL_BITS = 0;
+static const unsigned DEFAULT_FONT_SIZE = FONT_SIZE_UPEM;
+static const unsigned SUBPIXEL_BITS = 0;
 
 struct output_buffer_t : output_options_t<>
 {
@@ -159,8 +159,12 @@ struct output_buffer_t : output_options_t<>
   hb_buffer_serialize_flags_t serialize_flags = HB_BUFFER_SERIALIZE_FLAG_DEFAULT;
 };
 
-int
-main (int argc, char **argv)
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_shape_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
 {
   using main_t = main_font_text_t<shape_consumer_t<output_buffer_t>, font_options_t, shape_text_options_t>;
   return batch_main<main_t> (argc, argv);

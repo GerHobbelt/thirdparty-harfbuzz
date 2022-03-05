@@ -27,11 +27,11 @@
 
 #include "options.hh"
 
-typedef int (*main_func_t) (int argc, char **argv);
+typedef int (*main_func_t) (int argc, const char **argv);
 
 template <typename main_t, bool report_status=false>
 int
-batch_main (int argc, char **argv)
+batch_main (int argc, const char **argv)
 {
   if (argc == 2 && !strcmp (argv[1], "--batch"))
   {
