@@ -1,3 +1,6 @@
+
+#if !defined(BUILD_MONOLITHIC)
+
 #include "hb-aat-layout.cc"
 #include "hb-aat-map.cc"
 #include "hb-blob.cc"
@@ -54,3 +57,5 @@
 #include "hb-gdi.cc"
 #include "hb-directwrite.cc"
 #include "hb-coretext.cc"
+
+#endif
