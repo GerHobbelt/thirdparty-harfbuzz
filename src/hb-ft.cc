@@ -135,8 +135,9 @@ _hb_ft_font_destroy (void *data)
 
 
 /* hb_font changed, update FT_Face. */
-static void _hb_ft_changed (hb_font_t *font, FT_Face ft_face)
+static void _hb_ft_hb_font_changed (hb_font_t *font, FT_Face ft_face)
 {
+
   FT_Set_Char_Size (ft_face,
 		    abs (font->x_scale), abs (font->y_scale),
 		    0, 0);
@@ -170,12 +171,13 @@ static void _hb_ft_changed (hb_font_t *font, FT_Face ft_face)
 
 /* Check if hb_font changed, update FT_Face. */
 static inline bool
-_hb_ft_check_changed (hb_font_t *font,
-		      const hb_ft_font_t *ft_font)
+_hb_ft_hb_font_check_changed (hb_font_t *font,
+			      const hb_ft_font_t *ft_font)
 {
   if (font->serial != ft_font->cached_serial)
   {
-    _hb_ft_changed (font, ft_font->ft_face);
+    _hb_ft_hb_font_changed (font, ft_font->ft_face);
+    ft_font->advance_cache.clear ();
     ft_font->cached_serial = font->serial;
     return true;
   }
@@ -390,9 +392,6 @@ hb_ft_get_glyph_h_advances (hb_font_t* font, void* font_data,
   int load_flags = ft_font->load_flags;
   int mult = font->x_scale < 0 ? -1 : +1;
 
-  if (_hb_ft_check_changed (font, ft_font))
-    ft_font->advance_cache.clear ();
-
   for (unsigned int i = 0; i < count; i++)
   {
     FT_Fixed v = 0;
@@ -424,8 +423,6 @@ hb_ft_get_glyph_v_advance (hb_font_t *font,
   hb_lock_t lock (ft_font->lock);
   FT_Fixed v;
 
-  _hb_ft_check_changed (font, ft_font);
-
   if (unlikely (FT_Get_Advance (ft_font->ft_face, glyph, ft_font->load_flags | FT_LOAD_VERTICAL_LAYOUT, &v)))
     return 0;
 
@@ -451,8 +448,6 @@ hb_ft_get_glyph_v_origin (hb_font_t *font,
   const hb_ft_font_t *ft_font = (const hb_ft_font_t *) font_data;
   hb_lock_t lock (ft_font->lock);
   FT_Face ft_face = ft_font->ft_face;
-
-  _hb_ft_check_changed (font, ft_font);
 
   if (unlikely (FT_Load_Glyph (ft_face, glyph, ft_font->load_flags)))
     return false;
@@ -483,8 +478,6 @@ hb_ft_get_glyph_h_kerning (hb_font_t *font,
   hb_lock_t lock (ft_font->lock);
   FT_Vector kerningv;
 
-  _hb_ft_check_changed (font, ft_font);
-
   FT_Kerning_Mode mode = font->x_ppem ? FT_KERNING_DEFAULT : FT_KERNING_UNFITTED;
   if (FT_Get_Kerning (ft_font->ft_face, left_glyph, right_glyph, mode, &kerningv))
     return 0;
@@ -503,8 +496,6 @@ hb_ft_get_glyph_extents (hb_font_t *font,
   const hb_ft_font_t *ft_font = (const hb_ft_font_t *) font_data;
   hb_lock_t lock (ft_font->lock);
   FT_Face ft_face = ft_font->ft_face;
-
-  _hb_ft_check_changed (font, ft_font);
 
   if (unlikely (FT_Load_Glyph (ft_face, glyph, ft_font->load_flags)))
     return false;
@@ -538,8 +529,6 @@ hb_ft_get_glyph_contour_point (hb_font_t *font HB_UNUSED,
   const hb_ft_font_t *ft_font = (const hb_ft_font_t *) font_data;
   hb_lock_t lock (ft_font->lock);
   FT_Face ft_face = ft_font->ft_face;
-
-  _hb_ft_check_changed (font, ft_font);
 
   if (unlikely (FT_Load_Glyph (ft_face, glyph, ft_font->load_flags)))
       return false;
@@ -618,8 +607,6 @@ hb_ft_get_font_h_extents (hb_font_t *font HB_UNUSED,
   hb_lock_t lock (ft_font->lock);
   FT_Face ft_face = ft_font->ft_face;
 
-  _hb_ft_check_changed (font, ft_font);
-
   metrics->ascender = FT_MulFix(ft_face->ascender, ft_face->size->metrics.y_scale);
   metrics->descender = FT_MulFix(ft_face->descender, ft_face->size->metrics.y_scale);
   metrics->line_gap = FT_MulFix( ft_face->height, ft_face->size->metrics.y_scale ) - (metrics->ascender - metrics->descender);
@@ -683,7 +670,7 @@ hb_ft_get_glyph_shape (hb_font_t *font HB_UNUSED,
   hb_lock_t lock (ft_font->lock);
   FT_Face ft_face = ft_font->ft_face;
 
-  _hb_ft_check_changed (font, ft_font);
+  _hb_ft_hb_font_check_changed (font, ft_font);
 
   if (unlikely (FT_Load_Glyph (ft_face, glyph,
 			       FT_LOAD_NO_BITMAP | ft_font->load_flags)))
@@ -1033,6 +1020,31 @@ hb_ft_font_changed (hb_font_t *font)
 }
 
 /**
+ * hb_ft_hb_font_changed:
+ * @font: #hb_font_t to work upon
+ *
+ * Refreshes the state of the underlying FT_Face of @font when the hb_font_t
+ * @font has changed.
+ * This function should be called after changing the size or
+ * variation-axis settings on the @font.
+ * This call is fast if nothing has changed on @font.
+ *
+ * Return value: true if changed, false otherwise
+ *
+ * Since: REPLACEME
+ **/
+hb_bool_t
+hb_ft_hb_font_changed (hb_font_t *font)
+{
+  if (font->destroy != (hb_destroy_func_t) _hb_ft_font_destroy)
+    return false;
+
+  hb_ft_font_t *ft_font = (hb_ft_font_t *) font->user_data;
+
+  return _hb_ft_hb_font_check_changed (font, ft_font);
+}
+
+/**
  * hb_ft_font_create_referenced:
  * @ft_face: FT_Face to work upon
  *
@@ -1150,7 +1162,7 @@ hb_ft_font_set_funcs (hb_font_t *font)
   if (FT_Select_Charmap (ft_face, FT_ENCODING_MS_SYMBOL))
     FT_Select_Charmap (ft_face, FT_ENCODING_UNICODE);
 
-  _hb_ft_changed (font, ft_face);
+  _hb_ft_hb_font_changed (font, ft_face);
 
   ft_face->generic.data = blob;
   ft_face->generic.finalizer = (FT_Generic_Finalizer) _release_blob;

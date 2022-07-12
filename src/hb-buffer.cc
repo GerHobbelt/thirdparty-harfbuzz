@@ -311,6 +311,7 @@ hb_buffer_t::enter ()
 {
   deallocate_var_all ();
   serial = 0;
+  shaping_failed = false;
   scratch_flags = HB_BUFFER_SCRATCH_FLAG_DEFAULT;
   if (likely (!hb_unsigned_mul_overflows (len, HB_BUFFER_MAX_LEN_FACTOR)))
   {
@@ -330,6 +331,7 @@ hb_buffer_t::leave ()
   max_ops = HB_BUFFER_MAX_OPS_DEFAULT;
   deallocate_var_all ();
   serial = 0;
+  // Intentionally not reseting shaping_failed, such that it can be inspected.
 }
 
 
@@ -543,11 +545,14 @@ hb_buffer_t::delete_glyph ()
   /* The logic here is duplicated in hb_ot_hide_default_ignorables(). */
 
   unsigned int cluster = info[idx].cluster;
-  if (idx + 1 < len && cluster == info[idx + 1].cluster)
+  if ((idx + 1 < len && cluster == info[idx + 1].cluster) ||
+      (out_len && cluster == out_info[out_len - 1].cluster))
   {
     /* Cluster survives; do nothing. */
     goto done;
   }
+
+  /* TODO We need to just merge one direction, with whichever is smaller. */
 
   if (out_len)
   {
@@ -836,7 +841,7 @@ hb_buffer_set_content_type (hb_buffer_t              *buffer,
  * Since: 0.9.5
  **/
 hb_buffer_content_type_t
-hb_buffer_get_content_type (hb_buffer_t *buffer)
+hb_buffer_get_content_type (const hb_buffer_t *buffer)
 {
   return buffer->content_type;
 }
@@ -878,7 +883,7 @@ hb_buffer_set_unicode_funcs (hb_buffer_t        *buffer,
  * Since: 0.9.2
  **/
 hb_unicode_funcs_t *
-hb_buffer_get_unicode_funcs (hb_buffer_t        *buffer)
+hb_buffer_get_unicode_funcs (const hb_buffer_t *buffer)
 {
   return buffer->unicode;
 }
@@ -921,7 +926,7 @@ hb_buffer_set_direction (hb_buffer_t    *buffer,
  * Since: 0.9.2
  **/
 hb_direction_t
-hb_buffer_get_direction (hb_buffer_t    *buffer)
+hb_buffer_get_direction (const hb_buffer_t *buffer)
 {
   return buffer->props.direction;
 }
@@ -965,7 +970,7 @@ hb_buffer_set_script (hb_buffer_t *buffer,
  * Since: 0.9.2
  **/
 hb_script_t
-hb_buffer_get_script (hb_buffer_t *buffer)
+hb_buffer_get_script (const hb_buffer_t *buffer)
 {
   return buffer->props.script;
 }
@@ -1009,7 +1014,7 @@ hb_buffer_set_language (hb_buffer_t   *buffer,
  * Since: 0.9.2
  **/
 hb_language_t
-hb_buffer_get_language (hb_buffer_t *buffer)
+hb_buffer_get_language (const hb_buffer_t *buffer)
 {
   return buffer->props.language;
 }
@@ -1045,7 +1050,7 @@ hb_buffer_set_segment_properties (hb_buffer_t *buffer,
  * Since: 0.9.7
  **/
 void
-hb_buffer_get_segment_properties (hb_buffer_t *buffer,
+hb_buffer_get_segment_properties (const hb_buffer_t *buffer,
 				  hb_segment_properties_t *props)
 {
   *props = buffer->props;
@@ -1083,7 +1088,7 @@ hb_buffer_set_flags (hb_buffer_t       *buffer,
  * Since: 0.9.7
  **/
 hb_buffer_flags_t
-hb_buffer_get_flags (hb_buffer_t *buffer)
+hb_buffer_get_flags (const hb_buffer_t *buffer)
 {
   return buffer->flags;
 }
@@ -1122,7 +1127,7 @@ hb_buffer_set_cluster_level (hb_buffer_t               *buffer,
  * Since: 0.9.42
  **/
 hb_buffer_cluster_level_t
-hb_buffer_get_cluster_level (hb_buffer_t *buffer)
+hb_buffer_get_cluster_level (const hb_buffer_t *buffer)
 {
   return buffer->cluster_level;
 }
@@ -1163,7 +1168,7 @@ hb_buffer_set_replacement_codepoint (hb_buffer_t    *buffer,
  * Since: 0.9.31
  **/
 hb_codepoint_t
-hb_buffer_get_replacement_codepoint (hb_buffer_t    *buffer)
+hb_buffer_get_replacement_codepoint (const hb_buffer_t *buffer)
 {
   return buffer->replacement;
 }
@@ -1203,7 +1208,7 @@ hb_buffer_set_invisible_glyph (hb_buffer_t    *buffer,
  * Since: 2.0.0
  **/
 hb_codepoint_t
-hb_buffer_get_invisible_glyph (hb_buffer_t    *buffer)
+hb_buffer_get_invisible_glyph (const hb_buffer_t *buffer)
 {
   return buffer->invisible;
 }
@@ -1243,7 +1248,7 @@ hb_buffer_set_not_found_glyph (hb_buffer_t    *buffer,
  * Since: 3.1.0
  **/
 hb_codepoint_t
-hb_buffer_get_not_found_glyph (hb_buffer_t    *buffer)
+hb_buffer_get_not_found_glyph (const hb_buffer_t *buffer)
 {
   return buffer->not_found;
 }
@@ -1383,7 +1388,7 @@ hb_buffer_set_length (hb_buffer_t  *buffer,
  * Since: 0.9.2
  **/
 unsigned int
-hb_buffer_get_length (hb_buffer_t *buffer)
+hb_buffer_get_length (const hb_buffer_t *buffer)
 {
   return buffer->len;
 }
