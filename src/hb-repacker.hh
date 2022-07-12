@@ -148,6 +148,8 @@ struct graph_t
   {
     num_roots_for_space_.push (1);
     bool removed_nil = false;
+    vertices_.alloc (objects.length);
+    vertices_scratch_.alloc (objects.length);
     for (unsigned i = 0; i < objects.length; i++)
     {
       // TODO(grieger): check all links point to valid objects.
@@ -260,7 +262,7 @@ struct graph_t
     }
 
     hb_vector_t<unsigned> queue;
-    hb_vector_t<vertex_t> sorted_graph;
+    hb_vector_t<vertex_t> &sorted_graph = vertices_scratch_;
     if (unlikely (!check_success (sorted_graph.resize (vertices_.length)))) return;
     hb_vector_t<unsigned> id_map;
     if (unlikely (!check_success (id_map.resize (vertices_.length)))) return;
@@ -296,7 +298,6 @@ struct graph_t
     remap_all_obj_indices (id_map, &sorted_graph);
 
     hb_swap (vertices_, sorted_graph);
-    sorted_graph.fini ();
   }
 
   /*
@@ -315,7 +316,7 @@ struct graph_t
     update_distances ();
 
     hb_priority_queue_t queue;
-    hb_vector_t<vertex_t> sorted_graph;
+    hb_vector_t<vertex_t> &sorted_graph = vertices_scratch_;
     if (unlikely (!check_success (sorted_graph.resize (vertices_.length)))) return;
     hb_vector_t<unsigned> id_map;
     if (unlikely (!check_success (id_map.resize (vertices_.length)))) return;
@@ -356,7 +357,6 @@ struct graph_t
     remap_all_obj_indices (id_map, &sorted_graph);
 
     hb_swap (vertices_, sorted_graph);
-    sorted_graph.fini ();
   }
 
   /*
@@ -1090,6 +1090,7 @@ struct graph_t
  public:
   // TODO(garretrieger): make private, will need to move most of offset overflow code into graph.
   hb_vector_t<vertex_t> vertices_;
+  hb_vector_t<vertex_t> vertices_scratch_;
  private:
   bool parents_invalid;
   bool distance_invalid;
