@@ -491,8 +491,8 @@ struct arg_stack_t : cff_stack_t<ARG, 513>
 /* an operator prefixed by its operands in a byte string */
 struct op_str_t
 {
-  op_code_t  op;
   hb_ubytes_t str;
+  op_code_t  op;
 };
 
 /* base of OP_SERIALIZER */
@@ -543,8 +543,8 @@ struct parsed_values_t
 
   bool has_op (op_code_t op) const
   {
-    for (unsigned int i = 0; i < get_count (); i++)
-      if (get_value (i).op == op) return true;
+    for (const auto& v : values)
+      if (v.op == op) return true;
     return false;
   }
 
