@@ -240,18 +240,16 @@ struct
   private:
 
   template <typename T> constexpr auto
-  impl (const T& v, hb_priority<2>) const HB_RETURN (uint32_t, hb_deref (v).hash ())
+  impl (const T& v, hb_priority<1>) const HB_RETURN (uint32_t, hb_deref (v).hash ())
+
+  template <typename T> constexpr uint32_t
+  impl (const hb::shared_ptr<T>& v, hb_priority<1>) const
+  {
+    return v.get () ? v.get ()->hash () : 0;
+  }
 
   template <typename T> constexpr auto
-  impl (const T& v, hb_priority<1>) const HB_RETURN (uint32_t, std::hash<hb_decay<decltype (hb_deref (v))>>{} (hb_deref (v)))
-
-  template <typename T,
-	    hb_enable_if (std::is_integral<T>::value)> constexpr auto
-  impl (const T& v, hb_priority<0>) const HB_AUTO_RETURN
-  (
-    /* Knuth's multiplicative method: */
-    (uint32_t) v * 2654435761u
-  )
+  impl (const T& v, hb_priority<0>) const HB_RETURN (uint32_t, std::hash<hb_decay<decltype (hb_deref (v))>>{} (hb_deref (v)))
 
   public:
 

@@ -20,7 +20,6 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  THE SOFTWARE PROVIDED HEREUNDER IS
  * ON AN "AS IS" BASIS, AND THE COPYRIGHT HOLDER HAS NO OBLIGATION TO
  * PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
- *
  */
 
 #include "hb.hh"
@@ -222,6 +221,17 @@ main (int argc, char **argv)
     assert (m1.get (vector_t {1}) == vector_t {2});
     assert (m2.get (vector_t {1}) == vector_t {2});
   }
+
+  /* Test hb::shared_ptr. */
+  hb_hash (hb::shared_ptr<hb_set_t> ());
+#if 0
+  {
+    hb_hashmap_t<hb::shared_ptr<hb_set_t>, hb::shared_ptr<hb_set_t>, std::nullptr_t, std::nullptr_t, nullptr, nullptr> m;
+
+    m.get (hb::shared_ptr<hb_set_t> ());
+    m.get (hb::shared_ptr<hb_set_t> (hb_set_get_empty ()));
+  }
+#endif
 
   return 0;
 }
