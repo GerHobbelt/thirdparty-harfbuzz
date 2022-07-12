@@ -68,8 +68,8 @@ struct hb_hashmap_t
   struct item_t
   {
     K key;
-    V value;
     uint32_t hash;
+    V value;
 
     void clear ()
     {
@@ -100,6 +100,9 @@ struct hb_hashmap_t
       return key != kinv && value != vinv;
     }
     hb_pair_t<K, V> get_pair() const { return hb_pair_t<K, V> (key, value); }
+
+    uint32_t total_hash () const
+    { return (hash * 31) + hb_hash (value); }
   };
 
   hb_object_header_t header;
@@ -242,8 +245,9 @@ struct hb_hashmap_t
   uint32_t hash () const
   {
     uint32_t h = 0;
-    for (auto pair : iter ())
-      h ^= (hb_hash (pair.first) * 31) + hb_hash (pair.second);
+    for (const auto &item : + hb_array (items, mask ? mask + 1 : 0)
+			    | hb_filter (&item_t::is_real))
+      h ^= item.total_hash ();
     return h;
   }
 
