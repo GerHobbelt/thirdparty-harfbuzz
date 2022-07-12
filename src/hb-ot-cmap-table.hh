@@ -796,16 +796,16 @@ struct CmapSubtableFormat12 : CmapSubtableLongSegmented<CmapSubtableFormat12>
   void serialize (hb_serialize_context_t *c,
 		  Iterator it)
   {
-    if (it.len () == 0) return;
+    if (!it) return;
     unsigned table_initpos = c->length ();
     if (unlikely (!c->extend_min (this))) return;
 
-    hb_codepoint_t startCharCode = 0xFFFF, endCharCode = 0xFFFF;
+    hb_codepoint_t startCharCode = (hb_codepoint_t) -1, endCharCode = (hb_codepoint_t) -1;
     hb_codepoint_t glyphID = 0;
 
     for (const auto& _ : +it)
     {
-      if (startCharCode == 0xFFFF)
+      if (startCharCode == (hb_codepoint_t) -1)
       {
 	startCharCode = _.first;
 	endCharCode = _.first;
@@ -836,7 +836,7 @@ struct CmapSubtableFormat12 : CmapSubtableLongSegmented<CmapSubtableFormat12>
     this->format = 12;
     this->reserved = 0;
     this->length = c->length () - table_initpos;
-    this->groups.len = (this->length - min_size)/CmapSubtableLongGroup::static_size;
+    this->groups.len = (this->length - min_size) / CmapSubtableLongGroup::static_size;
   }
 
   static size_t get_sub_table_size (const hb_sorted_vector_t<CmapSubtableLongGroup> &groups_data)

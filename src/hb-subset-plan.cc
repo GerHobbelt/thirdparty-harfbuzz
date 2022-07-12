@@ -279,12 +279,7 @@ static inline void
 _remove_invalid_gids (hb_set_t *glyphs,
 		      unsigned int num_glyphs)
 {
-  hb_codepoint_t gid = HB_SET_VALUE_INVALID;
-  while (glyphs->next (&gid))
-  {
-    if (gid >= num_glyphs)
-      glyphs->del (gid);
-  }
+  glyphs->del_range (num_glyphs, HB_SET_VALUE_INVALID);
 }
 
 static void
@@ -344,12 +339,11 @@ _populate_unicodes_to_retain (const hb_set_t *unicodes,
     }
   }
 
-  for (unsigned i = 0; i < plan->unicode_to_new_gid_list.length; i++)
+  auto &arr = plan->unicode_to_new_gid_list;
+  if (arr.length)
   {
-    // Use raw array access for performance.
-    hb_pair_t<hb_codepoint_t, hb_codepoint_t> pair = plan->unicode_to_new_gid_list.arrayZ[i];
-    plan->unicodes->add(pair.first);
-    plan->_glyphset_gsub->add(pair.second);
+    plan->unicodes->add_sorted_array (&arr.arrayZ->first, arr.length, sizeof (*arr.arrayZ));
+    plan->_glyphset_gsub->add_array (&arr.arrayZ->second, arr.length, sizeof (*arr.arrayZ));
   }
 }
 
@@ -399,16 +393,19 @@ _populate_gids_to_retain (hb_subset_plan_t* plan,
   _remove_invalid_gids (&cur_glyphset, plan->source->get_num_glyphs ());
 
   hb_set_set (plan->_glyphset_colred, &cur_glyphset);
-  // Populate a full set of glyphs to retain by adding all referenced
-  // composite glyphs.
-  for (hb_codepoint_t gid : cur_glyphset.iter ())
-  {
-    glyf.add_gid_and_children (gid, plan->_glyphset);
+
+  /* Populate a full set of glyphs to retain by adding all referenced
+   * composite glyphs. */
+  if (glyf.has_data ())
+    for (hb_codepoint_t gid : cur_glyphset)
+      glyf.add_gid_and_children (gid, plan->_glyphset);
+  else
+    plan->_glyphset->union_ (cur_glyphset);
 #ifndef HB_NO_SUBSET_CFF
-    if (cff.is_valid ())
+  if (cff.is_valid ())
+    for (hb_codepoint_t gid : cur_glyphset)
       _add_cff_seac_components (cff, gid, plan->_glyphset);
 #endif
-  }
 
   _remove_invalid_gids (plan->_glyphset, plan->source->get_num_glyphs ());
 
@@ -445,10 +442,9 @@ _create_old_gid_to_new_gid_map (const hb_face_t *face,
     | hb_sink (reverse_glyph_map)
     ;
 
-    unsigned max_glyph =
-    + hb_iter (all_gids_to_retain)
-    | hb_reduce (hb_max, 0u)
-    ;
+    hb_codepoint_t max_glyph = HB_SET_VALUE_INVALID;
+    hb_set_previous (all_gids_to_retain, &max_glyph);
+
     *num_glyphs = max_glyph + 1;
   }
 
