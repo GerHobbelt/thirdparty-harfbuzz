@@ -1287,7 +1287,7 @@ struct cff1
 	  hb_ubytes_t	ustr = (*stringIndex)[sid - cff1_std_strings_length];
 	  gname.name = hb_bytes_t ((const char*)ustr.arrayZ, ustr.length);
 	}
-	if (unlikely (!gname.name.arrayZ)) { fini (); return; }
+	if (unlikely (!gname.name.length)) { fini (); return; }
 	glyph_names.push (gname);
       }
       glyph_names.qsort ();
@@ -1356,7 +1356,7 @@ struct cff1
       {
 	const gname_t *a = (const gname_t *)a_;
 	const gname_t *b = (const gname_t *)b_;
-	int minlen = hb_min (a->name.length, b->name.length);
+	unsigned minlen = hb_min (a->name.length, b->name.length);
 	int ret = strncmp (a->name.arrayZ, b->name.arrayZ, minlen);
 	if (ret) return ret;
 	return a->name.length - b->name.length;
