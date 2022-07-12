@@ -80,6 +80,8 @@ struct hb_bit_set_invertible_t
     next (&v);
     return v == INVALID;
   }
+  uint32_t hash () const { return s.hash () ^ inverted; }
+
   hb_codepoint_t get_min () const
   {
     hb_codepoint_t v = INVALID;

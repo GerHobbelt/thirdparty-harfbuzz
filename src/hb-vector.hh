@@ -43,6 +43,7 @@ struct hb_vector_t : std::conditional<sorted, hb_vector_t<Type, false>, hb_empty
   using c_array_t = typename std::conditional<sorted, hb_sorted_array_t<const Type>, hb_array_t<const Type>>::type;
 
   hb_vector_t () = default;
+  hb_vector_t (std::nullptr_t) : hb_vector_t () {}
   hb_vector_t (std::initializer_list<Type> lst) : hb_vector_t ()
   {
     alloc (lst.size ());
@@ -60,7 +61,8 @@ struct hb_vector_t : std::conditional<sorted, hb_vector_t<Type, false>, hb_empty
   hb_vector_t (const hb_vector_t &o) : hb_vector_t ()
   {
     alloc (o.length);
-    hb_copy (o, *this);
+    if (unlikely (in_error ())) return;
+    copy_vector (o);
   }
   hb_vector_t (hb_vector_t &&o)
   {
@@ -108,7 +110,10 @@ struct hb_vector_t : std::conditional<sorted, hb_vector_t<Type, false>, hb_empty
   {
     reset ();
     alloc (o.length);
-    hb_copy (o, *this);
+    if (unlikely (in_error ())) return *this;
+
+    copy_vector (o);
+
     return *this;
   }
   hb_vector_t& operator = (hb_vector_t &&o)
@@ -230,8 +235,7 @@ struct hb_vector_t : std::conditional<sorted, hb_vector_t<Type, false>, hb_empty
   }
 
   template <typename T = Type,
-	    hb_enable_if (hb_is_trivially_constructible(T) ||
-			  !std::is_default_constructible<T>::value)>
+	    hb_enable_if (hb_is_trivially_constructible(T))>
   void
   grow_vector (unsigned size)
   {
@@ -239,8 +243,7 @@ struct hb_vector_t : std::conditional<sorted, hb_vector_t<Type, false>, hb_empty
     length = size;
   }
   template <typename T = Type,
-	    hb_enable_if (!hb_is_trivially_constructible(T) &&
-			   std::is_default_constructible<T>::value)>
+	    hb_enable_if (!hb_is_trivially_constructible(T))>
   void
   grow_vector (unsigned size)
   {
@@ -248,6 +251,44 @@ struct hb_vector_t : std::conditional<sorted, hb_vector_t<Type, false>, hb_empty
     {
       length++;
       new (std::addressof (arrayZ[length - 1])) Type ();
+    }
+  }
+
+  template <typename T = Type,
+	    hb_enable_if (hb_is_trivially_copyable (T))>
+  void
+  copy_vector (const hb_vector_t &other)
+  {
+    length = other.length;
+    hb_memcpy ((void *) arrayZ, (const void *) other.arrayZ, length * item_size);
+  }
+  template <typename T = Type,
+	    hb_enable_if (!hb_is_trivially_copyable (T) &&
+			   std::is_copy_constructible<T>::value)>
+  void
+  copy_vector (const hb_vector_t &other)
+  {
+    length = 0;
+    while (length < other.length)
+    {
+      length++;
+      new (std::addressof (arrayZ[length - 1])) Type (other.arrayZ[length - 1]);
+    }
+  }
+  template <typename T = Type,
+	    hb_enable_if (!hb_is_trivially_copyable (T) &&
+			  !std::is_copy_constructible<T>::value &&
+			  std::is_default_constructible<T>::value &&
+			  std::is_copy_assignable<T>::value)>
+  void
+  copy_vector (const hb_vector_t &other)
+  {
+    length = 0;
+    while (length < other.length)
+    {
+      length++;
+      new (std::addressof (arrayZ[length - 1])) Type ();
+      arrayZ[length - 1] = other.arrayZ[length - 1];
     }
   }
 
