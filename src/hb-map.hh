@@ -77,10 +77,10 @@ struct hb_hashmap_t
 
     template <bool v = minus_one,
 	      hb_enable_if (v == false)>
-    static V default_value () { return V(); };
+    static const V& default_value () { return Null(V); };
     template <bool v = minus_one,
 	      hb_enable_if (v == true)>
-    static V default_value () { return V(-1); };
+    static const V& default_value () { static const V minus_1 = -1; return minus_1; };
 
     void clear ()
     {
@@ -94,6 +94,7 @@ struct hb_hashmap_t
     bool operator == (const K &o) { return hb_deref (key) == hb_deref (o); }
     bool operator == (const item_t &o) { return *this == o.key; }
     hb_pair_t<K, V> get_pair() const { return hb_pair_t<K, V> (key, value); }
+    hb_pair_t<const K &, const V &> get_pair_ref() const { return hb_pair_t<const K &, const V &> (key, value); }
 
     uint32_t total_hash () const
     { return (hash * 31) + hb_hash (value); }
@@ -197,10 +198,10 @@ struct hb_hashmap_t
     return true;
   }
 
-  bool set (K key, const V &value) { return set_with_hash (key, hb_hash (key), value); }
-  bool set (K key, V&& value) { return set_with_hash (key, hb_hash (key), std::move (value)); }
+  template <typename VV>
+  bool set (K key, VV&& value) { return set_with_hash (key, hb_hash (key), std::forward<VV> (value)); }
 
-  V get (K key) const
+  const V& get (K key) const
   {
     if (unlikely (!items)) return item_t::default_value ();
     unsigned int i = bucket_for (key);
@@ -212,22 +213,22 @@ struct hb_hashmap_t
   /* Has interface. */
   typedef V value_t;
   value_t operator [] (K k) const { return get (k); }
-  bool has (K key, V *vp = nullptr) const
+  bool has (K key, const V **vp = nullptr) const
   {
     if (unlikely (!items))
     {
-      if (vp) *vp = item_t::default_value ();
+      if (vp) *vp = &item_t::default_value ();
       return false;
     }
     unsigned int i = bucket_for (key);
     if (items[i].is_real () && items[i] == key)
     {
-      if (vp) *vp = items[i].value;
+      if (vp) *vp = &items[i].value;
       return true;
     }
     else
     {
-      if (vp) *vp = item_t::default_value ();
+      if (vp) *vp = &item_t::default_value ();
       return false;
     }
   }
@@ -281,6 +282,12 @@ struct hb_hashmap_t
     | hb_filter (&item_t::is_real)
     | hb_map (&item_t::get_pair)
   )
+  auto iter_ref () const HB_AUTO_RETURN
+  (
+    + hb_array (items, mask ? mask + 1 : 0)
+    | hb_filter (&item_t::is_real)
+    | hb_map (&item_t::get_pair_ref)
+  )
   auto keys () const HB_AUTO_RETURN
   (
     + hb_array (items, mask ? mask + 1 : 0)
@@ -320,7 +327,7 @@ struct hb_hashmap_t
     }
 
     items[i].key = key;
-    items[i].value = value;
+    items[i].value = std::forward<VV> (value);
     items[i].hash = hash;
     items[i].set_used (true);
     items[i].set_tombstone (is_delete);
@@ -332,12 +339,12 @@ struct hb_hashmap_t
     return true;
   }
 
-  unsigned int bucket_for (K key) const
+  unsigned int bucket_for (const K &key) const
   {
     return bucket_for_hash (key, hb_hash (key));
   }
 
-  unsigned int bucket_for_hash (K key, uint32_t hash) const
+  unsigned int bucket_for_hash (const K &key, uint32_t hash) const
   {
     hash &= 0x3FFFFFFF; // We only store lower 30bit of hash
     unsigned int i = hash % prime;
