@@ -598,6 +598,8 @@ struct cff1_top_dict_interp_env_t : num_interp_env_t
 {
   cff1_top_dict_interp_env_t ()
     : num_interp_env_t(), prev_offset(0), last_offset(0) {}
+  cff1_top_dict_interp_env_t (const hb_ubytes_t &bytes)
+    : num_interp_env_t(bytes), prev_offset(0), last_offset(0) {}
 
   unsigned int prev_offset;
   unsigned int last_offset;
@@ -1022,9 +1024,8 @@ struct cff1
       { /* parse top dict */
 	const hb_ubytes_t topDictStr = (*topDictIndex)[0];
 	if (unlikely (!topDictStr.sanitize (&sc))) { fini (); return; }
-	cff1_top_dict_interpreter_t top_interp;
-	top_interp.env.init (topDictStr);
-	topDict.init ();
+	cff1_top_dict_interp_env_t env (topDictStr);
+	cff1_top_dict_interpreter_t top_interp (env);
 	if (unlikely (!top_interp.interpret (topDict))) { fini (); return; }
       }
 
@@ -1097,8 +1098,8 @@ struct cff1
 	  hb_ubytes_t fontDictStr = (*fdArray)[i];
 	  if (unlikely (!fontDictStr.sanitize (&sc))) { fini (); return; }
 	  cff1_font_dict_values_t *font;
-	  cff1_font_dict_interpreter_t font_interp;
-	  font_interp.env.init (fontDictStr);
+	  cff1_top_dict_interp_env_t env (fontDictStr);
+	  cff1_font_dict_interpreter_t font_interp (env);
 	  font = fontDicts.push ();
 	  if (unlikely (font == &Crap (cff1_font_dict_values_t))) { fini (); return; }
 	  font->init ();
@@ -1106,8 +1107,8 @@ struct cff1
 	  PRIVDICTVAL *priv = &privateDicts[i];
 	  const hb_ubytes_t privDictStr = StructAtOffset<UnsizedByteStr> (cff, font->privateDictInfo.offset).as_ubytes (font->privateDictInfo.size);
 	  if (unlikely (!privDictStr.sanitize (&sc))) { fini (); return; }
-	  dict_interpreter_t<PRIVOPSET, PRIVDICTVAL> priv_interp;
-	  priv_interp.env.init (privDictStr);
+	  num_interp_env_t env2 (privDictStr);
+	  dict_interpreter_t<PRIVOPSET, PRIVDICTVAL> priv_interp (env2);
 	  priv->init ();
 	  if (unlikely (!priv_interp.interpret (*priv))) { fini (); return; }
 
@@ -1124,8 +1125,8 @@ struct cff1
 
 	const hb_ubytes_t privDictStr = StructAtOffset<UnsizedByteStr> (cff, font->privateDictInfo.offset).as_ubytes (font->privateDictInfo.size);
 	if (unlikely (!privDictStr.sanitize (&sc))) { fini (); return; }
-	dict_interpreter_t<PRIVOPSET, PRIVDICTVAL> priv_interp;
-	priv_interp.env.init (privDictStr);
+	num_interp_env_t env (privDictStr);
+	dict_interpreter_t<PRIVOPSET, PRIVDICTVAL> priv_interp (env);
 	priv->init ();
 	if (unlikely (!priv_interp.interpret (*priv))) { fini (); return; }
 
