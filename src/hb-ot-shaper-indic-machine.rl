@@ -32,7 +32,11 @@
 #include "hb-ot-layout.hh"
 #include "hb-ot-shaper-indic.hh"
 
-using indic_category_t = ot_category_t;
+/* buffer var allocations */
+#define indic_category() ot_shaper_var_u8_category() /* indic_category_t */
+#define indic_position() ot_shaper_var_u8_auxiliary() /* indic_position_t */
+
+using indic_category_t = unsigned;
 using indic_position_t = ot_position_t;
 
 #define I_Cat(Cat) indic_syllable_machine_ex_##Cat
@@ -56,8 +60,7 @@ enum indic_syllable_type_t {
 %%{
 
 
-# These values are replicated from indic.hh, and relisted in indic.cc; keep in sync.
-
+export X    = 0;
 export C    = 1;
 export V    = 2;
 export N    = 3;
@@ -123,7 +126,7 @@ main := |*
     if (unlikely (syllable_serial == 16)) syllable_serial = 1; \
   } HB_STMT_END
 
-static void
+inline void
 find_syllables_indic (hb_buffer_t *buffer)
 {
   unsigned int p, pe, eof, ts, te, act;

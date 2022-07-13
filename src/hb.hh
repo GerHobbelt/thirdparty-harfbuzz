@@ -66,6 +66,7 @@
 #pragma GCC diagnostic error   "-Wbitwise-instead-of-logical"
 #pragma GCC diagnostic error   "-Wcast-align"
 #pragma GCC diagnostic error   "-Wcast-function-type"
+#pragma GCC diagnostic error   "-Wcomma"
 #pragma GCC diagnostic error   "-Wdelete-non-virtual-dtor"
 #pragma GCC diagnostic error   "-Wembedded-directive"
 #pragma GCC diagnostic error   "-Wextra-semi-stmt"
@@ -184,7 +185,7 @@
 #include <cassert>
 #include <cfloat>
 #include <climits>
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(_USE_MATH_DEFINES)
 # define _USE_MATH_DEFINES
 #endif
 #include <cmath>

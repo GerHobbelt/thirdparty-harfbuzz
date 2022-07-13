@@ -35,9 +35,9 @@
 #include "hb-ot-shaper-indic.hh"
 
 /* buffer var allocations */
-#define khmer_category() indic_category() /* khmer_category_t */
+#define khmer_category() ot_shaper_var_u8_category() /* khmer_category_t */
 
-using khmer_category_t = ot_category_t;
+using khmer_category_t = unsigned;
 
 #define K_Cat(Cat) khmer_syllable_machine_ex_##Cat
 
@@ -50,8 +50,8 @@ enum khmer_syllable_type_t {
 
 #line 52 "hb-ot-shaper-khmer-machine.hh"
 #define khmer_syllable_machine_ex_C 1u
-#define khmer_syllable_machine_ex_Coeng 4u
 #define khmer_syllable_machine_ex_DOTTEDCIRCLE 11u
+#define khmer_syllable_machine_ex_H 4u
 #define khmer_syllable_machine_ex_PLACEHOLDER 10u
 #define khmer_syllable_machine_ex_Ra 15u
 #define khmer_syllable_machine_ex_Robatic 25u
@@ -271,7 +271,7 @@ static const int khmer_syllable_machine_en_main = 20;
     if (unlikely (syllable_serial == 16)) syllable_serial = 1; \
   } HB_STMT_END
 
-static void
+inline void
 find_syllables_khmer (hb_buffer_t *buffer)
 {
   unsigned int p, pe, eof, ts, te, act HB_UNUSED;

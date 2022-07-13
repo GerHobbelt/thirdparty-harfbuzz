@@ -33,9 +33,9 @@
 #include "hb-ot-shaper-indic.hh"
 
 /* buffer var allocations */
-#define khmer_category() indic_category() /* khmer_category_t */
+#define khmer_category() ot_shaper_var_u8_category() /* khmer_category_t */
 
-using khmer_category_t = ot_category_t;
+using khmer_category_t = unsigned;
 
 #define K_Cat(Cat) khmer_syllable_machine_ex_##Cat
 
@@ -55,10 +55,11 @@ enum khmer_syllable_type_t {
 %%{
 
 
-# These values are replicated from indic.hh, and relisted in khmer.cc; keep in sync.
+# We use category H for spec category Coeng
 
 export C    = 1;
 export V    = 2;
+export H    = 4;
 export ZWNJ = 5;
 export ZWJ  = 6;
 export PLACEHOLDER = 10;
@@ -70,7 +71,6 @@ export VBlw = 21;
 export VPre = 22;
 export VPst = 23;
 
-export Coeng   = 4;
 export Robatic = 25;
 export Xgroup  = 26;
 export Ygroup  = 27;
@@ -85,10 +85,10 @@ ygroup = Ygroup*;
 # This grammar was experimentally extracted from what Uniscribe allows.
 
 matra_group = VPre? xgroup VBlw? xgroup (joiner?.VAbv)? xgroup VPst?;
-syllable_tail = xgroup matra_group xgroup (Coeng.c)? ygroup;
+syllable_tail = xgroup matra_group xgroup (H.c)? ygroup;
 
 
-broken_cluster =	(Coeng.cn)* (Coeng | syllable_tail);
+broken_cluster =	(H.cn)* (H | syllable_tail);
 consonant_syllable =	(cn|PLACEHOLDER|DOTTEDCIRCLE) broken_cluster;
 other =			any;
 
@@ -110,7 +110,7 @@ main := |*
     if (unlikely (syllable_serial == 16)) syllable_serial = 1; \
   } HB_STMT_END
 
-static void
+inline void
 find_syllables_khmer (hb_buffer_t *buffer)
 {
   unsigned int p, pe, eof, ts, te, act HB_UNUSED;

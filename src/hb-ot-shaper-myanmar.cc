@@ -38,41 +38,6 @@
  */
 
 
-#define M_Check(C) static_assert (OT_##C == M_Cat(C), "")
-
-M_Check (C);
-M_Check (IV);
-M_Check (DB);
-M_Check (H);
-M_Check (ZWNJ);
-M_Check (ZWJ);
-M_Check (SM);
-M_Check (GB);
-M_Check (DOTTEDCIRCLE);
-M_Check (A);
-M_Check (Ra);
-M_Check (CS);
-
-M_Check (VAbv);
-M_Check (VBlw);
-M_Check (VPre);
-M_Check (VPst);
-
-M_Check (As);
-M_Check (D);
-M_Check (D0);
-M_Check (MH);
-M_Check (MR);
-M_Check (MW);
-M_Check (MY);
-M_Check (PT);
-M_Check (VS);
-M_Check (P);
-M_Check (ML);
-
-#undef M_Check
-
-
 static const hb_tag_t
 myanmar_basic_features[] =
 {
@@ -114,7 +79,7 @@ is_one_of_myanmar (const hb_glyph_info_t &info, unsigned int flags)
 {
   /* If it ligated, all bets are off. */
   if (_hb_glyph_info_ligated (&info)) return false;
-  return !!(FLAG_UNSAFE (info.indic_category()) & flags);
+  return !!(FLAG_UNSAFE (info.myanmar_category()) & flags);
 }
 
 /* Note:
@@ -321,7 +286,6 @@ reorder_syllable_myanmar (const hb_ot_shape_plan_t *plan HB_UNUSED,
       initial_reordering_consonant_syllable  (buffer, start, end);
       break;
 
-    case myanmar_punctuation_cluster:
     case myanmar_non_myanmar_cluster:
       break;
   }

@@ -82,6 +82,58 @@ del combined
 
 # Convert categories & positions types
 
+categories = {
+  'indic' : [
+    'X',
+    'C',
+    'V',
+    'N',
+    'H',
+    'ZWNJ',
+    'ZWJ',
+    'M',
+    'SM',
+    'A',
+    'VD',
+    'PLACEHOLDER',
+    'DOTTEDCIRCLE',
+    'RS',
+    'Repha',
+    'Ra',
+    'CM',
+    'Symbol',
+    'CS',
+  ],
+  'khmer' : [
+    'VAbv',
+    'VBlw',
+    'VPre',
+    'VPst',
+
+    'Robatic',
+    'Xgroup',
+    'Ygroup',
+  ],
+  'myanmar' : [
+    'VAbv',
+    'VBlw',
+    'VPre',
+    'VPst',
+
+    'IV',
+    'As',
+    'DB',
+    'GB',
+    'MH',
+    'MR',
+    'MW',
+    'MY',
+    'PT',
+    'VS',
+    'ML',
+  ],
+}
+
 category_map = {
   'Other'			: 'X',
   'Avagraha'			: 'Symbol',
@@ -102,7 +154,7 @@ category_map = {
   'Consonant_Succeeding_Repha'	: 'CM',
   'Consonant_With_Stacker'	: 'CS',
   'Gemination_Mark'		: 'SM', # https://github.com/harfbuzz/harfbuzz/issues/552
-  'Invisible_Stacker'		: 'Coeng',
+  'Invisible_Stacker'		: 'H',
   'Joiner'			: 'ZWJ',
   'Modifying_Letter'		: 'X',
   'Non_Joiner'			: 'ZWNJ',
@@ -319,8 +371,7 @@ category_overrides = {
   0x109B: 'SM',
   0x109C: 'SM',
 
-  0x104A: 'P',
-  0x104B: 'P',
+  0x104A: 'PLACEHOLDER',
 }
 position_overrides = {
 
@@ -456,11 +507,29 @@ print ('#ifndef HB_NO_OT_SHAPE')
 print ()
 print ('#include "hb-ot-shaper-indic.hh"')
 print ()
+print ('#pragma GCC diagnostic push')
+print ('#pragma GCC diagnostic ignored "-Wunused-macros"')
+print ()
+
+# Print categories
+for shaper in categories:
+  print ('#include "hb-ot-shaper-%s-machine.hh"' % shaper)
+print ()
+done = {}
+for shaper, shaper_cats in categories.items():
+  print ('/* %s */' % shaper)
+  for cat in shaper_cats:
+    v = shaper[0].upper()
+    if cat not in done:
+      print ("#define OT_%s %s_Cat(%s)" % (cat, v, cat))
+      done[cat] = v
+    else:
+      print ('static_assert (OT_%s == %s_Cat(%s), "");' % (cat, v, cat))
+print ()
 
 # Shorten values
 short = [{
 	"Repha":		'Rf',
-	"Coeng":		'Co',
 	"PLACEHOLDER":		'GB',
 	"DOTTEDCIRCLE":		'DC',
 	"VPst":			'VR',
@@ -493,8 +562,6 @@ for i in range (2):
 
 what = ["OT", "POS"]
 what_short = ["_OT", "_POS"]
-print ('#pragma GCC diagnostic push')
-print ('#pragma GCC diagnostic ignored "-Wunused-macros"')
 cat_defs = []
 for i in range (2):
 	vv = sorted (values[i].keys ())

@@ -23,14 +23,63 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-macros"
 
+#include "hb-ot-shaper-indic-machine.hh"
+#include "hb-ot-shaper-khmer-machine.hh"
+#include "hb-ot-shaper-myanmar-machine.hh"
+
+/* indic */
+#define OT_X I_Cat(X)
+#define OT_C I_Cat(C)
+#define OT_V I_Cat(V)
+#define OT_N I_Cat(N)
+#define OT_H I_Cat(H)
+#define OT_ZWNJ I_Cat(ZWNJ)
+#define OT_ZWJ I_Cat(ZWJ)
+#define OT_M I_Cat(M)
+#define OT_SM I_Cat(SM)
+#define OT_A I_Cat(A)
+#define OT_VD I_Cat(VD)
+#define OT_PLACEHOLDER I_Cat(PLACEHOLDER)
+#define OT_DOTTEDCIRCLE I_Cat(DOTTEDCIRCLE)
+#define OT_RS I_Cat(RS)
+#define OT_Repha I_Cat(Repha)
+#define OT_Ra I_Cat(Ra)
+#define OT_CM I_Cat(CM)
+#define OT_Symbol I_Cat(Symbol)
+#define OT_CS I_Cat(CS)
+/* khmer */
+#define OT_VAbv K_Cat(VAbv)
+#define OT_VBlw K_Cat(VBlw)
+#define OT_VPre K_Cat(VPre)
+#define OT_VPst K_Cat(VPst)
+#define OT_Robatic K_Cat(Robatic)
+#define OT_Xgroup K_Cat(Xgroup)
+#define OT_Ygroup K_Cat(Ygroup)
+/* myanmar */
+static_assert (OT_VAbv == M_Cat(VAbv), "");
+static_assert (OT_VBlw == M_Cat(VBlw), "");
+static_assert (OT_VPre == M_Cat(VPre), "");
+static_assert (OT_VPst == M_Cat(VPst), "");
+#define OT_IV M_Cat(IV)
+#define OT_As M_Cat(As)
+#define OT_DB M_Cat(DB)
+#define OT_GB	 M_Cat(GB)
+#define OT_MH M_Cat(MH)
+#define OT_MR M_Cat(MR)
+#define OT_MW M_Cat(MW)
+#define OT_MY M_Cat(MY)
+#define OT_PT M_Cat(PT)
+#define OT_VS M_Cat(VS)
+#define OT_ML M_Cat(ML)
+
+
 #define _OT_A    OT_A            /*  53 chars; A */
 #define _OT_As   OT_As           /*   1 chars; As */
 #define _OT_C    OT_C            /* 518 chars; C */
 #define _OT_CM   OT_CM           /*   1 chars; CM */
 #define _OT_CS   OT_CS           /*   2 chars; CS */
-#define _OT_Co   OT_Coeng        /*   2 chars; Coeng */
 #define _OT_DC   OT_DOTTEDCIRCLE /*   1 chars; DOTTEDCIRCLE */
-#define _OT_H    OT_H            /*  10 chars; H */
+#define _OT_H    OT_H            /*  12 chars; H */
 #define _OT_M    OT_M            /* 160 chars; M */
 #define _OT_MH   OT_MH           /*   1 chars; MH */
 #define _OT_ML   OT_ML           /*   1 chars; ML */
@@ -38,8 +87,7 @@
 #define _OT_MW   OT_MW           /*   2 chars; MW */
 #define _OT_MY   OT_MY           /*   3 chars; MY */
 #define _OT_N    OT_N            /*  17 chars; N */
-#define _OT_P    OT_P            /*   2 chars; P */
-#define _OT_GB   OT_PLACEHOLDER  /* 172 chars; PLACEHOLDER */
+#define _OT_GB   OT_PLACEHOLDER  /* 174 chars; PLACEHOLDER */
 #define _OT_PT   OT_PT           /*   8 chars; PT */
 #define _OT_R    OT_Ra           /*  15 chars; Ra */
 #define _OT_Rf   OT_Repha        /*   1 chars; Repha */
@@ -62,10 +110,10 @@
 #define _POS_A   POS_AFTER_MAIN  /*   3 chars; AFTER_MAIN */
 #define _POS_AP  POS_AFTER_POST  /*  50 chars; AFTER_POST */
 #define _POS_AS  POS_AFTER_SUB   /*  60 chars; AFTER_SUB */
-#define _POS_C   POS_BASE_C      /* 899 chars; BASE_C */
+#define _POS_C   POS_BASE_C      /* 901 chars; BASE_C */
 #define _POS_BS  POS_BEFORE_SUB  /*  31 chars; BEFORE_SUB */
 #define _POS_B   POS_BELOW_C     /*  13 chars; BELOW_C */
-#define _POS_X   POS_END         /*  73 chars; END */
+#define _POS_X   POS_END         /*  71 chars; END */
 #define _POS_R   POS_POST_C      /*  13 chars; POST_C */
 #define _POS_L   POS_PRE_C       /*   5 chars; PRE_C */
 #define _POS_LM  POS_PRE_M       /*  16 chars; PRE_M */
@@ -305,9 +353,9 @@ static const uint16_t indic_table[] = {
   /* 1020 */  _(C,C),  _(V,C),  _(V,C),  _(V,C),  _(V,C),  _(V,C),  _(V,C),  _(V,C),
   /* 1028 */  _(V,C),  _(V,C),  _(V,C), _(VR,R), _(VR,R), _(VA,T), _(VA,T), _(VB,B),
   /* 1030 */ _(VB,B), _(VL,L), _(A,SM), _(VA,T), _(VA,T), _(VA,T), _(A,SM),  _(N,X),
-  /* 1038 */_(SM,SM), _(Co,X), _(As,X), _(MY,X), _(MR,X), _(MW,X), _(MH,X),  _(C,C),
+  /* 1038 */_(SM,SM),  _(H,X), _(As,X), _(MY,X), _(MR,X), _(MW,X), _(MH,X),  _(C,C),
   /* 1040 */ _(GB,C), _(GB,C), _(GB,C), _(GB,C), _(GB,C), _(GB,C), _(GB,C), _(GB,C),
-  /* 1048 */ _(GB,C), _(GB,C),  _(P,X),  _(P,X),  _(X,X),  _(X,X),  _(C,C),  _(X,X),
+  /* 1048 */ _(GB,C), _(GB,C), _(GB,C), _(GB,C),  _(X,X),  _(X,X),  _(C,C),  _(X,X),
   /* 1050 */  _(C,C),  _(C,C),  _(V,C),  _(V,C),  _(V,C),  _(V,C), _(VR,R), _(VR,R),
   /* 1058 */ _(VB,B), _(VB,B),  _(R,C),  _(C,C),  _(C,C),  _(C,C), _(MY,X), _(MY,X),
   /* 1060 */ _(ML,X),  _(C,C), _(VR,R), _(PT,X), _(PT,X),  _(C,C),  _(C,C), _(VR,R),
@@ -334,7 +382,7 @@ static const uint16_t indic_table[] = {
   /* 17B8 */ _(VA,T), _(VA,T), _(VA,T), _(VB,B), _(VB,B), _(VB,B), _(VA,T), _(VR,R),
   /* 17C0 */ _(VR,R), _(VL,L), _(VL,L), _(VL,L), _(VR,R), _(VR,R), _(Xg,X), _(Yg,X),
   /* 17C8 */ _(Yg,X), _(Rt,X), _(Rt,X), _(Xg,X), _(Rt,X), _(Xg,X), _(Xg,X), _(Xg,X),
-  /* 17D0 */ _(Xg,X), _(Xg,X), _(Co,X), _(Yg,X),  _(X,X),  _(X,X),  _(X,X),  _(X,X),
+  /* 17D0 */ _(Xg,X), _(Xg,X),  _(H,X), _(Yg,X),  _(X,X),  _(X,X),  _(X,X),  _(X,X),
   /* 17D8 */  _(X,X),  _(X,X),  _(X,X),  _(X,X), _(S,SM), _(Yg,X),  _(X,X),  _(X,X),
   /* 17E0 */ _(GB,C), _(GB,C), _(GB,C), _(GB,C), _(GB,C), _(GB,C), _(GB,C), _(GB,C),
   /* 17E8 */ _(GB,C), _(GB,C),  _(X,X),  _(X,X),  _(X,X),  _(X,X),  _(X,X),  _(X,X),
@@ -490,7 +538,6 @@ hb_indic_get_categories (hb_codepoint_t u)
 #undef _OT_C
 #undef _OT_CM
 #undef _OT_CS
-#undef _OT_Co
 #undef _OT_DC
 #undef _OT_H
 #undef _OT_M
@@ -500,7 +547,6 @@ hb_indic_get_categories (hb_codepoint_t u)
 #undef _OT_MW
 #undef _OT_MY
 #undef _OT_N
-#undef _OT_P
 #undef _OT_GB
 #undef _OT_PT
 #undef _OT_R

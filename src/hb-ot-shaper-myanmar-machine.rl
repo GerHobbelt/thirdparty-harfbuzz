@@ -33,17 +33,16 @@
 #include "hb-ot-shaper-indic.hh"
 
 /* buffer var allocations */
-#define myanmar_category() indic_category() /* myanmar_category_t */
-#define myanmar_position() indic_position() /* myanmar_position_t */
+#define myanmar_category() ot_shaper_var_u8_category() /* myanmar_category_t */
+#define myanmar_position() ot_shaper_var_u8_auxiliary() /* myanmar_position_t */
 
-using myanmar_category_t = ot_category_t;
+using myanmar_category_t = unsigned;
 using myanmar_position_t = ot_position_t;
 
 #define M_Cat(Cat) myanmar_syllable_machine_ex_##Cat
 
 enum myanmar_syllable_type_t {
   myanmar_consonant_syllable,
-  myanmar_punctuation_cluster,
   myanmar_broken_cluster,
   myanmar_non_myanmar_cluster,
 };
@@ -58,7 +57,8 @@ enum myanmar_syllable_type_t {
 %%{
 
 
-# These values are replicated from indic.hh, and relisted in myanmar.cc; keep in sync.
+# Spec category D is folded into GB; D0 is not implemented by Uniscribe and as such folded into D
+# Spec category P is folded into GB
 
 export C    = 1;
 export IV   = 2;
@@ -78,17 +78,15 @@ export VBlw = 21;
 export VPre = 22;
 export VPst = 23;
 
+# 32+ are for Myanmar-specific values
 export As   = 32;	# Asat
-export D    = 33;	# Digits except zero
-export D0   = 34;	# Digit zero
 export MH   = 35;	# Medial Ha
 export MR   = 36;	# Medial Ra
 export MW   = 37;	# Medial Wa, Shan Wa
 export MY   = 38;	# Medial Ya, Mon Na, Mon Ma
 export PT   = 39;	# Pwo and other tones
 export VS   = 40;	# Variation selectors
-export P    = 41;	# Punctuation
-export ML   = 42;	# Medial Mon La
+export ML   = 41;	# Medial Mon La
 
 
 j = ZWJ|ZWNJ;			# Joiners
@@ -104,15 +102,13 @@ pwo_tone_group = PT A* DB? As?;
 complex_syllable_tail = As* medial_group main_vowel_group post_vowel_group* pwo_tone_group* SM* j?;
 syllable_tail = (H (c|IV).VS?)* (H | complex_syllable_tail);
 
-consonant_syllable =	(k|CS)? (c|IV|D|GB|DOTTEDCIRCLE).VS? syllable_tail;
-punctuation_cluster =	P SM;
+consonant_syllable =	(k|CS)? (c|IV|GB|DOTTEDCIRCLE).VS? syllable_tail;
 broken_cluster =	k? VS? syllable_tail;
 other =			any;
 
 main := |*
 	consonant_syllable	=> { found_syllable (myanmar_consonant_syllable); };
 	j			=> { found_syllable (myanmar_non_myanmar_cluster); };
-	punctuation_cluster	=> { found_syllable (myanmar_punctuation_cluster); };
 	broken_cluster		=> { found_syllable (myanmar_broken_cluster); buffer->scratch_flags |= HB_BUFFER_SCRATCH_FLAG_HAS_BROKEN_SYLLABLE; };
 	other			=> { found_syllable (myanmar_non_myanmar_cluster); };
 *|;
@@ -129,7 +125,7 @@ main := |*
     if (unlikely (syllable_serial == 16)) syllable_serial = 1; \
   } HB_STMT_END
 
-static void
+inline void
 find_syllables_myanmar (hb_buffer_t *buffer)
 {
   unsigned int p, pe, eof, ts, te, act HB_UNUSED;
