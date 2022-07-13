@@ -45,17 +45,17 @@ enum myanmar_syllable_type_t {
 
 %%{
 
-export A    = 10;
+export A    = 9;
 export As   = 18;
 export C    = 1;
-export D    = 32;
+export D    = 10;
 export D0   = 20;
 export DB   = 3;
-export GB   = 11;
+export GB   = 10;
 export H    = 4;
 export IV   = 2;
 export MH   = 21;
-export ML   = 33;
+export ML   = 32;
 export MR   = 22;
 export MW   = 23;
 export MY   = 24;
@@ -68,7 +68,7 @@ export VPst = 29;
 export VS   = 30;
 export ZWJ  = 6;
 export ZWNJ = 5;
-export Ra   = 16;
+export Ra   = 15;
 export P    = 31;
 export CS   = 19;
 

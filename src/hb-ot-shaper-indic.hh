@@ -52,17 +52,17 @@ enum indic_category_t {
   OT_ZWJ = 6,
   OT_M = 7,
   OT_SM = 8,
-  /* OT_VD = 9, UNUSED; we use OT_A instead. */
-  OT_A = 10,
-  OT_PLACEHOLDER = 11,
-  OT_DOTTEDCIRCLE = 12,
-  OT_RS = 13, /* Register Shifter, used in Khmer OT spec. */
-  OT_Coeng = 14, /* Khmer-style Virama. */
-  OT_Repha = 15, /* Atomically-encoded logical or visual repha. */
-  OT_Ra = 16,
-  OT_CM = 17,  /* Consonant-Medial. */
-  OT_Symbol = 18, /* Avagraha, etc that take marks (SM,A,VD). */
-  OT_CS = 19,
+  OT_A = 9,
+  OT_VD = OT_A,
+  OT_PLACEHOLDER = 10,
+  OT_DOTTEDCIRCLE = 11,
+  OT_RS = 12, /* Register Shifter, used in Khmer OT spec. */
+  OT_Coeng = 13, /* Khmer-style Virama. */
+  OT_Repha = 14, /* Atomically-encoded logical or visual repha. */
+  OT_Ra = 15,
+  OT_CM = 16,  /* Consonant-Medial. */
+  OT_Symbol = 17, /* Avagraha, etc that take marks (SM,A,VD). */
+  OT_CS = 18,
 
   /* The following are used by Khmer & Myanmar shapers.  Defined
    * here for them to share. */
@@ -388,7 +388,7 @@ set_indic_properties (hb_glyph_info_t &info)
   {
     pos = matra_position_indic (u, pos);
   }
-  else if ((FLAG_UNSAFE (cat) & (FLAG (OT_SM) /* | FLAG (OT_VD) */ | FLAG (OT_A) | FLAG (OT_Symbol))))
+  else if ((FLAG_UNSAFE (cat) & (FLAG (OT_SM) | FLAG (OT_VD) | FLAG (OT_A) | FLAG (OT_Symbol))))
   {
     pos = POS_SMVD;
   }
