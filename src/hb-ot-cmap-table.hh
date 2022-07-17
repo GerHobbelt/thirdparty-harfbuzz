@@ -28,7 +28,7 @@
 #define HB_OT_CMAP_TABLE_HH
 
 #include "hb-ot-os2-table.hh"
-#include "hb-ot-shape-complex-arabic-pua.hh"
+#include "hb-ot-shaper-complex-arabic-pua.hh"
 #include "hb-open-type.hh"
 #include "hb-set.hh"
 
