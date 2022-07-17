@@ -366,17 +366,13 @@ AC_ARG_WITH(directwrite,
 have_directwrite=false
 AC_LANG_PUSH([C++])
 if test "x$with_directwrite" = "xyes" -o "x$with_directwrite" = "xauto"; then
-	AC_CHECK_HEADERS(dwrite.h, have_directwrite=true)
+	AC_CHECK_HEADERS(dwrite_1.h, have_directwrite=true)
 fi
 AC_LANG_POP([C++])
 if test "x$with_directwrite" = "xyes" -a "x$have_directwrite" != "xtrue"; then
 	AC_MSG_ERROR([directwrite support requested but not found])
 fi
 if $have_directwrite; then
-	DIRECTWRITE_CXXFLAGS=
-	DIRECTWRITE_LIBS=-ldwrite
-	AC_SUBST(DIRECTWRITE_CXXFLAGS)
-	AC_SUBST(DIRECTWRITE_LIBS)
 	AC_DEFINE(HAVE_DIRECTWRITE, 1, [Have DirectWrite library])
 fi
 AM_CONDITIONAL(HAVE_DIRECTWRITE, $have_directwrite)
