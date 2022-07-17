@@ -82,14 +82,14 @@ chafa_print_image_rgb24 (const void *data, int width, int height, int stride)
   /* Create the configuration */
 
   symbol_map = chafa_symbol_map_new ();
-  chafa_symbol_map_add_by_tags (symbol_map,
-                                (ChafaSymbolTags) (CHAFA_SYMBOL_TAG_BLOCK
-                                                   | CHAFA_SYMBOL_TAG_SPACE));
+  chafa_symbol_map_add_by_tags (symbol_map, CHAFA_SYMBOL_TAG_ALL
+                                /*(ChafaSymbolTags) (CHAFA_SYMBOL_TAG_BLOCK
+                                                   | CHAFA_SYMBOL_TAG_SPACE)*/);
 
   config = chafa_canvas_config_new ();
   chafa_canvas_config_set_canvas_mode (config, mode);
   chafa_canvas_config_set_pixel_mode (config, pixel_mode);
-  chafa_canvas_config_set_cell_geometry (config, 10, 20);
+  chafa_canvas_config_set_cell_geometry (config, CELL_W, CELL_H);
   chafa_canvas_config_set_geometry (config, cols, rows);
   chafa_canvas_config_set_symbol_map (config, symbol_map);
   chafa_canvas_config_set_color_extractor (config, CHAFA_COLOR_EXTRACTOR_MEDIAN);
@@ -164,6 +164,7 @@ helper_cairo_surface_write_to_ansi_stream (cairo_surface_t	*surface,
   uint32_t bg_color = data ? * (uint32_t *) data : 0;
 
   /* Drop first row while empty */
+  auto orig_data = data;
   while (height)
   {
     unsigned int i;
@@ -175,9 +176,14 @@ helper_cairo_surface_write_to_ansi_stream (cairo_surface_t	*surface,
     data += stride / 4;
     height--;
   }
+  if (orig_data < data)
+  {
+    data -= stride / 4;
+    height++; /* Add one first blank row for padding. */
+  }
 
   /* Drop last row while empty */
-  unsigned int orig_height = height;
+  auto orig_height = height;
   while (height)
   {
     const uint32_t *row = data + (height - 1) * stride / 4;
@@ -195,7 +201,11 @@ helper_cairo_surface_write_to_ansi_stream (cairo_surface_t	*surface,
   if (width && height)
   {
 #ifdef HAVE_CHAFA
-    if (true)
+    const char *env = getenv ("HB_CHAFA");
+    bool chafa = true;
+    if (env)
+      chafa = atoi (env);
+    if (chafa)
       chafa_print_image_rgb24 (data, width, height, stride);
     else
 #endif
