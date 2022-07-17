@@ -25,11 +25,19 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "hb.h"
+
+#if defined(_MSC_VER) && !defined(__attribute__)
+#define __attribute__(x)    /**/
+#endif
+
+#if defined(HB_CUSTOM_MALLOC)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int alloc_state = 0;
+static int alloc_state = 0;
 
 __attribute__((no_sanitize("integer")))
 static int fastrand ()
@@ -62,4 +70,6 @@ void  hb_free_impl (void *ptr)
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif
