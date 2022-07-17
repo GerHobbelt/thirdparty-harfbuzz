@@ -26,6 +26,10 @@
  */
 
 #include "batch.hh"
+#include "options.hh"
+
+#ifdef HAVE_GLIB_H
+
 #include "font-options.hh"
 #include "main-font-text.hh"
 #include "output-options.hh"
@@ -169,3 +173,18 @@ int main(int argc, const char** argv)
   using main_t = main_font_text_t<shape_consumer_t<output_buffer_t>, font_options_t, shape_text_options_t>;
   return batch_main<main_t> (argc, argv);
 }
+
+#else
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_shape_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
+{
+  fprintf(stderr, "hb-shape tool is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+}
+
+#endif

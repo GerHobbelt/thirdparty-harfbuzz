@@ -30,6 +30,8 @@
 #include "options.hh"
 
 
+#ifdef HAVE_GLIB_H
+
 struct shape_format_options_t
 {
   void add_options (option_parser_t *parser);
@@ -210,5 +212,7 @@ shape_format_options_t::add_options (option_parser_t *parser)
 		     "Options for the syntax of the output",
 		     this);
 }
+
+#endif  // HAVE_GLIB_H
 
 #endif

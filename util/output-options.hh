@@ -29,6 +29,8 @@
 
 #include "options.hh"
 
+#ifdef HAVE_GLIB_H
+
 template <bool default_stdout = true>
 struct output_options_t
 {
@@ -113,5 +115,7 @@ struct output_options_t
   bool explicit_output_format = false;
   FILE *out_fp = nullptr;
 };
+
+#endif  // HAVE_GLIB_H
 
 #endif

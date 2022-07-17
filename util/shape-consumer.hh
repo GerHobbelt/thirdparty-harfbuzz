@@ -32,6 +32,8 @@
 #include "text-options.hh"
 
 
+#ifdef HAVE_GLIB_H
+
 template <typename output_t>
 struct shape_consumer_t : shape_options_t
 {
@@ -97,5 +99,6 @@ struct shape_consumer_t : shape_options_t
   hb_buffer_t *buffer = nullptr;
 };
 
+#endif  // HAVE_GLIB_H
 
 #endif

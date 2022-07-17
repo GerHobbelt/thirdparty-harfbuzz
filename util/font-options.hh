@@ -40,6 +40,8 @@
 extern const unsigned DEFAULT_FONT_SIZE;
 extern const unsigned SUBPIXEL_BITS;
 
+#ifdef HAVE_GLIB_H
+
 struct font_options_t : face_options_t
 {
   ~font_options_t ()
@@ -69,6 +71,7 @@ struct font_options_t : face_options_t
   hb_font_t *font = nullptr;
 };
 
+#endif
 
 static struct supported_font_funcs_t {
 	char name[4];
@@ -81,6 +84,7 @@ static struct supported_font_funcs_t {
 #endif
 };
 
+#ifdef HAVE_GLIB_H
 
 void
 font_options_t::post_parse (GError **error)
@@ -315,5 +319,7 @@ font_options_t::add_options (option_parser_t *parser)
 		     "Options for font variations used",
 		     this);
 }
+
+#endif  // HAVE_GLIB_H
 
 #endif

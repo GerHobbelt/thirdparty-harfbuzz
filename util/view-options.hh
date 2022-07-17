@@ -33,6 +33,9 @@
 #define DEFAULT_FORE "#000000"
 #define DEFAULT_BACK "#FFFFFF"
 
+
+#ifdef HAVE_GLIB_H
+
 struct view_options_t
 {
   ~view_options_t ()
@@ -119,5 +122,7 @@ view_options_t::add_options (option_parser_t *parser)
 		     "Options for output rendering",
 		     this);
 }
+
+#endif  // HAVE_GLIB_H
 
 #endif

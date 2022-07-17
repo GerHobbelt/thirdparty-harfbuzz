@@ -29,6 +29,8 @@
 
 #include "hb-fc.h"
 
+#if defined(HAVE_FONTCONFIG_H)
+
 static hb_bool_t
 hb_fc_get_glyph (hb_font_t *font /*HB_UNUSED*/,
 		 void *font_data,
@@ -147,3 +149,5 @@ hb_fc_can_render (hb_font_t *font, const char *text)
 
   return true;
 }
+
+#endif // HAVE_FONTCONFIG_H

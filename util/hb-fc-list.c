@@ -27,6 +27,8 @@
 
 #include "hb-fc.h"
 
+#ifdef HAVE_FONTCONFIG_H
+
 #include <fontconfig/fontconfig.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -95,6 +97,11 @@ usage (char *program, int error)
 #endif
     exit (error);
 }
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_fc_list_main(cnt, arr)
+#endif
 
 int
 main (int argc, char **argv)
@@ -220,3 +227,22 @@ main (int argc, char **argv)
 
     return quiet ? (nfont == 0 ? 1 : 0) : 0;
 }
+
+#else
+
+#include <stdio.h>
+#include <stdlib.h>
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_fc_list_main(cnt, arr)
+#endif
+
+int
+main(int argc, char** argv)
+{
+  fprintf(stderr, "hb_fc_list tool is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+}
+
+#endif

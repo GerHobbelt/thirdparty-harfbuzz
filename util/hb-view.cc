@@ -26,14 +26,23 @@
  */
 
 #include "batch.hh"
+#include "options.hh"
+
+#ifdef HAVE_GLIB_H
+
 #include "font-options.hh"
 #include "main-font-text.hh"
 #include "shape-consumer.hh"
 #include "text-options.hh"
 #include "view-cairo.hh"
 
-const unsigned DEFAULT_FONT_SIZE = 256;
-const unsigned SUBPIXEL_BITS = 6;
+static const unsigned DEFAULT_FONT_SIZE = 256;
+static const unsigned SUBPIXEL_BITS = 6;
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_view_main(cnt, arr)
+#endif
 
 int
 main (int argc, char **argv)
@@ -41,3 +50,18 @@ main (int argc, char **argv)
   using main_t = main_font_text_t<shape_consumer_t<view_cairo_t>, font_options_t, shape_text_options_t>;
   return batch_main<main_t> (argc, argv);
 }
+
+#else
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_view_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
+{
+  fprintf(stderr, "hb_view utility is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+}
+
+#endif

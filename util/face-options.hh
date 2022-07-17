@@ -29,6 +29,8 @@
 
 #include "options.hh"
 
+#ifdef HAVE_GLIB_H
+
 struct face_options_t
 {
   ~face_options_t ()
@@ -138,5 +140,7 @@ face_options_t::add_options (option_parser_t *parser)
 		     "Options for the font face",
 		     this);
 }
+
+#endif
 
 #endif

@@ -26,11 +26,16 @@
  */
 
 #include "batch.hh"
+#include "options.hh"
+
+#ifdef HAVE_GLIB_H
+
 #include "face-options.hh"
 #include "main-font-text.hh"
 #include "output-options.hh"
 
 #include <hb-subset.h>
+
 
 /*
  * Command line interface to the harfbuzz font subsetter.
@@ -844,3 +849,18 @@ int main(int argc, const char** argv)
 {
   return batch_main<subset_main_t, true> (argc, argv);
 }
+
+#else
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_subset_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
+{
+  fprintf(stderr, "hb-subset utility is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+}
+
+#endif

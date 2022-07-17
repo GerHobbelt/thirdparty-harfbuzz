@@ -29,6 +29,8 @@
 
 #include "options.hh"
 
+#ifdef HAVE_GLIB_H
+
 struct text_options_t
 {
   text_options_t ()
@@ -366,5 +368,7 @@ shape_text_options_t::add_options (option_parser_t *parser)
 		     "Options for the input context text",
 		     this);
 }
+
+#endif  // HAVE_GLIB_H
 
 #endif

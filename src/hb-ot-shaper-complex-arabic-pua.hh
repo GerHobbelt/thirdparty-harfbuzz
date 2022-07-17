@@ -2,7 +2,7 @@
 #ifndef HB_OT_SHAPE_COMPLEX_ARABIC_PUA_HH
 #define HB_OT_SHAPE_COMPLEX_ARABIC_PUA_HH
 
-#include "hb-ot-shaper-complex-arabic.hh"
+#include "hb-ot-shaper-arabic.hh"
 
 static const uint16_t _arabic_table_pua1[][128] = {
   { // 0x0000u..0x007Fu

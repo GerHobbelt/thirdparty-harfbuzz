@@ -47,6 +47,9 @@
 
 #include <hb.h>
 #include <hb-ot.h>
+
+#ifdef HAVE_GLIB_H
+
 #include <glib.h>
 #include <glib/gprintf.h>
 
@@ -221,6 +224,8 @@ option_parser_t::parse (int *argc, char ***argv, bool ignore_error)
   }
   return true;
 }
+
+#endif // HAVE_GLIB_H
 
 
 /* fallback implementation for scalbn()/scalbnf() for pre-2013 MSVC */

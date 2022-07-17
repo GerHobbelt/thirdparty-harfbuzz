@@ -31,7 +31,7 @@
 
 #include "hb-ot-cmap-table.hh"
 #include "hb-ot-shape.hh"
-#include "hb-ot-shape-complex-arabic-pua.hh"
+#include "hb-ot-shaper-arabic.hh"
 #include "hb-ot-layout-gsub-table.hh"
 
 

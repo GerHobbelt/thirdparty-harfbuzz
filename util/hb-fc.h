@@ -29,6 +29,8 @@
 
 #include "hb.h"
 
+#if defined(HAVE_FONTCONFIG_H)
+
 #include <fontconfig/fontconfig.h>
 
 HB_BEGIN_DECLS
@@ -42,5 +44,7 @@ hb_fc_can_render (hb_font_t *font, const char *text);
 
 
 HB_END_DECLS
+
+#endif
 
 #endif /* HB_FC_H */

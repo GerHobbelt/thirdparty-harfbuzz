@@ -25,13 +25,18 @@
  */
 
 #include "batch.hh"
+#include "options.hh"
+
+#ifdef HAVE_GLIB_H
+
 #include "font-options.hh"
 #include "main-font-text.hh"
 #include "shape-options.hh"
 #include "text-options.hh"
 
-const unsigned DEFAULT_FONT_SIZE = FONT_SIZE_NONE;
-const unsigned SUBPIXEL_BITS = 0;
+static const unsigned DEFAULT_FONT_SIZE = FONT_SIZE_NONE;
+static const unsigned SUBPIXEL_BITS = 0;
+
 
 struct shape_closure_consumer_t
 {
@@ -114,9 +119,30 @@ struct shape_closure_consumer_t
   hb_buffer_t *buffer = nullptr;
 };
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_ot_shape_closure_main(cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
   using main_t = main_font_text_t<shape_closure_consumer_t, font_options_t, text_options_t>;
   return batch_main<main_t> (argc, argv);
 }
+
+#else
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      hb_ot_shape_closure_main(cnt, arr)
+#endif
+
+int
+main(int argc, char** argv)
+{
+  fprintf(stderr, "hb_ot_shape_closure tool is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+}
+
+#endif

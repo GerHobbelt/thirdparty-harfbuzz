@@ -29,6 +29,8 @@
 
 #include "options.hh"
 
+#ifdef HAVE_GLIB_H
+
 /* main() body for utilities taking font and processing text.*/
 
 template <typename consumer_t,
@@ -100,5 +102,7 @@ struct main_font_text_t :
     return false;
   }
 };
+
+#endif
 
 #endif

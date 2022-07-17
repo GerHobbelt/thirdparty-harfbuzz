@@ -29,6 +29,8 @@
 
 #include "options.hh"
 
+#ifdef HAVE_GLIB_H
+
 struct shape_options_t
 {
   ~shape_options_t ()
@@ -322,5 +324,7 @@ shape_options_t::add_options (option_parser_t *parser)
 		     "Options for font features used",
 		     this);
 }
+
+#endif  // HAVE_GLIB_H
 
 #endif
