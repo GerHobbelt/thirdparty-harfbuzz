@@ -124,12 +124,12 @@ struct SimpleGlyph
 			   const simple_glyph_flag_t short_flag,
 			   const simple_glyph_flag_t same_flag)
   {
-    float v = 0;
+    int v = 0;
 
     unsigned count = points_.length;
     for (unsigned i = 0; i < count; i++)
     {
-      uint8_t flag = points_[i].flag;
+      unsigned flag = points_[i].flag;
       if (flag & short_flag)
       {
 	if (unlikely (p + 1 > end)) return false;
@@ -171,14 +171,16 @@ struct SimpleGlyph
     const HBUINT8 *p = &StructAtOffset<HBUINT8> (&endPtsOfContours[num_contours + 1],
 						 endPtsOfContours[num_contours]);
 
+    if (unlikely ((const char *) p < bytes.arrayZ)) return false; /* Unlikely overflow */
     const HBUINT8 *end = (const HBUINT8 *) (bytes.arrayZ + bytes.length);
+    if (unlikely (p >= end)) return false;
 
     /* Read flags */
     for (unsigned int i = 0; i < num_points;)
     {
       if (unlikely (p + 1 > end)) return false;
       uint8_t flag = *p++;
-      points_[i++].flag = flag;
+      points_.arrayZ[i++].flag = flag;
       if (flag & FLAG_REPEAT)
       {
 	if (unlikely (p + 1 > end)) return false;
