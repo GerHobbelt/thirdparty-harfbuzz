@@ -29,9 +29,7 @@
 
 #include "hb.hh"
 
-#include "hb-ot-cmap-table.hh"
 #include "hb-ot-shape.hh"
-#include "hb-ot-shaper-arabic.hh"
 #include "hb-ot-layout-gsub-table.hh"
 
 
@@ -53,23 +51,18 @@ static const hb_tag_t arabic_fallback_features[] =
 };
 
 static OT::SubstLookup *
-synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB_UNUSED,
-			  hb_font_t *font,
-			  unsigned int feature_index,
-			  const uint16_t table[][4],
-			  hb_codepoint_t table_first,
-			  hb_codepoint_t table_last,
-			  OT::HBGlyphID16 *glyphs,
-			  OT::HBGlyphID16 *substitutes,
-			  char *buf,
-			  size_t buf_len)
+arabic_fallback_synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB_UNUSED,
+					  hb_font_t *font,
+					  unsigned int feature_index)
 {
+  OT::HBGlyphID16 glyphs[SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1];
+  OT::HBGlyphID16 substitutes[SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1];
   unsigned int num_glyphs = 0;
 
   /* Populate arrays */
-  for (hb_codepoint_t u = table_first; u < table_last + 1; u++)
+  for (hb_codepoint_t u = SHAPING_TABLE_FIRST; u < SHAPING_TABLE_LAST + 1; u++)
   {
-    hb_codepoint_t s = table[u - table_first][feature_index];
+    hb_codepoint_t s = shaping_table[u - SHAPING_TABLE_FIRST][feature_index];
     hb_codepoint_t u_glyph, s_glyph;
 
     if (!s ||
@@ -95,7 +88,9 @@ synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB_UNUSED,
 		  &substitutes[0]);
 
 
-  hb_serialize_context_t c (buf, buf_len);
+  /* Each glyph takes four bytes max, and there's some overhead. */
+  char buf[(SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1) * 4 + 128];
+  hb_serialize_context_t c (buf, sizeof (buf));
   OT::SubstLookup *lookup = c.start_serialize<OT::SubstLookup> ();
   bool ret = lookup->serialize_single (&c,
 				       OT::LookupFlag::IgnoreMarks,
@@ -129,9 +124,9 @@ arabic_fallback_synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UN
   /* Populate arrays */
 
   /* Sort out the first-glyphs */
-  for (unsigned int first_glyph_idx = 0; first_glyph_idx < table_len; first_glyph_idx++)
+  for (unsigned int first_glyph_idx = 0; first_glyph_idx < ARRAY_LENGTH (first_glyphs); first_glyph_idx++)
   {
-    hb_codepoint_t first_u = table[first_glyph_idx].first;
+    hb_codepoint_t first_u = ligature_table[first_glyph_idx].first;
     hb_codepoint_t first_glyph;
     if (!hb_font_get_glyph (font, first_u, 0, &first_glyph))
       continue;
@@ -183,7 +178,9 @@ arabic_fallback_synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UN
     return nullptr;
 
 
-  hb_serialize_context_t c (buf, buf_len);
+  /* 16 bytes per ligature ought to be enough... */
+  char buf[ARRAY_LENGTH_CONST (ligature_list) * 16 + 128];
+  hb_serialize_context_t c (buf, sizeof (buf));
   OT::SubstLookup *lookup = c.start_serialize<OT::SubstLookup> ();
   bool ret = lookup->serialize_ligature (&c,
 					 lookup_flags,
@@ -195,60 +192,6 @@ arabic_fallback_synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UN
   c.end_serialize ();
 
   return ret && !c.in_error () ? c.copy<OT::SubstLookup> () : nullptr;
-}
-
-
-static OT::SubstLookup *
-arabic_fallback_synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB_UNUSED,
-					  hb_font_t *font,
-					  unsigned int feature_index)
-{
-  OT::HBGlyphID16 glyphs[SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1];
-  OT::HBGlyphID16 substitutes[SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1];
-  /* Each glyph takes four bytes max, and there's some overhead. */
-  char buf[(SHAPING_TABLE_LAST - SHAPING_TABLE_FIRST + 1) * 4 + 128];
-
-  return synthesize_lookup_single (plan,
-				   font,
-				   feature_index,
-				   shaping_table,
-				   SHAPING_TABLE_FIRST,
-				   SHAPING_TABLE_LAST,
-				   glyphs,
-				   substitutes,
-				   buf,
-				   sizeof (buf));
-}
-
-static OT::SubstLookup *
-arabic_fallback_synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UNUSED,
-					    hb_font_t *font)
-{
-  OT::HBGlyphID16 first_glyphs[ARRAY_LENGTH_CONST (ligature_table)];
-  unsigned int first_glyphs_indirection[ARRAY_LENGTH_CONST (ligature_table)];
-  unsigned int ligature_per_first_glyph_count_list[ARRAY_LENGTH_CONST (first_glyphs)];
-
-  /* We know that all our ligatures are 2-component */
-  OT::HBGlyphID16 ligature_list[ARRAY_LENGTH_CONST (first_glyphs) * ARRAY_LENGTH_CONST(ligature_table[0].ligatures)];
-  unsigned int component_count_list[ARRAY_LENGTH_CONST (ligature_list)];
-  OT::HBGlyphID16 component_list[ARRAY_LENGTH_CONST (ligature_list) * 1/* One extra component per ligature */];
-
-  /* 16 bytes per ligature ought to be enough... */
-  char buf[ARRAY_LENGTH_CONST (ligature_list) * 16 + 128];
-
-  return synthesize_lookup_ligature (plan,
-				     font,
-				     first_glyphs,
-				     first_glyphs_indirection,
-				     ligature_per_first_glyph_count_list,
-				     ligature_list,
-				     component_count_list,
-				     component_list,
-				     ligature_table,
-				     ARRAY_LENGTH_CONST (ligature_table),
-				     buf,
-				     sizeof (buf),
-				     OT::LookupFlag::IgnoreMarks);
 }
 
 static OT::SubstLookup *
@@ -281,137 +224,6 @@ struct arabic_fallback_plan_t
   OT::SubstLookup *lookup_array[ARABIC_FALLBACK_MAX_LOOKUPS];
   OT::hb_ot_layout_lookup_accelerator_t accel_array[ARABIC_FALLBACK_MAX_LOOKUPS];
 };
-
-static OT::SubstLookup *
-arabic_fallback_pua1_synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB_UNUSED,
-					       hb_font_t *font,
-					       unsigned int feature_index)
-{
-  OT::HBGlyphID16 glyphs[SHAPING_TABLE_PUA1_LEN];
-  OT::HBGlyphID16 substitutes[SHAPING_TABLE_PUA1_LEN];
-  /* Each glyph takes four bytes max, and there's some overhead. */
-  char buf[SHAPING_TABLE_PUA1_LEN * 4 + 128];
-
-  return synthesize_lookup_single (plan,
-				   font,
-				   feature_index,
-				   shaping_table_pua1,
-				   SHAPING_TABLE_PUA1_FIRST,
-				   SHAPING_TABLE_PUA1_LAST,
-				   glyphs,
-				   substitutes,
-				   buf,
-				   sizeof (buf));
-}
-
-static OT::SubstLookup *
-arabic_fallback_pua2_synthesize_lookup_single (const hb_ot_shape_plan_t *plan HB_UNUSED,
-					       hb_font_t *font,
-					       unsigned int feature_index)
-{
-  OT::HBGlyphID16 glyphs[SHAPING_TABLE_PUA2_LEN];
-  OT::HBGlyphID16 substitutes[SHAPING_TABLE_PUA2_LEN];
-  /* Each glyph takes four bytes max, and there's some overhead. */
-  char buf[SHAPING_TABLE_PUA2_LEN * 4 + 128];
-
-  return synthesize_lookup_single (plan,
-				   font,
-				   feature_index,
-				   shaping_table_pua2,
-				   SHAPING_TABLE_PUA2_FIRST,
-				   SHAPING_TABLE_PUA2_LAST,
-				   glyphs,
-				   substitutes,
-				   buf,
-				   sizeof (buf));
-}
-
-static OT::SubstLookup *
-arabic_fallback_pua1_synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UNUSED,
-						 hb_font_t *font)
-{
-  OT::HBGlyphID16 first_glyphs[ARRAY_LENGTH_CONST (ligature_table_pua1)];
-  unsigned int first_glyphs_indirection[ARRAY_LENGTH_CONST (ligature_table_pua1)];
-  unsigned int ligature_per_first_glyph_count_list[ARRAY_LENGTH_CONST (first_glyphs)];
-
-  /* We know that all our ligatures are 2-component */
-  OT::HBGlyphID16 ligature_list[ARRAY_LENGTH_CONST (first_glyphs) * ARRAY_LENGTH_CONST(ligature_table_pua1[0].ligatures)];
-  unsigned int component_count_list[ARRAY_LENGTH_CONST (ligature_list)];
-  OT::HBGlyphID16 component_list[ARRAY_LENGTH_CONST (ligature_list) * 1/* One extra component per ligature */];
-
-  /* 16 bytes per ligature ought to be enough... */
-  char buf[ARRAY_LENGTH_CONST (ligature_list) * 16 + 128];
-
-  return synthesize_lookup_ligature (plan,
-				     font,
-				     first_glyphs,
-				     first_glyphs_indirection,
-				     ligature_per_first_glyph_count_list,
-				     ligature_list,
-				     component_count_list,
-				     component_list,
-				     ligature_table_pua1,
-				     ARRAY_LENGTH_CONST (ligature_table_pua1),
-				     buf,
-				     sizeof (buf),
-				     0);
-}
-
-static OT::SubstLookup *
-arabic_fallback_pua2_synthesize_lookup_ligature (const hb_ot_shape_plan_t *plan HB_UNUSED,
-						 hb_font_t *font)
-{
-  OT::HBGlyphID16 first_glyphs[ARRAY_LENGTH_CONST (ligature_table_pua2)];
-  unsigned int first_glyphs_indirection[ARRAY_LENGTH_CONST (ligature_table_pua2)];
-  unsigned int ligature_per_first_glyph_count_list[ARRAY_LENGTH_CONST (first_glyphs)];
-
-  /* We know that all our ligatures are 2-component */
-  OT::HBGlyphID16 ligature_list[ARRAY_LENGTH_CONST (first_glyphs) * ARRAY_LENGTH_CONST(ligature_table_pua2[0].ligatures)];
-  unsigned int component_count_list[ARRAY_LENGTH_CONST (ligature_list)];
-  OT::HBGlyphID16 component_list[ARRAY_LENGTH_CONST (ligature_list) * 1/* One extra component per ligature */];
-
-  /* 16 bytes per ligature ought to be enough... */
-  char buf[ARRAY_LENGTH_CONST (ligature_list) * 16 + 128];
-
-  return synthesize_lookup_ligature (plan,
-				     font,
-				     first_glyphs,
-				     first_glyphs_indirection,
-				     ligature_per_first_glyph_count_list,
-				     ligature_list,
-				     component_count_list,
-				     component_list,
-				     ligature_table_pua2,
-				     ARRAY_LENGTH_CONST (ligature_table_pua2),
-				     buf,
-				     sizeof (buf),
-				     0);
-}
-
-static OT::SubstLookup *
-arabic_fallback_pua_synthesize_lookup (const hb_ot_shape_plan_t *plan,
-					  hb_font_t *font,
-					  unsigned int feature_index)
-{
-  switch ((unsigned) font->face->table.OS2->get_font_page ()) {
-  case OT::OS2::font_page_t::FONT_PAGE_SIMP_ARABIC:
-  {
-    if (feature_index < 4)
-      return arabic_fallback_pua1_synthesize_lookup_single (plan, font, feature_index);
-    else
-      return arabic_fallback_pua1_synthesize_lookup_ligature (plan, font);
-  }
-  case OT::OS2::font_page_t::FONT_PAGE_TRAD_ARABIC:
-  {
-    if (feature_index < 4)
-      return arabic_fallback_pua2_synthesize_lookup_single (plan, font, feature_index);
-    else
-      return arabic_fallback_pua2_synthesize_lookup_ligature (plan, font);
-  }
-  default:
-    return nullptr;
-  }
-}
 
 #if defined(_WIN32) && !defined(HB_NO_WIN1256)
 #define HB_WITH_WIN1256
@@ -476,41 +288,6 @@ arabic_fallback_plan_init_win1256 (arabic_fallback_plan_t *fallback_plan HB_UNUS
 }
 
 static bool
-arabic_fallback_plan_init_pua (arabic_fallback_plan_t *fallback_plan,
-			       const hb_ot_shape_plan_t *plan,
-			       hb_font_t *font)
-{
-  switch ((unsigned) font->face->table.OS2->get_font_page ()) {
-  case OT::OS2::font_page_t::FONT_PAGE_SIMP_ARABIC:
-  case OT::OS2::font_page_t::FONT_PAGE_TRAD_ARABIC:
-    break;
-  default:
-    return false;
-  }
-
-  static_assert ((ARRAY_LENGTH_CONST(arabic_fallback_features) <= ARABIC_FALLBACK_MAX_LOOKUPS), "");
-  unsigned int j = 0;
-  for (unsigned int i = 0; i < ARRAY_LENGTH(arabic_fallback_features) ; i++)
-  {
-    fallback_plan->mask_array[j] = plan->map.get_1_mask (arabic_fallback_features[i]);
-    if (fallback_plan->mask_array[j])
-    {
-      fallback_plan->lookup_array[j] = arabic_fallback_pua_synthesize_lookup (plan, font, i);
-      if (fallback_plan->lookup_array[j])
-      {
-	fallback_plan->accel_array[j].init (*fallback_plan->lookup_array[j]);
-	j++;
-      }
-    }
-  }
-
-  fallback_plan->num_lookups = j;
-  fallback_plan->free_lookups = true;
-
-  return j > 0;
-}
-
-static bool
 arabic_fallback_plan_init_unicode (arabic_fallback_plan_t *fallback_plan,
 				   const hb_ot_shape_plan_t *plan,
 				   hb_font_t *font)
@@ -547,11 +324,6 @@ arabic_fallback_plan_create (const hb_ot_shape_plan_t *plan,
 
   fallback_plan->num_lookups = 0;
   fallback_plan->free_lookups = false;
-
-  /* Try synthesizing GSUB table using legacy PUA mapping,
-   * in case the font has cmap entries for the PUA characters. */
-  if (arabic_fallback_plan_init_pua (fallback_plan, plan, font))
-    return fallback_plan;
 
   /* Try synthesizing GSUB table using Unicode Arabic Presentation Forms,
    * in case the font has cmap entries for the presentation-forms characters. */

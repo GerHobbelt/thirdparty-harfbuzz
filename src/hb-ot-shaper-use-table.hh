@@ -44,8 +44,6 @@
 
 #include "hb-ot-shaper-use-machine.hh"
 
-#undef G // hb-ot-shape-complex-arabic-win1256.hh(187): previous definition of 'G'
-
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-macros"
 #define B	USE(B)	/* BASE */

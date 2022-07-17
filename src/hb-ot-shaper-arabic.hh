@@ -35,13 +35,6 @@
 
 
 struct arabic_shape_plan_t;
-struct ligature_set_t {
- uint16_t first;
- struct ligature_pairs_t {
-   uint16_t second;
-   uint16_t ligature;
- } ligatures[18];
-};
 
 HB_INTERNAL void *
 data_create_arabic (const hb_ot_shape_plan_t *plan);

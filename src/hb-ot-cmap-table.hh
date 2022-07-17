@@ -1867,37 +1867,6 @@ struct cmap
       return false;
     }
 
-    template <typename Type>
-    HB_INTERNAL static bool get_glyph_from_symbol_arabic_pua1 (const void *obj,
-							       hb_codepoint_t codepoint,
-							       hb_codepoint_t *glyph)
-    {
-      const Type *typed_obj = (const Type *) obj;
-      if (likely (typed_obj->get_glyph (codepoint, glyph)))
-	return true;
-
-      if (hb_codepoint_t c = _hb_remap_arabic_pua1 (codepoint))
-	return typed_obj->get_glyph (c, glyph);
-
-      return false;
-    }
-
-    template <typename Type>
-    HB_INTERNAL static bool get_glyph_from_symbol_arabic_pua2 (const void *obj,
-							       hb_codepoint_t codepoint,
-							       hb_codepoint_t *glyph)
-    {
-      const Type *typed_obj = (const Type *) obj;
-      if (likely (typed_obj->get_glyph (codepoint, glyph)))
-	return true;
-
-      if (hb_codepoint_t c = _hb_remap_arabic_pua2 (codepoint))
-	return typed_obj->get_glyph (c, glyph);
-
-      return false;
-    }
-
-
     private:
     hb_nonnull_ptr_t<const CmapSubtable> subtable;
     hb_nonnull_ptr_t<const CmapSubtableFormat14> subtable_uvs;

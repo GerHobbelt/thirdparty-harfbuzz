@@ -4076,11 +4076,11 @@ struct GSUBGPOS
   void prune_features (const hb_map_t *lookup_indices, /* IN */
 		       hb_set_t       *feature_indices /* IN/OUT */) const
   {
+#ifndef HB_NO_VAR
     // This is the set of feature indices which have alternate versions defined
     // if the FeatureVariation's table and the alternate version(s) intersect the
     // set of lookup indices.
     hb_set_t alternate_feature_indices;
-#ifndef HB_NO_VAR
     if (version.to_int () >= 0x00010001u)
       (this+featureVars).closure_features (lookup_indices, &alternate_feature_indices);
     if (unlikely (alternate_feature_indices.in_error()))
