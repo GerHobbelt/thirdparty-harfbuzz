@@ -62,7 +62,7 @@ struct LongMetric
 };
 
 
-template <typename T, typename H>
+template <typename T/*Data table type*/, typename H/*Header table type*/, typename V/*Var table type*/>
 struct hmtxvmtx
 {
   bool sanitize (hb_sanitize_context_t *c HB_UNUSED) const
@@ -173,7 +173,7 @@ struct hmtxvmtx
     accelerator_t (hb_face_t *face)
     {
       table = hb_sanitize_context_t ().reference_table<hmtxvmtx> (face, T::tableTag);
-      var_table = hb_sanitize_context_t ().reference_table<HVARVVAR> (face, T::variationsTag);
+      var_table = hb_sanitize_context_t ().reference_table<V> (face, T::variationsTag);
 
       default_advance = T::is_horizontal ? hb_face_get_upem (face) / 2 : hb_face_get_upem (face);
 
@@ -283,9 +283,9 @@ struct hmtxvmtx
       return advances[hb_min (glyph - num_bearings, num_advances - num_bearings - 1)];
     }
 
-    unsigned int get_advance (hb_codepoint_t  glyph,
-			      hb_font_t      *font,
-			      VariationStore::cache_t *store_cache = nullptr) const
+    unsigned get_advance (hb_codepoint_t  glyph,
+			  hb_font_t      *font,
+			  VariationStore::cache_t *store_cache = nullptr) const
     {
       unsigned int advance = get_advance (glyph);
 
@@ -294,7 +294,9 @@ struct hmtxvmtx
 	return advance;
 
       if (var_table.get_length ())
-	return advance + roundf (var_table->get_advance_var (glyph, font, store_cache)); // TODO Optimize?!
+	return advance + roundf (var_table->get_advance_var (glyph,
+							     font->coords, font->num_coords,
+							     store_cache)); // TODO Optimize?!
 
       return _glyf_get_advance_var (font, glyph, T::tableTag == HB_OT_TAG_vmtx);
 #else
@@ -313,7 +315,7 @@ struct hmtxvmtx
 
     public:
     hb_blob_ptr_t<hmtxvmtx> table;
-    hb_blob_ptr_t<HVARVVAR> var_table;
+    hb_blob_ptr_t<V> var_table;
   };
 
   protected:
@@ -346,12 +348,12 @@ struct hmtxvmtx
   DEFINE_SIZE_ARRAY (0, longMetricZ);
 };
 
-struct hmtx : hmtxvmtx<hmtx, hhea> {
+struct hmtx : hmtxvmtx<hmtx, hhea, HVAR> {
   static constexpr hb_tag_t tableTag = HB_OT_TAG_hmtx;
   static constexpr hb_tag_t variationsTag = HB_OT_TAG_HVAR;
   static constexpr bool is_horizontal = true;
 };
-struct vmtx : hmtxvmtx<vmtx, vhea> {
+struct vmtx : hmtxvmtx<vmtx, vhea, VVAR> {
   static constexpr hb_tag_t tableTag = HB_OT_TAG_vmtx;
   static constexpr hb_tag_t variationsTag = HB_OT_TAG_VVAR;
   static constexpr bool is_horizontal = false;

@@ -151,7 +151,7 @@ hb_ot_get_glyph_h_advances (hb_font_t* font, void* font_data,
   const OT::hmtx_accelerator_t &hmtx = *ot_face->hmtx;
 
 #ifndef HB_NO_VAR
-  const OT::HVARVVAR &HVAR = *hmtx.var_table;
+  const OT::HVAR &HVAR = *hmtx.var_table;
   const OT::VariationStore &varStore = &HVAR + HVAR.varStore;
   OT::VariationStore::cache_t *varStore_cache = font->num_coords * count >= 128 ? varStore.create_cache () : nullptr;
 
@@ -242,7 +242,7 @@ hb_ot_get_glyph_v_advances (hb_font_t* font, void* font_data,
   if (vmtx.has_data ())
   {
 #ifndef HB_NO_VAR
-    const OT::HVARVVAR &VVAR = *vmtx.var_table;
+    const OT::VVAR &VVAR = *vmtx.var_table;
     const OT::VariationStore &varStore = &VVAR + VVAR.varStore;
     OT::VariationStore::cache_t *varStore_cache = font->num_coords ? varStore.create_cache () : nullptr;
 #else
@@ -293,9 +293,24 @@ hb_ot_get_glyph_v_origin (hb_font_t *font,
   const OT::VORG &VORG = *ot_face->VORG;
   if (VORG.has_data ())
   {
-    *y = font->em_scale_y (VORG.get_y_origin (glyph));
+    float delta = 0;
+
+#ifndef HB_NO_VAR
+    const OT::vmtx_accelerator_t &vmtx = *ot_face->vmtx;
+    const OT::VVAR &VVAR = *vmtx.var_table;
+    if (font->num_coords &&
+	!VVAR.get_vorg_var (glyph,
+			    font->coords, font->num_coords,
+			    &delta))
+      goto out;
+#endif
+
+    *y = font->em_scalef_y (VORG.get_y_origin (glyph) + delta);
     return true;
   }
+#ifndef HB_NO_VAR
+out:
+#endif
 
   hb_glyph_extents_t extents = {0};
   if (ot_face->glyf->get_extents (font, glyph, &extents))

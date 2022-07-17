@@ -40,7 +40,7 @@
 #include "hb-ot-stat-table.hh"
 #include "hb-ot-math-table.hh"
 
-using OT::Layout::GSUB::GSUB;
+using OT::Layout::GSUB;
 using OT::Layout::GPOS;
 
 typedef hb_hashmap_t<unsigned, hb::unique_ptr<hb_set_t>> script_langsys_map;
@@ -755,7 +755,7 @@ hb_subset_plan_reference (hb_subset_plan_t *plan)
  *
  * Attaches a user-data key/data pair to the given subset plan object.
  *
- * Return value: %true if success, %false otherwise
+ * Return value: `true` if success, `false` otherwise
  *
  * Since: 4.0.0
  **/

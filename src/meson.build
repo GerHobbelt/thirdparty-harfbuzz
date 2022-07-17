@@ -123,7 +123,7 @@ hb_base_sources = files(
   'OT/Layout/GSUB/SubstLookupSubTable.hh',
   'OT/Layout/GSUB/SubstLookup.hh',
   'OT/Layout/GSUB/GSUB.hh',
-  'OT/Layout/GPOS.hh',
+  'OT/Layout/GPOS/GPOS.hh',
   'OT/Layout/GPOS/CursivePosFormat1.hh',
   'OT/Layout/GPOS/MarkLigPos.hh',
   'OT/Layout/GPOS/PairPos.hh',

@@ -1,16 +1,14 @@
 #ifndef OT_LAYOUT_GSUB_GSUB_HH
 #define OT_LAYOUT_GSUB_GSUB_HH
 
-// TODO(garretrieger): move to new layout.
 #include "../../../hb-ot-layout-gsubgpos.hh"
 #include "Common.hh"
 #include "SubstLookup.hh"
 
-using OT::Layout::GSUB::SubstLookup;
+using OT::Layout::GSUB_impl::SubstLookup;
 
 namespace OT {
 namespace Layout {
-namespace GSUB {
 
 /*
  * GSUB -- Glyph Substitution
@@ -48,10 +46,9 @@ struct GSUB : GSUBGPOS
 
 
 }
-}
 
-struct GSUB_accelerator_t : Layout::GSUB::GSUB::accelerator_t {
-  GSUB_accelerator_t (hb_face_t *face) : Layout::GSUB::GSUB::accelerator_t (face) {}
+struct GSUB_accelerator_t : Layout::GSUB::accelerator_t {
+  GSUB_accelerator_t (hb_face_t *face) : Layout::GSUB::accelerator_t (face) {}
 };
 
 
