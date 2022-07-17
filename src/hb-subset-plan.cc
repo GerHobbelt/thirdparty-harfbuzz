@@ -347,13 +347,42 @@ _populate_unicodes_to_retain (const hb_set_t *unicodes,
   }
 }
 
+#ifndef HB_COMPOSITE_OPERATIONS_PER_GLYPH
+#define HB_COMPOSITE_OPERATIONS_PER_GLYPH 64
+#endif
+
+static unsigned
+_glyf_add_gid_and_children (const OT::glyf_accelerator_t &glyf,
+			    hb_codepoint_t gid,
+			    hb_set_t *gids_to_retain,
+			    int operation_count,
+			    unsigned depth = 0)
+{
+  if (unlikely (depth++ > HB_MAX_NESTING_LEVEL)) return operation_count;
+  if (unlikely (--operation_count < 0)) return operation_count;
+  /* Check if is already visited */
+  if (gids_to_retain->has (gid)) return operation_count;
+
+  gids_to_retain->add (gid);
+
+  for (auto item : glyf.glyph_for_gid (gid).get_composite_iterator ())
+    operation_count =
+      _glyf_add_gid_and_children (glyf,
+				  item.glyphIndex,
+				  gids_to_retain,
+				  operation_count,
+				  depth);
+
+  return operation_count;
+}
+
 static void
 _populate_gids_to_retain (hb_subset_plan_t* plan,
 			  bool close_over_gsub,
 			  bool close_over_gpos,
 			  bool close_over_gdef)
 {
-  OT::glyf::accelerator_t glyf (plan->source);
+  OT::glyf_accelerator_t glyf (plan->source);
 #ifndef HB_NO_SUBSET_CFF
   OT::cff1::accelerator_t cff (plan->source);
 #endif
@@ -398,7 +427,8 @@ _populate_gids_to_retain (hb_subset_plan_t* plan,
    * composite glyphs. */
   if (glyf.has_data ())
     for (hb_codepoint_t gid : cur_glyphset)
-      glyf.add_gid_and_children (gid, plan->_glyphset);
+      _glyf_add_gid_and_children (glyf, gid, plan->_glyphset,
+				  cur_glyphset.get_population () * HB_COMPOSITE_OPERATIONS_PER_GLYPH);
   else
     plan->_glyphset->union_ (cur_glyphset);
 #ifndef HB_NO_SUBSET_CFF
