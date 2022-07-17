@@ -105,7 +105,7 @@ struct IntType
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    return_trace (likely (c->check_struct (this)));
+    return_trace (c->check_struct (this));
   }
   protected:
   BEInt<Type, Size> v;
@@ -170,7 +170,7 @@ struct LONGDATETIME
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    return_trace (likely (c->check_struct (this)));
+    return_trace (c->check_struct (this));
   }
   protected:
   HBINT32 major;
@@ -195,6 +195,10 @@ struct Tag : HBUINT32
 struct HBGlyphID16 : HBUINT16
 {
   HBGlyphID16& operator = (uint16_t i) { HBUINT16::operator= (i); return *this; }
+};
+struct HBGlyphID24 : HBUINT24
+{
+  HBGlyphID24& operator = (uint32_t i) { HBUINT24::operator= (i); return *this; }
 };
 
 /* Script/language-system/feature index */
@@ -729,6 +733,7 @@ struct ArrayOf
   DEFINE_SIZE_ARRAY (sizeof (LenType), arrayZ);
 };
 template <typename Type> using Array16Of = ArrayOf<Type, HBUINT16>;
+template <typename Type> using Array24Of = ArrayOf<Type, HBUINT24>;
 template <typename Type> using Array32Of = ArrayOf<Type, HBUINT32>;
 using PString = ArrayOf<HBUINT8, HBUINT8>;
 
@@ -961,6 +966,7 @@ struct SortedArrayOf : ArrayOf<Type, LenType>
 };
 
 template <typename Type> using SortedArray16Of = SortedArrayOf<Type, HBUINT16>;
+template <typename Type> using SortedArray24Of = SortedArrayOf<Type, HBUINT24>;
 template <typename Type> using SortedArray32Of = SortedArrayOf<Type, HBUINT32>;
 
 /*
