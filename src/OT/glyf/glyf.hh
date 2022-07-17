@@ -295,7 +295,7 @@ struct glyf_accelerator_t
     if (unlikely (gid >= num_glyphs)) return false;
 
 #ifndef HB_NO_VAR
-    if (font->num_coords && font->num_coords == gvar->get_axis_count ())
+    if (font->num_coords)
       return get_points (font, gid, points_aggregator_t (font, extents, nullptr));
 #endif
     return glyph_for_gid (gid).get_extents (font, *this, extents);
@@ -326,7 +326,7 @@ struct glyf_accelerator_t
 
     glyf_impl::Glyph glyph (hb_bytes_t ((const char *) this->glyf_table + start_offset,
 			     end_offset - start_offset), gid);
-    return needs_padding_removal ? glyf_impl::Glyph (glyph.trim_padding ()) : glyph;
+    return needs_padding_removal ? glyf_impl::Glyph (glyph.trim_padding (), gid) : glyph;
   }
 
   bool

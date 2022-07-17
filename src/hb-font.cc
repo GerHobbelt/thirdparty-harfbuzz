@@ -1649,8 +1649,8 @@ DEFINE_NULL_INSTANCE (hb_font_t) =
   1000, /* y_scale */
   0., /* slant */
   0., /* slant_xy; */
-  1000, /* upem */
-  0.001f, /* upem_inv */
+  1.f, /* x_multf */
+  1.f, /* y_multf */
   1<<16, /* x_mult */
   1<<16, /* y_mult */
 
@@ -1683,9 +1683,8 @@ _hb_font_create (hb_face_t *face)
   font->face = hb_face_reference (face);
   font->klass = hb_font_funcs_get_empty ();
   font->data.init0 (font);
-  font->x_scale = font->y_scale = hb_face_get_upem (face);
-  font->upem = face->get_upem ();
-  font->upem_inv = 1.f / font->upem;
+  font->x_scale = font->y_scale = face->get_upem ();
+  font->x_multf = font->y_multf = 1.f;
   font->x_mult = font->y_mult = 1 << 16;
 
   return font;
@@ -1946,7 +1945,7 @@ hb_font_is_immutable (hb_font_t *font)
  *
  * Return value: serial number
  *
- * Since: REPLACEME.
+ * Since: 4.4.0.
  **/
 unsigned int
 hb_font_get_serial (hb_font_t *font)
@@ -1962,7 +1961,7 @@ hb_font_get_serial (hb_font_t *font)
  * This has the effect of increasing the serial as returned
  * by hb_font_get_serial(), which invalidates internal caches.
  *
- * Since: REPLACEME.
+ * Since: 4.4.0.
  **/
 void
 hb_font_changed (hb_font_t *font)

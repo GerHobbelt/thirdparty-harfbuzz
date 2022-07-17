@@ -139,14 +139,14 @@ struct Glyph
       break;
     case COMPOSITE:
     {
+      contour_point_vector_t comp_points;
       unsigned int comp_index = 0;
       for (auto &item : get_composite_iterator ())
       {
-	contour_point_vector_t comp_points;
+        comp_points.reset ();
 	if (unlikely (!glyf_accelerator.glyph_for_gid (item.glyphIndex)
 				       .get_points (font, glyf_accelerator, comp_points,
-						    phantom_only, depth + 1)
-		      || comp_points.length < PHANTOM_COUNT))
+						    phantom_only, depth + 1)))
 	  return false;
 
 	/* Copy phantom points from component if USE_MY_METRICS flag set */
@@ -195,7 +195,7 @@ struct Glyph
       if (delta.x) all_points.translate (delta);
     }
 
-    return true;
+    return !all_points.in_error ();
   }
 
   bool get_extents (hb_font_t *font, const glyf_accelerator_t &glyf_accelerator,
@@ -208,8 +208,9 @@ struct Glyph
   hb_bytes_t get_bytes () const { return bytes; }
 
   Glyph (hb_bytes_t bytes_ = hb_bytes_t (),
-	 hb_codepoint_t gid_ = (hb_codepoint_t) -1) : bytes (bytes_), gid (gid_),
-						      header (bytes.as<GlyphHeader> ())
+	 hb_codepoint_t gid_ = (hb_codepoint_t) -1) : bytes (bytes_),
+						      header (bytes.as<GlyphHeader> ()),
+						      gid (gid_)
   {
     int num_contours = header->numberOfContours;
     if (unlikely (num_contours == 0)) type = EMPTY;
@@ -219,8 +220,8 @@ struct Glyph
 
   protected:
   hb_bytes_t bytes;
-  hb_codepoint_t gid;
   const GlyphHeader *header;
+  hb_codepoint_t gid;
   unsigned type;
 };
 
