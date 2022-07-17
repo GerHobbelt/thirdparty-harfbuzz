@@ -277,6 +277,7 @@ static void
 override_features_indic (hb_ot_shape_planner_t *plan)
 {
   plan->map.disable_feature (HB_TAG('l','i','g','a'));
+  plan->map.add_gsub_pause (hb_syllabic_clear_var); // Don't need syllables anymore, use stop to free buffer var
 }
 
 
@@ -1524,7 +1525,9 @@ preprocess_text_indic (const hb_ot_shape_plan_t *plan,
 		       hb_buffer_t              *buffer,
 		       hb_font_t                *font)
 {
-  _hb_preprocess_text_vowel_constraints (plan, buffer, font);
+  const indic_shape_plan_t *indic_plan = (const indic_shape_plan_t *) plan->data;
+  if (!indic_plan->uniscribe_bug_compatible)
+    _hb_preprocess_text_vowel_constraints (plan, buffer, font);
 }
 
 static bool
