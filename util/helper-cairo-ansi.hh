@@ -41,7 +41,7 @@
 # define CELL_H (2 * CELL_W)
 
 static void
-chafa_print_image_rgb24 (const void *data, int width, int height, int stride)
+chafa_print_image_rgb24 (const void *data, int width, int height, int stride, int level)
 {
   ChafaTermInfo *term_info;
   ChafaSymbolMap *symbol_map;
@@ -82,9 +82,12 @@ chafa_print_image_rgb24 (const void *data, int width, int height, int stride)
   /* Create the configuration */
 
   symbol_map = chafa_symbol_map_new ();
-  chafa_symbol_map_add_by_tags (symbol_map, CHAFA_SYMBOL_TAG_ALL
-                                /*(ChafaSymbolTags) (CHAFA_SYMBOL_TAG_BLOCK
-                                                   | CHAFA_SYMBOL_TAG_SPACE)*/);
+  chafa_symbol_map_add_by_tags (symbol_map,
+                                (ChafaSymbolTags) (CHAFA_SYMBOL_TAG_BLOCK
+                                                   | CHAFA_SYMBOL_TAG_SPACE
+						   | (level >= 2 ? CHAFA_SYMBOL_TAG_WEDGE : 0)
+						   | (level >= 3 ? CHAFA_SYMBOL_TAG_ALL : 0)
+				));
 
   config = chafa_canvas_config_new ();
   chafa_canvas_config_set_canvas_mode (config, mode);
@@ -202,11 +205,11 @@ helper_cairo_surface_write_to_ansi_stream (cairo_surface_t	*surface,
   {
 #ifdef HAVE_CHAFA
     const char *env = getenv ("HB_CHAFA");
-    bool chafa = true;
+    int chafa_level = 1;
     if (env)
-      chafa = atoi (env);
-    if (chafa)
-      chafa_print_image_rgb24 (data, width, height, stride);
+      chafa_level = atoi (env);
+    if (chafa_level)
+      chafa_print_image_rgb24 (data, width, height, stride, chafa_level);
     else
 #endif
       ansi_print_image_rgb24 (data, width, height, stride / 4);
