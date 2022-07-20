@@ -53,6 +53,7 @@
 #include "hb-ot-var-gvar-table.hh"
 #include "hb-ot-var-hvar-table.hh"
 #include "hb-ot-math-table.hh"
+#include "hb-ot-stat-table.hh"
 #include "hb-repacker.hh"
 
 using OT::Layout::GSUB;
@@ -361,6 +362,8 @@ _should_drop_table (hb_subset_plan_t *plan, hb_tag_t tag)
   switch (tag)
   {
   case HB_TAG ('c','v','a','r'): /* hint table, fallthrough */
+    return plan->all_axes_pinned || (plan->flags & HB_SUBSET_FLAGS_NO_HINTING);
+
   case HB_TAG ('c','v','t',' '): /* hint table, fallthrough */
   case HB_TAG ('f','p','g','m'): /* hint table, fallthrough */
   case HB_TAG ('p','r','e','p'): /* hint table, fallthrough */
@@ -379,6 +382,14 @@ _should_drop_table (hb_subset_plan_t *plan, hb_tag_t tag)
   case HB_TAG ('k','e','r','n'):
     return true;
 #endif
+
+  case HB_TAG ('a','v','a','r'):
+  case HB_TAG ('f','v','a','r'):
+  case HB_TAG ('g','v','a','r'):
+  case HB_OT_TAG_HVAR:
+  case HB_OT_TAG_VVAR:
+  case HB_TAG ('M','V','A','R'):
+    return plan->all_axes_pinned;
 
   default:
     return false;
@@ -443,6 +454,11 @@ _subset_table (hb_subset_plan_t *plan,
   case HB_OT_TAG_HVAR: return _subset<const OT::HVAR> (plan, buf);
   case HB_OT_TAG_VVAR: return _subset<const OT::VVAR> (plan, buf);
 #endif
+  case HB_OT_TAG_STAT:
+    /*TODO(qxliu): change the condition as we support more complex
+     * instancing operation*/
+    if (plan->all_axes_pinned) return _subset<const OT::STAT> (plan, buf);
+    else return _passthrough (plan, tag);
 
   default:
     if (plan->flags & HB_SUBSET_FLAGS_PASSTHROUGH_UNRECOGNIZED)
