@@ -42,8 +42,10 @@ struct SingleSubstFormat1_3
     hb_codepoint_t d = deltaGlyphID;
     hb_codepoint_t mask = get_mask ();
 
-    + hb_iter (this+coverage)
-    | hb_filter (c->parent_active_glyphs ())
+    hb_set_t intersection;
+    (this+coverage).intersect_set (c->parent_active_glyphs (), intersection);
+
+    + hb_iter (intersection)
     | hb_map ([d, mask] (hb_codepoint_t g) { return (g + d) & mask; })
     | hb_sink (c->output)
     ;
@@ -107,9 +109,11 @@ struct SingleSubstFormat1_3
     hb_codepoint_t d = deltaGlyphID;
     hb_codepoint_t mask = get_mask ();
 
+    hb_set_t intersection;
+    (this+coverage).intersect_set (glyphset, intersection);
+
     auto it =
-    + hb_iter (this+coverage)
-    | hb_filter (glyphset)
+    + hb_iter (intersection)
     | hb_map_retains_sorting ([d, mask] (hb_codepoint_t g) {
                                 return hb_codepoint_pair_t (g,
                                                             (g + d) & mask); })

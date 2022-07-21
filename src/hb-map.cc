@@ -56,8 +56,6 @@ hb_map_create ()
   if (!(map = hb_object_create<hb_map_t> ()))
     return hb_map_get_empty ();
 
-  map->init_shallow ();
-
   return map;
 }
 
@@ -106,8 +104,6 @@ void
 hb_map_destroy (hb_map_t *map)
 {
   if (!hb_object_destroy (map)) return;
-
-  map->fini_shallow ();
 
   hb_free (map);
 }

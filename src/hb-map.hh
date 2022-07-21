@@ -124,21 +124,20 @@ struct hb_hashmap_t
     hb_swap (a.prime, b.prime);
     hb_swap (a.items, b.items);
   }
-  void init_shallow ()
+  void init ()
   {
+    hb_object_init (this);
+
     successful = true;
     population = occupancy = 0;
     mask = 0;
     prime = 0;
     items = nullptr;
   }
-  void init ()
+  void fini ()
   {
-    hb_object_init (this);
-    init_shallow ();
-  }
-  void fini_shallow ()
-  {
+    hb_object_fini (this);
+
     if (likely (items)) {
       unsigned size = mask + 1;
       for (unsigned i = 0; i < size; i++)
@@ -147,11 +146,6 @@ struct hb_hashmap_t
       items = nullptr;
     }
     population = occupancy = 0;
-  }
-  void fini ()
-  {
-    hb_object_fini (this);
-    fini_shallow ();
   }
 
   void reset ()
@@ -219,13 +213,11 @@ struct hb_hashmap_t
   /* Has interface. */
   typedef const V& value_t;
   value_t operator [] (K k) const { return get (k); }
-  bool has (K key, const V **vp = nullptr) const
+  template <typename VV=V>
+  bool has (K key, VV **vp = nullptr) const
   {
     if (unlikely (!items))
-    {
-      if (vp) *vp = &item_t::default_value ();
       return false;
-    }
     unsigned int i = bucket_for (key);
     if (items[i].is_real () && items[i] == key)
     {
@@ -233,10 +225,7 @@ struct hb_hashmap_t
       return true;
     }
     else
-    {
-      if (vp) *vp = &item_t::default_value ();
       return false;
-    }
   }
   /* Projection. */
   V operator () (K k) const { return get (k); }
@@ -464,8 +453,6 @@ hb_hashmap_t<K, V>* hb_hashmap_create ()
   if (!(map = hb_object_create<hashmap> ()))
     return nullptr;
 
-  map->init_shallow ();
-
   return map;
 }
 
@@ -475,8 +462,19 @@ void hb_hashmap_destroy (hb_hashmap_t<K, V>* map)
 {
   if (!hb_object_destroy (map))
     return;
-  map->fini_shallow ();
+
   hb_free (map);
 }
+
+namespace hb {
+
+template <typename K, typename V>
+struct vtable<hb_hashmap_t<K, V>>
+{
+  static constexpr auto destroy = hb_hashmap_destroy<K,V>;
+};
+
+}
+
 
 #endif /* HB_MAP_HH */
