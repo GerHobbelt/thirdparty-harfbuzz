@@ -21,32 +21,40 @@
  * ON AN "AS IS" BASIS, AND THE COPYRIGHT HOLDER HAS NO OBLIGATION TO
  * PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  *
+ * Google Author(s): Garret Rieger
  */
-#include "hb-repacker.hh"
 
-#ifdef HB_EXPERIMENTAL_API
-/**
- * hb_subset_repack_or_fail:
- * @hb_objects: raw array of struct hb_object_t, which provides
- * object graph info
- * @num_hb_objs: number of hb_object_t in the hb_objects array.
- *
- * Given the input object graph info, repack a table to eliminate
- * offset overflows. A nullptr is returned if the repacking attempt fails.
- *
- * Since: EXPERIMENTAL
- **/
-hb_blob_t* hb_subset_repack_or_fail (hb_object_t* hb_objects, unsigned num_hb_objs)
+#include "gsubgpos-graph.hh"
+
+namespace graph {
+
+make_extension_context_t::make_extension_context_t (hb_tag_t table_tag_,
+                                                    graph_t& graph_,
+                                                    hb_vector_t<char>& buffer_)
+    : table_tag (table_tag_),
+      graph (graph_),
+      buffer (buffer_),
+      lookup_list_index (0),
+      lookups ()
 {
-  hb_vector_t<const hb_object_t *> packed;
-  packed.alloc (num_hb_objs + 1);
-  packed.push (nullptr);
-  for (unsigned i = 0 ; i < num_hb_objs ; i++)
-    packed.push (&(hb_objects[i]));
+  GSTAR* gstar = graph::GSTAR::graph_to_gstar (graph_);
+  if (gstar) {
+    gstar->find_lookups (graph, lookups);
+    lookup_list_index = gstar->get_lookup_list_index (graph_);
+  }
 
-  return hb_resolve_overflows (packed,
-                               HB_OT_TAG_GSUB,
-                               20,
-                               true);
+  unsigned extension_size = OT::ExtensionFormat1<OT::Layout::GSUB_impl::ExtensionSubst>::static_size;
+  buffer.alloc (num_non_ext_subtables () * extension_size);
 }
-#endif
+
+unsigned make_extension_context_t::num_non_ext_subtables ()  {
+  unsigned count = 0;
+  for (auto l : lookups.values ())
+  {
+    if (l->is_extension (table_tag)) continue;
+    count += l->number_of_subtables ();
+  }
+  return count;
+}
+
+}

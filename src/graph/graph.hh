@@ -24,6 +24,10 @@
  * Google Author(s): Garret Rieger
  */
 
+#include "../hb-set.hh"
+#include "../hb-priority-queue.hh"
+#include "../hb-serialize.hh"
+
 #ifndef GRAPH_GRAPH_HH
 #define GRAPH_GRAPH_HH
 
@@ -105,6 +109,10 @@ struct graph_t
 
     bool has_max_priority () const {
       return priority >= 3;
+    }
+
+    size_t table_size () const {
+      return obj.tail - obj.head;
     }
 
     int64_t modified_distance (unsigned order) const
@@ -199,7 +207,7 @@ struct graph_t
     return vertices_.length - 1;
   }
 
-  const hb_serialize_context_t::object_t& object(unsigned i) const
+  const hb_serialize_context_t::object_t& object (unsigned i) const
   {
     return vertices_[i].obj;
   }
@@ -310,6 +318,22 @@ struct graph_t
     }
   }
 
+  unsigned index_for_offset(unsigned node_idx, const void* offset) const
+  {
+    const auto& node = object (node_idx);
+    if (offset < node.head || offset >= node.tail) return -1;
+
+    for (const auto& link : node.real_links)
+    {
+      if (offset != node.head + link.position)
+        continue;
+      return link.objidx;
+    }
+
+    return -1;
+  }
+
+
   /*
    * Assign unique space numbers to each connected subgraph of 24 bit and/or 32 bit offset(s).
    * Currently, this is implemented specifically tailored to the structure of a GPOS/GSUB
@@ -317,6 +341,8 @@ struct graph_t
    */
   bool assign_spaces ()
   {
+    update_parents ();
+
     hb_set_t visited;
     hb_set_t roots;
     find_space_roots (visited, roots);
@@ -458,6 +484,21 @@ struct graph_t
       find_subgraph (link.objidx, subgraph);
   }
 
+  size_t find_subgraph_size (unsigned node_idx, hb_set_t& subgraph, unsigned max_depth = -1)
+  {
+    if (subgraph.has (node_idx)) return 0;
+    subgraph.add (node_idx);
+
+    const auto& o = vertices_[node_idx].obj;
+    size_t size = o.tail - o.head;
+    if (max_depth == 0)
+      return size;
+
+    for (const auto& link : o.all_links ())
+      size += find_subgraph_size (link.objidx, subgraph, max_depth - 1);
+    return size;
+  }
+
   /*
    * Finds the topmost children of 32bit offsets in the subgraph starting
    * at node_idx. Found indices are placed into 'found'.
@@ -579,6 +620,39 @@ struct graph_t
     }
 
     return true;
+  }
+
+
+  /*
+   * Adds a new node to the graph, not connected to anything.
+   */
+  unsigned new_node (char* head, char* tail)
+  {
+    positions_invalid = true;
+    distance_invalid = true;
+
+    auto* clone = vertices_.push ();
+    if (vertices_.in_error ()) {
+      return -1;
+    }
+
+    clone->obj.head = head;
+    clone->obj.tail = tail;
+    clone->distance = 0;
+    clone->space = 0;
+
+    unsigned clone_idx = vertices_.length - 2;
+
+    // The last object is the root of the graph, so swap back the root to the end.
+    // The root's obj idx does change, however since it's root nothing else refers to it.
+    // all other obj idx's will be unaffected.
+    hb_swap (vertices_[vertices_.length - 2], *clone);
+
+    // Since the root moved, update the parents arrays of all children on the root.
+    for (const auto& l : root ().obj.all_links ())
+      vertices_[l.objidx].remap_parent (root_idx () - 1, root_idx ());
+
+    return clone_idx;
   }
 
   /*

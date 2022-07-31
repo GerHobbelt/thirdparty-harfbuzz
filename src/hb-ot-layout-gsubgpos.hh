@@ -4029,6 +4029,11 @@ struct GSUBGPOSVersion1_2
 	   (version.to_int () >= 0x00010001u ? featureVars.static_size : 0);
   }
 
+  const typename Types::template OffsetTo<LookupList<Types>>* get_lookup_list_offset () const
+  {
+    return &lookupList;
+  }
+
   template <typename TLookup>
   bool sanitize (hb_sanitize_context_t *c) const
   {
