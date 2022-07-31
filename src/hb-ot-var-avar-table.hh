@@ -28,6 +28,8 @@
 #define HB_OT_VAR_AVAR_TABLE_HH
 
 #include "hb-open-type.hh"
+#include "hb-ot-var-common.hh"
+
 
 /*
  * avar -- Axis Variations
@@ -38,6 +40,28 @@
 
 
 namespace OT {
+
+
+/* "Spec": https://github.com/be-fonts/boring-expansion-spec/issues/14 */
+struct avarV2Tail
+{
+  friend struct avar;
+
+  bool sanitize (hb_sanitize_context_t *c,
+		 const void *base) const
+  {
+    TRACE_SANITIZE (this);
+    return_trace (varIdxMap.sanitize (c, base) &&
+		  varStore.sanitize (c, base));
+  }
+
+  protected:
+  Offset32To<DeltaSetIndexMap>	varIdxMap;	/* Offset from the beginning of 'avar' table. */
+  Offset32To<VariationStore>	varStore;	/* Offset from the beginning of 'avar' table. */
+
+  public:
+  DEFINE_SIZE_STATIC (8);
+};
 
 
 struct AxisValueMap
@@ -118,7 +142,7 @@ struct avar
   {
     TRACE_SANITIZE (this);
     if (unlikely (!(version.sanitize (c) &&
-		    version.major == 1 &&
+		    (version.major == 1 || version.major == 2) &&
 		    c->check_struct (this))))
       return_trace (false);
 
@@ -129,6 +153,13 @@ struct avar
       if (unlikely (!map->sanitize (c)))
 	return_trace (false);
       map = &StructAfter<SegmentMaps> (*map);
+    }
+
+    if (version.major == 2)
+    {
+      const auto *v2 = (const avarV2Tail *) map;
+      if (unlikely (!v2->sanitize (c, this)))
+	return_trace (false);
     }
 
     return_trace (true);
@@ -144,6 +175,32 @@ struct avar
       coords[i] = map->map (coords[i]);
       map = &StructAfter<SegmentMaps> (*map);
     }
+
+    if (version.major < 2)
+      return;
+
+    const auto *v2 = (const avarV2Tail *) map;
+
+    const auto &varidx_map = this+v2->varIdxMap;
+    const auto &var_store = this+v2->varStore;
+    auto *var_store_cache = var_store.create_cache ();
+
+    hb_vector_t<int> out;
+    out.alloc (coords_length);
+    for (unsigned i = 0; i < coords_length; i++)
+    {
+      int v = coords[i];
+      uint32_t varidx = varidx_map.map (i);
+      float delta = var_store.get_delta (varidx, coords, coords_length, var_store_cache);
+      v += round (delta);
+      v = hb_clamp (v, -(1<<14), +(1<<14));
+      out.push (v);
+    }
+
+    OT::VariationStore::destroy_cache (var_store_cache);
+
+    for (unsigned i = 0; i < coords_length; i++)
+      coords[i] = out[i];
   }
 
   void unmap_coords (int *coords, unsigned int coords_length) const
