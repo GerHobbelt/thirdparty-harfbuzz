@@ -1716,13 +1716,14 @@ struct ClassDefFormat2_4
     hb_sorted_vector_t<hb_pair_t<hb_codepoint_t, hb_codepoint_t>> glyph_and_klass;
     hb_set_t orig_klasses;
 
+    unsigned num_source_glyphs = c->plan->source->get_num_glyphs ();
     unsigned count = rangeRecord.len;
     for (unsigned i = 0; i < count; i++)
     {
       unsigned klass = rangeRecord[i].value;
       if (!klass) continue;
       hb_codepoint_t start = rangeRecord[i].first;
-      hb_codepoint_t end   = rangeRecord[i].last + 1;
+      hb_codepoint_t end   = hb_min (rangeRecord[i].last + 1, num_source_glyphs);
       for (hb_codepoint_t g = start; g < end; g++)
       {
         hb_codepoint_t new_gid = glyph_map[g];
@@ -1915,7 +1916,7 @@ struct ClassDef
     switch (u.format) {
     case 1: return u.format1.get_class (glyph_id);
     case 2: return u.format2.get_class (glyph_id);
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return u.format3.get_class (glyph_id);
     case 4: return u.format4.get_class (glyph_id);
 #endif
@@ -1963,7 +1964,7 @@ struct ClassDef
 	format = 1;
     }
 
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     if (glyph_max > 0xFFFFu)
       format += 2;
 #endif
@@ -1974,7 +1975,7 @@ struct ClassDef
     {
     case 1: return_trace (u.format1.serialize (c, it));
     case 2: return_trace (u.format2.serialize (c, it));
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return_trace (u.format3.serialize (c, it));
     case 4: return_trace (u.format4.serialize (c, it));
 #endif
@@ -1992,7 +1993,7 @@ struct ClassDef
     switch (u.format) {
     case 1: return_trace (u.format1.subset (c, klass_map, keep_empty_table, use_class_zero, glyph_filter));
     case 2: return_trace (u.format2.subset (c, klass_map, keep_empty_table, use_class_zero, glyph_filter));
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return_trace (u.format3.subset (c, klass_map, keep_empty_table, use_class_zero, glyph_filter));
     case 4: return_trace (u.format4.subset (c, klass_map, keep_empty_table, use_class_zero, glyph_filter));
 #endif
@@ -2007,7 +2008,7 @@ struct ClassDef
     switch (u.format) {
     case 1: return_trace (u.format1.sanitize (c));
     case 2: return_trace (u.format2.sanitize (c));
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return_trace (u.format3.sanitize (c));
     case 4: return_trace (u.format4.sanitize (c));
 #endif
@@ -2020,7 +2021,7 @@ struct ClassDef
     switch (u.format) {
     case 1: return u.format1.cost ();
     case 2: return u.format2.cost ();
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return u.format3.cost ();
     case 4: return u.format4.cost ();
 #endif
@@ -2036,7 +2037,7 @@ struct ClassDef
     switch (u.format) {
     case 1: return u.format1.collect_coverage (glyphs);
     case 2: return u.format2.collect_coverage (glyphs);
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return u.format3.collect_coverage (glyphs);
     case 4: return u.format4.collect_coverage (glyphs);
 #endif
@@ -2052,7 +2053,7 @@ struct ClassDef
     switch (u.format) {
     case 1: return u.format1.collect_class (glyphs, klass);
     case 2: return u.format2.collect_class (glyphs, klass);
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return u.format3.collect_class (glyphs, klass);
     case 4: return u.format4.collect_class (glyphs, klass);
 #endif
@@ -2065,7 +2066,7 @@ struct ClassDef
     switch (u.format) {
     case 1: return u.format1.intersects (glyphs);
     case 2: return u.format2.intersects (glyphs);
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return u.format3.intersects (glyphs);
     case 4: return u.format4.intersects (glyphs);
 #endif
@@ -2077,7 +2078,7 @@ struct ClassDef
     switch (u.format) {
     case 1: return u.format1.intersects_class (glyphs, klass);
     case 2: return u.format2.intersects_class (glyphs, klass);
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return u.format3.intersects_class (glyphs, klass);
     case 4: return u.format4.intersects_class (glyphs, klass);
 #endif
@@ -2090,7 +2091,7 @@ struct ClassDef
     switch (u.format) {
     case 1: return u.format1.intersected_class_glyphs (glyphs, klass, intersect_glyphs);
     case 2: return u.format2.intersected_class_glyphs (glyphs, klass, intersect_glyphs);
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return u.format3.intersected_class_glyphs (glyphs, klass, intersect_glyphs);
     case 4: return u.format4.intersected_class_glyphs (glyphs, klass, intersect_glyphs);
 #endif
@@ -2103,7 +2104,7 @@ struct ClassDef
     switch (u.format) {
     case 1: return u.format1.intersected_classes (glyphs, intersect_classes);
     case 2: return u.format2.intersected_classes (glyphs, intersect_classes);
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
     case 3: return u.format3.intersected_classes (glyphs, intersect_classes);
     case 4: return u.format4.intersected_classes (glyphs, intersect_classes);
 #endif
@@ -2117,7 +2118,7 @@ struct ClassDef
   HBUINT16			format;		/* Format identifier */
   ClassDefFormat1_3<SmallTypes>	format1;
   ClassDefFormat2_4<SmallTypes>	format2;
-#ifndef HB_NO_BORING_EXPANSION
+#ifndef HB_NO_BEYOND_64K
   ClassDefFormat1_3<MediumTypes>format3;
   ClassDefFormat2_4<MediumTypes>format4;
 #endif
@@ -2500,6 +2501,9 @@ struct VariationStore
 
   cache_t *create_cache () const
   {
+#ifdef HB_NO_VAR
+    return nullptr;
+#endif
     auto &r = this+regions;
     unsigned count = r.regionCount;
 
@@ -2560,6 +2564,10 @@ struct VariationStore
 		  const hb_array_t <hb_inc_bimap_t> &inner_maps)
   {
     TRACE_SERIALIZE (this);
+#ifdef HB_NO_VAR
+    return_trace (false);
+#endif
+
     if (unlikely (!c->extend_min (this))) return_trace (false);
 
     unsigned int set_count = 0;
@@ -2611,6 +2619,9 @@ struct VariationStore
   bool subset (hb_subset_context_t *c) const
   {
     TRACE_SUBSET (this);
+#ifdef HB_NO_VAR
+    return_trace (false);
+#endif
 
     VariationStore *varstore_prime = c->serializer->start_embed<VariationStore> ();
     if (unlikely (!varstore_prime)) return_trace (false);
@@ -2638,7 +2649,12 @@ struct VariationStore
   }
 
   unsigned int get_region_index_count (unsigned int major) const
-  { return (this+dataSets[major]).get_region_index_count (); }
+  {
+#ifdef HB_NO_VAR
+    return 0;
+#endif
+    return (this+dataSets[major]).get_region_index_count ();
+  }
 
   void get_region_scalars (unsigned int major,
 			   const int *coords, unsigned int coord_count,
@@ -2656,7 +2672,13 @@ struct VariationStore
 					       &scalars[0], num_scalars);
   }
 
-  unsigned int get_sub_table_count () const { return dataSets.len; }
+  unsigned int get_sub_table_count () const
+   {
+#ifdef HB_NO_VAR
+     return 0;
+#endif
+     return dataSets.len;
+   }
 
   protected:
   HBUINT16				format;

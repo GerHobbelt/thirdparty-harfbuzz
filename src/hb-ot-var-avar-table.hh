@@ -141,9 +141,13 @@ struct avar
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    if (unlikely (!(version.sanitize (c) &&
-		    (version.major == 1 || version.major == 2) &&
-		    c->check_struct (this))))
+    if (!(version.sanitize (c) &&
+	  (version.major == 1
+#ifndef HB_NO_VARIATIONS2
+	   || version.major == 2
+#endif
+	   ) &&
+	  c->check_struct (this)))
       return_trace (false);
 
     const SegmentMaps *map = &firstAxisSegmentMaps;
@@ -155,12 +159,14 @@ struct avar
       map = &StructAfter<SegmentMaps> (*map);
     }
 
-    if (version.major == 2)
-    {
-      const auto *v2 = (const avarV2Tail *) map;
-      if (unlikely (!v2->sanitize (c, this)))
-	return_trace (false);
-    }
+#ifndef HB_NO_VARIATIONS2
+    if (version.major < 2)
+      return_trace (true);
+
+    const auto &v2 = * (const avarV2Tail *) map;
+    if (unlikely (!v2.sanitize (c, this)))
+      return_trace (false);
+#endif
 
     return_trace (true);
   }
@@ -176,13 +182,17 @@ struct avar
       map = &StructAfter<SegmentMaps> (*map);
     }
 
+#ifndef HB_NO_VARIATIONS2
     if (version.major < 2)
       return;
 
-    const auto *v2 = (const avarV2Tail *) map;
+    for (; count < axisCount; count++)
+      map = &StructAfter<SegmentMaps> (*map);
 
-    const auto &varidx_map = this+v2->varIdxMap;
-    const auto &var_store = this+v2->varStore;
+    const auto &v2 = * (const avarV2Tail *) map;
+
+    const auto &varidx_map = this+v2.varIdxMap;
+    const auto &var_store = this+v2.varStore;
     auto *var_store_cache = var_store.create_cache ();
 
     hb_vector_t<int> out;
@@ -192,7 +202,7 @@ struct avar
       int v = coords[i];
       uint32_t varidx = varidx_map.map (i);
       float delta = var_store.get_delta (varidx, coords, coords_length, var_store_cache);
-      v += round (delta);
+      v += roundf (delta);
       v = hb_clamp (v, -(1<<14), +(1<<14));
       out.push (v);
     }
@@ -201,6 +211,7 @@ struct avar
 
     for (unsigned i = 0; i < coords_length; i++)
       coords[i] = out[i];
+#endif
   }
 
   void unmap_coords (int *coords, unsigned int coords_length) const
