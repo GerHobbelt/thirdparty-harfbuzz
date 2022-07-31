@@ -288,7 +288,8 @@ struct hb_buffer_t
 
   HB_INTERNAL void guess_segment_properties ();
 
-  HB_INTERNAL void sync ();
+  HB_INTERNAL bool sync ();
+  HB_INTERNAL int sync_so_far ();
   HB_INTERNAL void clear_output ();
   HB_INTERNAL void clear_positions ();
 
@@ -555,14 +556,10 @@ struct hb_buffer_t
     if (likely (!messaging ()))
       return true;
 
-    message_depth++;
-
     va_list ap;
     va_start (ap, fmt);
     bool ret = message_impl (font, fmt, ap);
     va_end (ap);
-
-    message_depth--;
 
     return ret;
 #endif
