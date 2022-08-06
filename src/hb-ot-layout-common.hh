@@ -2274,16 +2274,16 @@ struct VarData
    unsigned int count = regionIndices.len;
    bool is_long = longWords ();
    unsigned word_count = wordCount ();
-   unsigned int scount = is_long ? count - word_count : word_count;
+   unsigned int scount = is_long ? count : word_count;
    unsigned int lcount = is_long ? word_count : 0;
 
    const HBUINT8 *bytes = get_delta_bytes ();
-   const HBUINT8 *row = bytes + inner * (scount + count);
+   const HBUINT8 *row = bytes + inner * get_row_size ();
 
    float delta = 0.;
    unsigned int i = 0;
 
-   const HBINT16 *lcursor = reinterpret_cast<const HBINT16 *> (row);
+   const HBINT32 *lcursor = reinterpret_cast<const HBINT32 *> (row);
    for (; i < lcount; i++)
    {
      float scalar = regions.evaluate (regionIndices.arrayZ[i], coords, coord_count, cache);
