@@ -434,9 +434,9 @@ hb_ft_get_glyph_h_advances (hb_font_t* font, void* font_data,
 #ifdef HAVE_FT_GET_TRANSFORM
   FT_Matrix matrix;
   FT_Get_Transform (ft_face, &matrix, nullptr);
-  float mult = matrix.xx / 65536.f;
+  float x_mult = sqrtf ((float)matrix.xx * matrix.xx + (float)matrix.xy * matrix.xy) / 65536.f;
 #else
-  float mult = font->x_scale < 0 ? -1 : +1;
+  float x_mult = font->x_scale < 0 ? -1 : +1;
 #endif
 
   for (unsigned int i = 0; i < count; i++)
@@ -453,7 +453,7 @@ hb_ft_get_glyph_h_advances (hb_font_t* font, void* font_data,
       ft_font->advance_cache.set (glyph, v);
     }
 
-    *first_advance = (int) (v * mult + (1<<9)) >> 10;
+    *first_advance = (int) (v * x_mult + (1<<9)) >> 10;
     first_glyph = &StructAtOffsetUnaligned<hb_codepoint_t> (first_glyph, glyph_stride);
     first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
   }
@@ -472,7 +472,7 @@ hb_ft_get_glyph_v_advance (hb_font_t *font,
 #ifdef HAVE_FT_GET_TRANSFORM
   FT_Matrix matrix;
   FT_Get_Transform (ft_font->ft_face, &matrix, nullptr);
-  float y_mult = matrix.yy / 65536.f;
+  float y_mult = sqrtf ((float)matrix.yx * matrix.yx + (float)matrix.yy * matrix.yy) / 65536.f;
 #else
   float y_mult = font->y_scale < 0 ? -1 : +1;
 #endif
@@ -504,8 +504,8 @@ hb_ft_get_glyph_v_origin (hb_font_t *font,
 #ifdef HAVE_FT_GET_TRANSFORM
   FT_Matrix matrix;
   FT_Get_Transform (ft_face, &matrix, nullptr);
-  float x_mult = matrix.xx / 65536.f;
-  float y_mult = matrix.yy / 65536.f;
+  float x_mult = sqrtf ((float)matrix.xx * matrix.xx + (float)matrix.xy * matrix.xy) / 65536.f;
+  float y_mult = sqrtf ((float)matrix.yx * matrix.yx + (float)matrix.yy * matrix.yy) / 65536.f;
 #else
   float x_mult = font->x_scale < 0 ? -1 : +1;
   float y_mult = font->y_scale < 0 ? -1 : +1;
@@ -559,8 +559,8 @@ hb_ft_get_glyph_extents (hb_font_t *font,
 #ifdef HAVE_FT_GET_TRANSFORM
   FT_Matrix matrix;
   FT_Get_Transform (ft_face, &matrix, nullptr);
-  float x_mult = matrix.xx / 65536.f;
-  float y_mult = matrix.yy / 65536.f;
+  float x_mult = sqrtf ((float)matrix.xx * matrix.xx + (float)matrix.xy * matrix.xy) / 65536.f;
+  float y_mult = sqrtf ((float)matrix.yx * matrix.yx + (float)matrix.yy * matrix.yy) / 65536.f;
 #else
   float x_mult = font->x_scale < 0 ? -1 : +1;
   float y_mult = font->y_scale < 0 ? -1 : +1;
@@ -669,7 +669,7 @@ hb_ft_get_font_h_extents (hb_font_t *font HB_UNUSED,
 #ifdef HAVE_FT_GET_TRANSFORM
   FT_Matrix matrix;
   FT_Get_Transform (ft_face, &matrix, nullptr);
-  float y_mult = matrix.yy / 65536.f;
+  float y_mult = sqrtf ((float)matrix.yx * matrix.yx + (float)matrix.yy * matrix.yy) / 65536.f;
 #else
   float y_mult = font->y_scale < 0 ? -1 : +1;
 #endif
