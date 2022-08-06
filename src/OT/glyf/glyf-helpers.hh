@@ -16,7 +16,7 @@ template<typename IteratorIn, typename IteratorOut,
 	 hb_requires (hb_is_source_of (IteratorIn, unsigned int)),
 	 hb_requires (hb_is_sink_of (IteratorOut, unsigned))>
 static void
-_write_loca (IteratorIn it, bool short_offsets, IteratorOut dest)
+_write_loca (IteratorIn&& it, bool short_offsets, IteratorOut&& dest)
 {
   unsigned right_shift = short_offsets ? 1 : 0;
   unsigned int offset = 0;
@@ -53,7 +53,7 @@ _add_head_and_set_loca_version (hb_subset_plan_t *plan, bool use_short_loca)
 template<typename Iterator,
 	 hb_requires (hb_is_source_of (Iterator, unsigned int))>
 static bool
-_add_loca_and_head (hb_subset_plan_t * plan, Iterator padded_offsets, bool use_short_loca)
+_add_loca_and_head (hb_subset_plan_t * plan, Iterator&& padded_offsets, bool use_short_loca)
 {
   unsigned num_offsets = padded_offsets.len () + 1;
   unsigned entry_size = use_short_loca ? 2 : 4;
