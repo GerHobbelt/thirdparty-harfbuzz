@@ -585,12 +585,9 @@ _nameid_closure (hb_face_t *face,
 
 #ifndef HB_NO_VAR
 static void
-_normalize_axes_location (hb_face_t *face,
-			  const hb_hashmap_t<hb_tag_t, float> *user_axes_location,
-			  hb_hashmap_t<hb_tag_t, int> *normalized_axes_location, /* OUT */
-			  bool &all_axes_pinned)
+_normalize_axes_location (hb_face_t *face, hb_subset_plan_t *plan)
 {
-  if (user_axes_location->is_empty ())
+  if (plan->user_axes_location->is_empty ())
     return;
 
   hb_array_t<const OT::AxisRecord> axes = face->table.fvar->get_axes ();
@@ -605,25 +602,27 @@ _normalize_axes_location (hb_face_t *face,
   for (const auto& axis : axes)
   {
     hb_tag_t axis_tag = axis.get_axis_tag ();
-    if (!user_axes_location->has (axis_tag))
+    if (!plan->user_axes_location->has (axis_tag))
     {
       axis_not_pinned = true;
     }
     else
     {
-      int normalized_v = axis.normalize_axis_value (user_axes_location->get (axis_tag));
+      int normalized_v = axis.normalize_axis_value (plan->user_axes_location->get (axis_tag));
       if (has_avar && axis_count < face->table.avar->get_axis_count ())
       {
         normalized_v = seg_maps->map (normalized_v);
       }
-      normalized_axes_location->set (axis_tag, normalized_v);
+      plan->axes_location->set (axis_tag, normalized_v);
+      if (normalized_v != 0)
+        plan->pinned_at_default = false;
     }
     if (has_avar)
       seg_maps = &StructAfter<OT::SegmentMaps> (*seg_maps);
-    
+
     axis_count++;
   }
-  all_axes_pinned = !axis_not_pinned;
+  plan->all_axes_pinned = !axis_not_pinned;
 }
 #endif
 /**
@@ -692,6 +691,10 @@ hb_subset_plan_create_or_fail (hb_face_t	 *face,
   if (plan->user_axes_location && input->axes_location)
       *plan->user_axes_location = *input->axes_location;
   plan->all_axes_pinned = false;
+  plan->pinned_at_default = true;
+
+  plan->check_success (plan->vmtx_map = hb_hashmap_create<unsigned, hb_pair_t<unsigned, int>> ());
+  plan->check_success (plan->hmtx_map = hb_hashmap_create<unsigned, hb_pair_t<unsigned, int>> ());
 
   if (unlikely (plan->in_error ())) {
     hb_subset_plan_destroy (plan);
@@ -726,10 +729,7 @@ hb_subset_plan_create_or_fail (hb_face_t	 *face,
   }
 
 #ifndef HB_NO_VAR
-  _normalize_axes_location (face,
-                            input->axes_location,
-                            plan->axes_location,
-                            plan->all_axes_pinned);
+  _normalize_axes_location (face, plan);
 #endif
 
   _nameid_closure (face, plan->name_ids, plan->all_axes_pinned, plan->user_axes_location);
@@ -753,44 +753,6 @@ void
 hb_subset_plan_destroy (hb_subset_plan_t *plan)
 {
   if (!hb_object_destroy (plan)) return;
-
-  hb_set_destroy (plan->unicodes);
-  hb_set_destroy (plan->name_ids);
-  hb_set_destroy (plan->name_languages);
-  hb_set_destroy (plan->layout_features);
-  hb_set_destroy (plan->layout_scripts);
-  hb_set_destroy (plan->glyphs_requested);
-  hb_set_destroy (plan->drop_tables);
-  hb_set_destroy (plan->no_subset_tables);
-  hb_face_destroy (plan->source);
-  hb_face_destroy (plan->dest);
-  hb_map_destroy (plan->codepoint_to_glyph);
-  hb_map_destroy (plan->glyph_map);
-  hb_map_destroy (plan->reverse_glyph_map);
-  hb_map_destroy (plan->glyph_map_gsub);
-  hb_set_destroy (plan->_glyphset);
-  hb_set_destroy (plan->_glyphset_gsub);
-  hb_set_destroy (plan->_glyphset_mathed);
-  hb_set_destroy (plan->_glyphset_colred);
-  hb_map_destroy (plan->gsub_lookups);
-  hb_map_destroy (plan->gpos_lookups);
-  hb_map_destroy (plan->gsub_features);
-  hb_map_destroy (plan->gpos_features);
-  hb_map_destroy (plan->colrv1_layers);
-  hb_map_destroy (plan->colr_palettes);
-  hb_set_destroy (plan->layout_variation_indices);
-  hb_map_destroy (plan->layout_variation_idx_map);
-
-  hb_hashmap_destroy (plan->gsub_langsys);
-  hb_hashmap_destroy (plan->gpos_langsys);
-  hb_hashmap_destroy (plan->axes_location);
-  hb_hashmap_destroy (plan->sanitized_table_cache);
-
-  if (plan->user_axes_location)
-  {
-    hb_object_destroy (plan->user_axes_location);
-    hb_free (plan->user_axes_location);
-  }
 
   hb_free (plan);
 }
