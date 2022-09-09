@@ -601,6 +601,8 @@ hb_ot_layout_table_select_script (hb_face_t      *face,
  * @feature_tags: (out) (array length=feature_count): Array of feature tags found in the table
  *
  * Fetches a list of all feature tags in the given face's GSUB or GPOS table.
+ * Note that there might be duplicate feature tags, belonging to different
+ * script/language-system pairs of the table.
  *
  * Return value: Total number of feature tags.
  *
@@ -1184,9 +1186,12 @@ script_collect_features (hb_collect_features_context_t *c,
  * hb_ot_layout_collect_features:
  * @face: #hb_face_t to work upon
  * @table_tag: #HB_OT_TAG_GSUB or #HB_OT_TAG_GPOS
- * @scripts: The array of scripts to collect features for
- * @languages: The array of languages to collect features for
- * @features: The array of features to collect
+ * @scripts: (nullable): The array of scripts to collect features for,
+ *   terminated by %HB_TAG_NONE
+ * @languages: (nullable): The array of languages to collect features for,
+ *   terminated by %HB_TAG_NONE
+ * @features: (nullable): The array of features to collect,
+ *   terminated by %HB_TAG_NONE
  * @feature_indexes: (out): The array of feature indexes found for the query
  *
  * Fetches a list of all feature indexes in the specified face's GSUB table
@@ -1233,9 +1238,12 @@ hb_ot_layout_collect_features (hb_face_t      *face,
  * hb_ot_layout_collect_lookups:
  * @face: #hb_face_t to work upon
  * @table_tag: #HB_OT_TAG_GSUB or #HB_OT_TAG_GPOS
- * @scripts: The array of scripts to collect lookups for
- * @languages: The array of languages to collect lookups for
- * @features: The array of features to collect lookups for
+ * @scripts: (nullable): The array of scripts to collect lookups for,
+ *   terminated by %HB_TAG_NONE
+ * @languages: (nullable): The array of languages to collect lookups for,
+ *   terminated by %HB_TAG_NONE
+ * @features: (nullable): The array of features to collect lookups for,
+ *   terminated by %HB_TAG_NONE
  * @lookup_indexes: (out): The array of lookup indexes found for the query
  *
  * Fetches a list of all feature-lookup indexes in the specified face's GSUB
@@ -2321,11 +2329,6 @@ struct hb_get_glyph_alternates_dispatch_t :
   static return_t default_return_value () { return 0; }
   bool stop_sublookup_iteration (return_t r) const { return r; }
 
-  hb_face_t *face;
-
-  hb_get_glyph_alternates_dispatch_t (hb_face_t *face) :
-					face (face) {}
-
   private:
   template <typename T, typename ...Ts> auto
   _dispatch (const T &obj, hb_priority<1>, Ts&&... ds) HB_AUTO_RETURN
@@ -2364,7 +2367,7 @@ hb_ot_layout_lookup_get_glyph_alternates (hb_face_t      *face,
 					  unsigned       *alternate_count  /* IN/OUT.  May be NULL. */,
 					  hb_codepoint_t *alternate_glyphs /* OUT.     May be NULL. */)
 {
-  hb_get_glyph_alternates_dispatch_t c (face);
+  hb_get_glyph_alternates_dispatch_t c;
   const OT::SubstLookup &lookup = face->table.GSUB->table->get_lookup (lookup_index);
   auto ret = lookup.dispatch (&c, glyph, start_offset, alternate_count, alternate_glyphs);
   if (!ret && alternate_count) *alternate_count = 0;
