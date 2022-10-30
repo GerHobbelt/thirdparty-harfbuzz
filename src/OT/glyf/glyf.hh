@@ -75,7 +75,10 @@ struct glyf
     _populate_subset_glyphs (c->plan, &glyphs);
 
     if (!c->plan->pinned_at_default)
-      _compile_subset_glyphs_with_deltas (c->plan, &glyphs);
+    {
+      if (!_compile_subset_glyphs_with_deltas (c->plan, &glyphs))
+        return_trace (false);
+    }
 
     auto padded_offsets =
     + hb_iter (glyphs)
@@ -107,7 +110,7 @@ struct glyf
   _populate_subset_glyphs (const hb_subset_plan_t   *plan,
 			   hb_vector_t<glyf_impl::SubsetGlyph> *glyphs /* OUT */) const;
   
-  void
+  bool
   _compile_subset_glyphs_with_deltas (const hb_subset_plan_t *plan,
                                       hb_vector_t<glyf_impl::SubsetGlyph> *glyphs /* OUT */) const;
 
@@ -180,7 +183,7 @@ struct glyf_accelerator_t
     contour_point_vector_t all_points;
 
     bool phantom_only = !consumer.is_consuming_contour_points ();
-    if (unlikely (!glyph_for_gid (gid).get_points (font, *this, all_points, nullptr, true, phantom_only)))
+    if (unlikely (!glyph_for_gid (gid).get_points (font, *this, all_points, nullptr, true, true, phantom_only)))
       return false;
 
     if (consumer.is_consuming_contour_points ())
@@ -389,7 +392,8 @@ glyf::_populate_subset_glyphs (const hb_subset_plan_t   *plan,
 	    return subset_glyph;
 
 	  if (new_gid == 0 &&
-	      !(plan->flags & HB_SUBSET_FLAGS_NOTDEF_OUTLINE))
+	      !(plan->flags & HB_SUBSET_FLAGS_NOTDEF_OUTLINE) &&
+	      plan->pinned_at_default)
 	    subset_glyph.source_glyph = glyf_impl::Glyph ();
 	  else
 	    subset_glyph.source_glyph = glyf.glyph_for_gid (subset_glyph.old_gid, true);
@@ -403,15 +407,17 @@ glyf::_populate_subset_glyphs (const hb_subset_plan_t   *plan,
   ;
 }
 
-inline void
+inline bool
 glyf::_compile_subset_glyphs_with_deltas (const hb_subset_plan_t *plan,
                                           hb_vector_t<glyf_impl::SubsetGlyph> *glyphs /* OUT */) const
 {
   OT::glyf_accelerator_t glyf (plan->source);
   hb_font_t *font = hb_font_create (plan->source);
+  if (unlikely (!font)) return false;
 
   hb_vector_t<hb_variation_t> vars;
-  vars.alloc (plan->user_axes_location->get_population ());
+  if (unlikely (!vars.alloc (plan->user_axes_location->get_population ())))
+    return false;
 
   for (auto _ : *plan->user_axes_location)
   {
@@ -423,9 +429,16 @@ glyf::_compile_subset_glyphs_with_deltas (const hb_subset_plan_t *plan,
 
   hb_font_set_variations (font, vars.arrayZ, plan->user_axes_location->get_population ());
   for (auto& subset_glyph : *glyphs)
-    const_cast<glyf_impl::SubsetGlyph &> (subset_glyph).compile_bytes_with_deltas (plan, font, glyf);
+  {
+    if (!const_cast<glyf_impl::SubsetGlyph &> (subset_glyph).compile_bytes_with_deltas (plan, font, glyf))
+    {
+      hb_font_destroy (font);
+      return false;
+    }
+  }
 
   hb_font_destroy (font);
+  return true;
 }
 
 
