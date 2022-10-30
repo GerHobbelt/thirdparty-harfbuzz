@@ -735,16 +735,18 @@ hb_ft_get_font_h_extents (hb_font_t *font HB_UNUSED,
 
 static int
 _hb_ft_move_to (const FT_Vector *to,
-		hb_draw_session_t *drawing)
+		void *arg)
 {
+  hb_draw_session_t *drawing = (hb_draw_session_t *) arg;
   drawing->move_to (to->x, to->y);
   return FT_Err_Ok;
 }
 
 static int
 _hb_ft_line_to (const FT_Vector *to,
-		hb_draw_session_t *drawing)
+		void *arg)
 {
+  hb_draw_session_t *drawing = (hb_draw_session_t *) arg;
   drawing->line_to (to->x, to->y);
   return FT_Err_Ok;
 }
@@ -752,8 +754,9 @@ _hb_ft_line_to (const FT_Vector *to,
 static int
 _hb_ft_conic_to (const FT_Vector *control,
 		 const FT_Vector *to,
-		 hb_draw_session_t *drawing)
+		 void *arg)
 {
+  hb_draw_session_t *drawing = (hb_draw_session_t *) arg;
   drawing->quadratic_to (control->x, control->y,
 			 to->x, to->y);
   return FT_Err_Ok;
@@ -763,8 +766,9 @@ static int
 _hb_ft_cubic_to (const FT_Vector *control1,
 		 const FT_Vector *control2,
 		 const FT_Vector *to,
-		 hb_draw_session_t *drawing)
+		 void *arg)
 {
+  hb_draw_session_t *drawing = (hb_draw_session_t *) arg;
   drawing->cubic_to (control1->x, control1->y,
 		     control2->x, control2->y,
 		     to->x, to->y);
@@ -790,10 +794,10 @@ hb_ft_get_glyph_shape (hb_font_t *font HB_UNUSED,
     return;
 
   const FT_Outline_Funcs outline_funcs = {
-    (FT_Outline_MoveToFunc) _hb_ft_move_to,
-    (FT_Outline_LineToFunc) _hb_ft_line_to,
-    (FT_Outline_ConicToFunc) _hb_ft_conic_to,
-    (FT_Outline_CubicToFunc) _hb_ft_cubic_to,
+    _hb_ft_move_to,
+    _hb_ft_line_to,
+    _hb_ft_conic_to,
+    _hb_ft_cubic_to,
     0, /* shift */
     0, /* delta */
   };
@@ -978,8 +982,9 @@ hb_ft_face_create_referenced (FT_Face ft_face)
 }
 
 static void
-hb_ft_face_finalize (FT_Face ft_face)
+hb_ft_face_finalize (void *arg)
 {
+  FT_Face ft_face = (FT_Face) arg;
   hb_face_destroy ((hb_face_t *) ft_face->generic.data);
 }
 
@@ -1011,7 +1016,7 @@ hb_ft_face_create_cached (FT_Face ft_face)
       ft_face->generic.finalizer (ft_face);
 
     ft_face->generic.data = hb_ft_face_create (ft_face, nullptr);
-    ft_face->generic.finalizer = (FT_Generic_Finalizer) hb_ft_face_finalize;
+    ft_face->generic.finalizer = hb_ft_face_finalize;
   }
 
   return hb_face_reference ((hb_face_t *) ft_face->generic.data);
@@ -1223,8 +1228,9 @@ get_ft_library ()
 }
 
 static void
-_release_blob (FT_Face ft_face)
+_release_blob (void *arg)
 {
+  FT_Face ft_face = (FT_Face) arg;
   hb_blob_destroy ((hb_blob_t *) ft_face->generic.data);
 }
 
@@ -1277,7 +1283,7 @@ hb_ft_font_set_funcs (hb_font_t *font)
 
 
   ft_face->generic.data = blob;
-  ft_face->generic.finalizer = (FT_Generic_Finalizer) _release_blob;
+  ft_face->generic.finalizer = _release_blob;
 
   _hb_ft_font_set_funcs (font, ft_face, true);
   hb_ft_font_set_load_flags (font, FT_LOAD_DEFAULT | FT_LOAD_NO_HINTING);
