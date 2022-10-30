@@ -1079,7 +1079,7 @@ struct LangSys
     auto *out = c->serializer->start_embed (*this);
     if (unlikely (!out || !c->serializer->extend_min (out))) return_trace (false);
 
-    const unsigned *v;
+    const uint32_t *v;
     out->reqFeatureIndex = l->feature_index_map->has (reqFeatureIndex, &v) ? *v : 0xFFFFu;
 
     if (!l->visitFeatureIndex (featureIndex.len))
@@ -1388,7 +1388,13 @@ struct Lookup
       outMarkFilteringSet = markFilteringSet;
     }
 
-    return_trace (out->subTable.len);
+    // Always keep the lookup even if it's empty. The rest of layout subsetting depends on lookup
+    // indices being consistent with those computed during planning. So if an empty lookup is
+    // discarded during the subset phase it will invalidate all subsequent lookup indices.
+    // Generally we shouldn't end up with an empty lookup as we pre-prune them during the planning
+    // phase, but it can happen in rare cases such as when during closure subtable is considered
+    // degenerate (see: https://github.com/harfbuzz/harfbuzz/issues/3853)
+    return true;
   }
 
   template <typename TSubTable>
@@ -1548,7 +1554,7 @@ struct ClassDefFormat1_3
 
     startGlyph = glyph_min;
     if (unlikely (!classValue.serialize (c, glyph_count))) return_trace (false);
-    for (const hb_pair_t<hb_codepoint_t, unsigned> gid_klass_pair : + it)
+    for (const hb_pair_t<hb_codepoint_t, uint32_t> gid_klass_pair : + it)
     {
       unsigned idx = gid_klass_pair.first - glyph_min;
       classValue[idx] = gid_klass_pair.second;
@@ -1675,11 +1681,11 @@ struct ClassDefFormat1_3
     if (klass == 0)
     {
       unsigned start_glyph = startGlyph;
-      for (unsigned g = HB_SET_VALUE_INVALID;
+      for (uint32_t g = HB_SET_VALUE_INVALID;
 	   hb_set_next (glyphs, &g) && g < start_glyph;)
 	intersect_glyphs->add (g);
 
-      for (unsigned g = startGlyph + count - 1;
+      for (uint32_t g = startGlyph + count - 1;
 	   hb_set_next (glyphs, &g);)
 	intersect_glyphs->add (g);
 
@@ -2942,7 +2948,7 @@ struct ConditionSet
 
     // all conditions met
     if (num_kept_cond == 0) return DROP_COND_WITH_VAR;
- 
+
     //check if condition_set is unique with variations
     if (c->conditionset_map->has (p))
       //duplicate found, drop the entire record
