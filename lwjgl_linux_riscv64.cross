@@ -1,0 +1,12 @@
+[host_machine]
+system = 'linux'
+cpu_family = 'riscv64'
+cpu = 'riscv64'
+endian = 'little'
+
+[binaries]
+c = '/usr/bin/riscv64-linux-gnu-gcc-14'
+cpp = '/usr/bin/riscv64-linux-gnu-g++-14'
+ar = '/usr/bin/riscv64-linux-gnu-gcc-ar-14'
+strip = '/usr/bin/riscv64-linux-gnu-strip'
+pkgconfig = '/usr/bin/pkg-config'

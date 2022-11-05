@@ -642,9 +642,12 @@ version = '0.@0@.0'.format(hb_version_int)
 
 extra_hb_cpp_args = []
 if cpp_is_microsoft_compiler
-  if get_option('default_library') != 'static'
+  # Commenting this out does not change anything for the standalone build.
+  # However, it is necessary for the LWJGL-CI/freetype build, where harfbuzz
+  # is linked statically, but we still need to export the API symbols.
+  #if get_option('default_library') != 'static'
     extra_hb_cpp_args += '-DHB_DLL_EXPORT'
-  endif
+  #endif
   hb_so_version = ''
 else
   hb_so_version = '0'

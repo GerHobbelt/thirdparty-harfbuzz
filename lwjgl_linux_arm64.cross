@@ -1,0 +1,12 @@
+[host_machine]
+system = 'linux'
+cpu_family = 'aarch64'
+cpu = 'arm64'
+endian = 'little'
+
+[binaries]
+c = '/usr/bin/aarch64-linux-gnu-gcc-12'
+cpp = '/usr/bin/aarch64-linux-gnu-g++-12'
+ar = '/usr/bin/aarch64-linux-gnu-gcc-ar-12'
+strip = '/usr/bin/aarch64-linux-gnu-strip'
+pkgconfig = '/usr/bin/pkg-config'
