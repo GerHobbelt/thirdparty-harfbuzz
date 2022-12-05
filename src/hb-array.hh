@@ -267,7 +267,7 @@ struct hb_array_t : hb_iter_with_fallback_t<hb_array_t<Type>, Type&>
 
   template <typename hb_serialize_context_t,
 	    typename U = Type,
-	    hb_enable_if (!(sizeof (U) < sizeof (long long) && hb_is_trivially_copy_assignable(Type)))>
+	    hb_enable_if (!(sizeof (U) < sizeof (long long) && hb_is_trivially_copy_assignable(hb_decay<Type>)))>
   hb_array_t copy (hb_serialize_context_t *c) const
   {
     TRACE_SERIALIZE (this);
@@ -280,13 +280,13 @@ struct hb_array_t : hb_iter_with_fallback_t<hb_array_t<Type>, Type&>
 
   template <typename hb_serialize_context_t,
 	    typename U = Type,
-	    hb_enable_if (sizeof (U) < sizeof (long long) && hb_is_trivially_copy_assignable(Type))>
+	    hb_enable_if (sizeof (U) < sizeof (long long) && hb_is_trivially_copy_assignable(hb_decay<Type>))>
   hb_array_t copy (hb_serialize_context_t *c) const
   {
     TRACE_SERIALIZE (this);
     auto* out = c->start_embed (arrayZ);
     if (unlikely (!c->extend_size (out, get_size (), false))) return_trace (hb_array_t ());
-    hb_memcpy (out, arrayZ, length);
+    hb_memcpy (out, arrayZ, get_size ());
     return_trace (hb_array_t (out, length));
   }
 
