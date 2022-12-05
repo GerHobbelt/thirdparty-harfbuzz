@@ -646,15 +646,6 @@ struct ArrayOf
   operator   iter_t () const { return   iter (); }
   operator writer_t ()       { return writer (); }
 
-  hb_array_t<const Type> sub_array (unsigned int start_offset, unsigned int count) const
-  { return as_array ().sub_array (start_offset, count); }
-  hb_array_t<const Type> sub_array (unsigned int start_offset, unsigned int *count = nullptr /* IN/OUT */) const
-  { return as_array ().sub_array (start_offset, count); }
-  hb_array_t<Type> sub_array (unsigned int start_offset, unsigned int count)
-  { return as_array ().sub_array (start_offset, count); }
-  hb_array_t<Type> sub_array (unsigned int start_offset, unsigned int *count = nullptr /* IN/OUT */)
-  { return as_array ().sub_array (start_offset, count); }
-
   template <typename T>
   Type &lsearch (const T &x, Type &not_found = Crap (Type))
   { return *as_array ().lsearch (x, &not_found); }
@@ -667,8 +658,8 @@ struct ArrayOf
 	      unsigned int to_store = (unsigned int) -1) const
   { return as_array ().lfind (x, i, not_found, to_store); }
 
-  void qsort (unsigned int start = 0, unsigned int end = (unsigned int) -1)
-  { as_array ().qsort (start, end); }
+  void qsort ()
+  { as_array ().qsort (); }
 
   HB_NODISCARD bool serialize (hb_serialize_context_t *c, unsigned items_len)
   {
@@ -943,15 +934,6 @@ struct SortedArrayOf : ArrayOf<Type, LenType>
   writer_t writer ()       { return as_array (); }
   operator   iter_t () const { return   iter (); }
   operator writer_t ()       { return writer (); }
-
-  hb_sorted_array_t<const Type> sub_array (unsigned int start_offset, unsigned int count) const
-  { return as_array ().sub_array (start_offset, count); }
-  hb_sorted_array_t<const Type> sub_array (unsigned int start_offset, unsigned int *count = nullptr /* IN/OUT */) const
-  { return as_array ().sub_array (start_offset, count); }
-  hb_sorted_array_t<Type> sub_array (unsigned int start_offset, unsigned int count)
-  { return as_array ().sub_array (start_offset, count); }
-  hb_sorted_array_t<Type> sub_array (unsigned int start_offset, unsigned int *count = nullptr /* IN/OUT */)
-  { return as_array ().sub_array (start_offset, count); }
 
   bool serialize (hb_serialize_context_t *c, unsigned int items_len)
   {

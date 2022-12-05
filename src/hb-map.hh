@@ -43,9 +43,9 @@ struct hb_hashmap_t
   hb_hashmap_t ()  { init (); }
   ~hb_hashmap_t () { fini (); }
 
-  hb_hashmap_t (const hb_hashmap_t& o) : hb_hashmap_t () { resize (population); hb_copy (o, *this); }
+  hb_hashmap_t (const hb_hashmap_t& o) : hb_hashmap_t () { resize (o.population); hb_copy (o, *this); }
   hb_hashmap_t (hb_hashmap_t&& o) : hb_hashmap_t () { hb_swap (*this, o); }
-  hb_hashmap_t& operator= (const hb_hashmap_t& o)  { resize (population); hb_copy (o, *this); return *this; }
+  hb_hashmap_t& operator= (const hb_hashmap_t& o)  { reset (); resize (o.population); hb_copy (o, *this); return *this; }
   hb_hashmap_t& operator= (hb_hashmap_t&& o)  { hb_swap (*this, o); return *this; }
 
   hb_hashmap_t (std::initializer_list<hb_pair_t<K, V>> lst) : hb_hashmap_t ()
@@ -234,9 +234,8 @@ struct hb_hashmap_t
   {
     if (unlikely (!successful)) return;
 
-    if (items)
-      for (auto &_ : hb_iter (items, mask + 1))
-	_.clear ();
+    for (auto &_ : hb_iter (items, mask ? mask + 1 : 0))
+      _.clear ();
 
     population = occupancy = 0;
   }
@@ -247,8 +246,7 @@ struct hb_hashmap_t
   uint32_t hash () const
   {
     uint32_t h = 0;
-    for (const auto &item : + hb_array (items, mask ? mask + 1 : 0)
-			    | hb_filter (&item_t::is_real))
+    for (auto item : iter_items ())
       h ^= item.total_hash ();
     return h;
   }
@@ -258,7 +256,7 @@ struct hb_hashmap_t
     if (population != other.population) return false;
 
     for (auto pair : iter ())
-      if (get (pair.first) != pair.second)
+      if (other.get (pair.first) != pair.second)
         return false;
 
     return true;
@@ -271,43 +269,41 @@ struct hb_hashmap_t
   /*
    * Iterator
    */
-  auto iter () const HB_AUTO_RETURN
+
+  auto iter_items () const HB_AUTO_RETURN
   (
-    + hb_array (items, mask ? mask + 1 : 0)
+    + hb_iter (items, mask ? mask + 1 : 0)
     | hb_filter (&item_t::is_real)
-    | hb_map (&item_t::get_pair)
   )
   auto iter_ref () const HB_AUTO_RETURN
   (
-    + hb_array (items, mask ? mask + 1 : 0)
-    | hb_filter (&item_t::is_real)
+    + iter_items ()
     | hb_map (&item_t::get_pair_ref)
   )
-  auto keys () const HB_AUTO_RETURN
+  auto iter () const HB_AUTO_RETURN
   (
-    + hb_array (items, mask ? mask + 1 : 0)
-    | hb_filter (&item_t::is_real)
-    | hb_map (&item_t::key)
-    | hb_map (hb_ridentity)
+    + iter_items ()
+    | hb_map (&item_t::get_pair)
   )
   auto keys_ref () const HB_AUTO_RETURN
   (
-    + hb_array (items, mask ? mask + 1 : 0)
-    | hb_filter (&item_t::is_real)
+    + iter_items ()
     | hb_map (&item_t::key)
   )
-  auto values () const HB_AUTO_RETURN
+  auto keys () const HB_AUTO_RETURN
   (
-    + hb_array (items, mask ? mask + 1 : 0)
-    | hb_filter (&item_t::is_real)
-    | hb_map (&item_t::value)
+    + keys_ref ()
     | hb_map (hb_ridentity)
   )
   auto values_ref () const HB_AUTO_RETURN
   (
-    + hb_array (items, mask ? mask + 1 : 0)
-    | hb_filter (&item_t::is_real)
+    + iter_items ()
     | hb_map (&item_t::value)
+  )
+  auto values () const HB_AUTO_RETURN
+  (
+    + values_ref ()
+    | hb_map (hb_ridentity)
   )
 
   /* Sink interface. */
