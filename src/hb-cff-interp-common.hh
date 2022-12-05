@@ -328,6 +328,8 @@ struct byte_str_ref_t
   void set_error ()      { str.backwards_length = str.length + 1; }
   bool in_error () const { return str.backwards_length > str.length; }
 
+  unsigned total_size () const { return str.length; }
+
   protected:
   hb_ubytes_t       str;
 };
@@ -552,9 +554,9 @@ struct interp_env_t
     str_ref.reset (str_);
   }
   bool in_error () const
-  { return error || str_ref.in_error () || argStack.in_error (); }
+  { return str_ref.in_error () || argStack.in_error (); }
 
-  void set_error () { error = true; }
+  void set_error () { str_ref.set_error (); }
 
   op_code_t fetch_op ()
   {
@@ -583,8 +585,6 @@ struct interp_env_t
 		str_ref;
   arg_stack_t<ARG>
 		argStack;
-  protected:
-  bool		error = false;
 };
 
 using num_interp_env_t =  interp_env_t<>;

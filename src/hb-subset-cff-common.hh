@@ -38,16 +38,12 @@ namespace CFF {
 struct str_encoder_t
 {
   str_encoder_t (str_buff_t &buff_)
-    : buff (buff_), error (false) {}
+    : buff (buff_) {}
 
   void reset () { buff.reset (); }
 
   void encode_byte (unsigned char b)
-  {
-    buff.push (b);
-    if (unlikely (buff.in_error ()))
-      set_error ();
-  }
+  { buff.push (b); }
 
   void encode_int (int v)
   {
@@ -112,23 +108,23 @@ struct str_encoder_t
   {
     unsigned int  offset = buff.length;
     /* Manually resize buffer since faster. */
-    if ((signed) (buff.length + str.length) <= buff.allocated)
+    if (likely ((signed) (buff.length + str.length) <= buff.allocated))
       buff.length += str.length;
     else if (unlikely (!buff.resize (offset + str.length)))
-    {
-      set_error ();
       return;
-    }
-    memcpy (buff.arrayZ + offset, &str[0], str.length);
+
+    /* Since our strings are one or two bytes typically,
+     * this is faster than memcpy. */
+    for (unsigned i = 0; i < str.length; i++)
+      buff.arrayZ[i + offset] = str.arrayZ[i];
+    // memcpy (buff.arrayZ + offset, &str[0], str.length);
   }
 
-  bool is_error () const { return error; }
+  bool is_error () const { return buff.in_error (); }
 
   protected:
-  void set_error () { error = true; }
 
   str_buff_t &buff;
-  bool    error;
 };
 
 struct cff_sub_table_info_t {
@@ -313,12 +309,12 @@ struct parsed_cs_op_t : op_str_t
   bool for_skip () const { return skip_flag; }
   void set_skip ()       { skip_flag = true; }
 
-  unsigned int  subr_num;
+  uint16_t subr_num;
 
   protected:
-  bool	  drop_flag;
-  bool	  keep_flag;
-  bool	  skip_flag;
+  bool	  drop_flag : 1;
+  bool	  keep_flag : 1;
+  bool	  skip_flag : 1;
 };
 
 struct parsed_cs_str_t : parsed_values_t<parsed_cs_op_t>
@@ -446,7 +442,11 @@ struct subr_subset_param_t
     if (unlikely (calling && !parsed_str->is_parsed () && (parsed_str->values.length > 0)))
       env.set_error ();
     else
+    {
+      if (!parsed_str->is_parsed ())
+        parsed_str->alloc (env.str_ref.total_size () / 2);
       current_parsed_str = parsed_str;
+    }
   }
 
   parsed_cs_str_t	*current_parsed_str;
@@ -569,7 +569,7 @@ struct subr_subsetter_t
       ENV env (str, acc, fd);
       cs_interpreter_t<ENV, OPSET, subr_subset_param_t> interp (env);
 
-      parsed_charstrings[i].alloc (str.length);
+      parsed_charstrings[i].alloc (str.length / 2);
       subr_subset_param_t  param (&parsed_charstrings[i],
 				  &parsed_global_subrs,
 				  &parsed_local_subrs[fd],
@@ -856,7 +856,7 @@ struct subr_subsetter_t
     unsigned count = str.get_count ();
     str_encoder_t  encoder (buff);
     encoder.reset ();
-    buff.alloc (count * 3);
+    buff.alloc (count * 2);
     /* if a prefix (CFF1 width or CFF2 vsindex) has been removed along with hints,
      * re-insert it at the beginning of charstreing */
     if (str.has_prefix () && str.is_hint_dropped ())
