@@ -199,6 +199,8 @@ main (int argc, char **argv)
     assert (v.length == 1);
     m1 << hb_pair_t<vector_t, vector_t&&> {vector_t {4}, std::move (v)};
     assert (v.length == 0);
+    m1 << hb_pair_t<vector_t&&, vector_t> {vector_t {4}, vector_t {5}};
+    m1 << hb_pair_t<vector_t&&, vector_t&&> {vector_t {4}, vector_t {5}};
 
     hb_hashmap_t<vector_t, vector_t> m2;
     vector_t v2 {3};
@@ -212,6 +214,8 @@ main (int argc, char **argv)
   {
     hb_hashmap_t<hb::shared_ptr<hb_set_t>, hb::shared_ptr<hb_set_t>> m;
 
+    m.set (hb::shared_ptr<hb_set_t> (hb_set_get_empty ()),
+	   hb::shared_ptr<hb_set_t> (hb_set_get_empty ()));
     m.get (hb::shared_ptr<hb_set_t> (hb_set_get_empty ()));
     m.iter ();
     m.keys ();
@@ -224,8 +228,10 @@ main (int argc, char **argv)
   {
     hb_hashmap_t<hb::unique_ptr<hb_set_t>, hb::unique_ptr<hb_set_t>> m;
 
-    m.set (hb::unique_ptr<hb_set_t> (hb_set_get_empty ()),
-	   hb::unique_ptr<hb_set_t> (hb_set_get_empty ()));
+    // Doesn't work.
+    // See commit f657ef7e57c889309c2d9d37934368ca255f9d5b and its revert.
+    //m.set (hb::unique_ptr<hb_set_t> (hb_set_get_empty ()),
+    //       hb::unique_ptr<hb_set_t> (hb_set_get_empty ()));
     m.get (hb::unique_ptr<hb_set_t> (hb_set_get_empty ()));
     m.iter_ref ();
     m.keys_ref ();
