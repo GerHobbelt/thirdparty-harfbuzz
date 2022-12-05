@@ -119,7 +119,7 @@ struct str_encoder_t
       return;
 
     /* Faster than hb_memcpy for small strings. */
-    auto arr = buff.arrayZ + offset;
+    auto *arr = buff.arrayZ + offset;
     /* Length is at least one; and mostly just one. */
     arr[0] = str[0];
     for (unsigned i = 1; i < length; i++)
@@ -281,11 +281,9 @@ struct subr_flattener_t
 
 struct subr_closures_t
 {
-  subr_closures_t (unsigned int fd_count) : valid (false), global_closure (), local_closures ()
+  subr_closures_t (unsigned int fd_count) : global_closure (), local_closures ()
   {
-    valid = true;
-    if (!local_closures.resize (fd_count))
-      valid = false;
+    local_closures.resize (fd_count);
   }
 
   void reset ()
@@ -295,8 +293,7 @@ struct subr_closures_t
       local_closures[i].clear();
   }
 
-  bool is_valid () const { return valid; }
-  bool  valid;
+  bool in_error () const { return local_closures.in_error (); }
   hb_set_t  global_closure;
   hb_vector_t<hb_set_t> local_closures;
 };
@@ -307,26 +304,16 @@ struct parsed_cs_op_t : op_str_t
   {
     subr_num = subr_num_;
     drop_flag = false;
-    keep_flag = false;
-    skip_flag = false;
   }
 
   bool for_drop () const { return drop_flag; }
-  void set_drop ()       { if (!for_keep ()) drop_flag = true; }
-
-  bool for_keep () const { return keep_flag; }
-  void set_keep ()       { keep_flag = true; }
-
-  bool for_skip () const { return skip_flag; }
-  void set_skip ()       { skip_flag = true; }
+  void set_drop ()       { drop_flag = true; }
 
   /* The layout of this struct is designed to fit within the
    * padding of op_str_t! */
 
   protected:
-  bool	  drop_flag : 1;
-  bool	  keep_flag : 1;
-  bool	  skip_flag : 1;
+  bool	  drop_flag;
 
   public:
   uint16_t subr_num;
@@ -340,6 +327,7 @@ struct parsed_cs_str_t : parsed_values_t<parsed_cs_op_t>
     parsed = false;
     hint_dropped = false;
     has_prefix_ = false;
+    has_calls_ = false;
   }
 
   void add_op (op_code_t op, const byte_str_ref_t& str_ref)
@@ -352,9 +340,11 @@ struct parsed_cs_str_t : parsed_values_t<parsed_cs_op_t>
   {
     if (!is_parsed ())
     {
+      has_calls_ = true;
+
       unsigned int parsed_len = get_count ();
       if (likely (parsed_len > 0))
-	values[parsed_len-1].set_skip ();
+        values.pop ();
 
       parsed_cs_op_t val;
       val.init (subr_num);
@@ -388,11 +378,14 @@ struct parsed_cs_str_t : parsed_values_t<parsed_cs_op_t>
   op_code_t prefix_op () const         { return prefix_op_; }
   const number_t &prefix_num () const { return prefix_num_; }
 
+  bool has_calls () const          { return has_calls_; }
+
   protected:
-  bool    parsed;
-  bool    hint_dropped;
-  bool    vsindex_dropped;
-  bool    has_prefix_;
+  bool    parsed : 1;
+  bool    hint_dropped : 1;
+  bool    vsindex_dropped : 1;
+  bool    has_prefix_ : 1;
+  bool    has_calls_ : 1;
   op_code_t	prefix_op_;
   number_t	prefix_num_;
 
@@ -583,7 +576,7 @@ template <typename SUBSETTER, typename SUBRS, typename ACC, typename ENV, typena
 struct subr_subsetter_t
 {
   subr_subsetter_t (ACC &acc_, const hb_subset_plan_t *plan_)
-      : acc (acc_), plan (plan_), closures(acc_.fdCount), cached_charstrings(),
+      : acc (acc_), plan (plan_), closures(acc_.fdCount),
         remaps(acc_.fdCount)
   {}
 
@@ -637,7 +630,7 @@ struct subr_subsetter_t
       parsed_local_subrs[i].resize (count);
       if (unlikely (parsed_local_subrs[i].in_error ())) return false;
     }
-    if (unlikely (!closures.valid))
+    if (unlikely (closures.in_error ()))
       return false;
 
 
@@ -955,8 +948,7 @@ struct subr_subsetter_t
     return true;
   }
 
-  void collect_subr_refs_in_subr (const parsed_cs_str_t &str, unsigned int pos,
-				  unsigned int subr_num, parsed_cs_str_vec_t &subrs,
+  void collect_subr_refs_in_subr (unsigned int subr_num, parsed_cs_str_vec_t &subrs,
 				  hb_set_t *closure,
 				  const subr_subset_param_t &param)
   {
@@ -968,23 +960,25 @@ struct subr_subsetter_t
 
   void collect_subr_refs_in_str (const parsed_cs_str_t &str, const subr_subset_param_t &param)
   {
+    if (!str.has_calls ())
+      return;
+
+    auto *values = str.values.arrayZ;
     unsigned count = str.values.length;
-    auto &values = str.values.arrayZ;
-    for (unsigned int pos = 0; pos < count; pos++)
+    for (unsigned i = 0; i < count; i++)
     {
-      if (!values[pos].for_drop ())
+      auto &value = values[i];
+      if (!value.for_drop ())
       {
-	switch (values[pos].op)
+	switch (value.op)
 	{
 	  case OpCode_callsubr:
-	    collect_subr_refs_in_subr (str, pos,
-				       values[pos].subr_num, *param.parsed_local_subrs,
+	    collect_subr_refs_in_subr (value.subr_num, *param.parsed_local_subrs,
 				       param.local_closure, param);
 	    break;
 
 	  case OpCode_callgsubr:
-	    collect_subr_refs_in_subr (str, pos,
-				       values[pos].subr_num, *param.parsed_global_subrs,
+	    collect_subr_refs_in_subr (value.subr_num, *param.parsed_global_subrs,
 				       param.global_closure, param);
 	    break;
 
@@ -1008,11 +1002,11 @@ struct subr_subsetter_t
       if (str.prefix_op () != OpCode_Invalid)
 	encoder.encode_op (str.prefix_op ());
     }
-    auto &arr = str.values.arrayZ;
+    auto *arr = str.values.arrayZ;
     for (unsigned int i = 0; i < count; i++)
     {
       const parsed_cs_op_t  &opstr = arr[i];
-      if (!opstr.for_drop () && !opstr.for_skip ())
+      if (!opstr.for_drop ())
       {
 	switch (opstr.op)
 	{
