@@ -540,21 +540,21 @@ struct hb_bit_set_t
     b = nb;
     for (; a && b; )
     {
-      if (page_map[a - 1].major == other.page_map[b - 1].major)
+      if (page_map.arrayZ[a - 1].major == other.page_map.arrayZ[b - 1].major)
       {
 	a--;
 	b--;
 	count--;
-	page_map[count] = page_map[a];
+	page_map.arrayZ[count] = page_map.arrayZ[a];
 	page_at (count).v = op (page_at (a).v, other.page_at (b).v);
       }
-      else if (page_map[a - 1].major > other.page_map[b - 1].major)
+      else if (page_map.arrayZ[a - 1].major > other.page_map.arrayZ[b - 1].major)
       {
 	a--;
 	if (passthru_left)
 	{
 	  count--;
-	  page_map[count] = page_map[a];
+	  page_map.arrayZ[count] = page_map.arrayZ[a];
 	}
       }
       else
@@ -563,8 +563,8 @@ struct hb_bit_set_t
 	if (passthru_right)
 	{
 	  count--;
-	  page_map[count].major = other.page_map[b].major;
-	  page_map[count].index = next_page++;
+	  page_map.arrayZ[count].major = other.page_map.arrayZ[b].major;
+	  page_map.arrayZ[count].index = next_page++;
 	  page_at (count).v = other.page_at (b).v;
 	}
       }
@@ -574,15 +574,15 @@ struct hb_bit_set_t
       {
 	a--;
 	count--;
-	page_map[count] = page_map [a];
+	page_map.arrayZ[count] = page_map.arrayZ[a];
       }
     if (passthru_right)
       while (b)
       {
 	b--;
 	count--;
-	page_map[count].major = other.page_map[b].major;
-	page_map[count].index = next_page++;
+	page_map.arrayZ[count].major = other.page_map.arrayZ[b].major;
+	page_map.arrayZ[count].index = next_page++;
 	page_at (count).v = other.page_at (b).v;
       }
     assert (!count);
@@ -605,8 +605,6 @@ struct hb_bit_set_t
 
   bool next (hb_codepoint_t *codepoint) const
   {
-    // TODO: this should be merged with prev() as both implementations
-    //       are very similar.
     if (unlikely (*codepoint == INVALID)) {
       *codepoint = get_min ();
       return *codepoint != INVALID;
@@ -642,7 +640,7 @@ struct hb_bit_set_t
 
     for (; i < page_map.length; i++)
     {
-      const page_map_t &current = page_map.arrayZ[i];
+      const page_map_t &current = page_map_array[i];
       hb_codepoint_t m = pages_array[current.index].get_min ();
       if (m != INVALID)
       {
@@ -665,21 +663,21 @@ struct hb_bit_set_t
     page_map_t map = {get_major (*codepoint), 0};
     unsigned int i;
     page_map.bfind (map, &i, HB_NOT_FOUND_STORE_CLOSEST);
-    if (i < page_map.length && page_map[i].major == map.major)
+    if (i < page_map.length && page_map.arrayZ[i].major == map.major)
     {
-      if (pages[page_map[i].index].previous (codepoint))
+      if (pages[page_map.arrayZ[i].index].previous (codepoint))
       {
-	*codepoint += page_map[i].major * page_t::PAGE_BITS;
+	*codepoint += page_map.arrayZ[i].major * page_t::PAGE_BITS;
 	return true;
       }
     }
     i--;
     for (; (int) i >= 0; i--)
     {
-      hb_codepoint_t m = pages[page_map[i].index].get_max ();
+      hb_codepoint_t m = pages.arrayZ[page_map.arrayZ[i].index].get_max ();
       if (m != INVALID)
       {
-	*codepoint = page_map[i].major * page_t::PAGE_BITS + m;
+	*codepoint = page_map.arrayZ[i].major * page_t::PAGE_BITS + m;
 	return true;
       }
     }
@@ -951,8 +949,16 @@ struct hb_bit_set_t
     last_page_lookup = i;
     return &pages.arrayZ[page_map[i].index];
   }
-  page_t &page_at (unsigned int i) { return pages[page_map[i].index]; }
-  const page_t &page_at (unsigned int i) const { return pages[page_map[i].index]; }
+  page_t &page_at (unsigned int i)
+  {
+    assert (i < page_map.length);
+    return pages.arrayZ[page_map.arrayZ[i].index];
+  }
+  const page_t &page_at (unsigned int i) const
+  {
+    assert (i < page_map.length);
+    return pages.arrayZ[page_map.arrayZ[i].index];
+  }
   unsigned int get_major (hb_codepoint_t g) const { return g >> page_t::PAGE_BITS_LOG_2; }
   unsigned int page_remainder (hb_codepoint_t g) const { return g & page_t::PAGE_BITMASK; }
   hb_codepoint_t major_start (unsigned int major) const { return major << page_t::PAGE_BITS_LOG_2; }
