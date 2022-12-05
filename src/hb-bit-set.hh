@@ -85,10 +85,10 @@ struct hb_bit_set_t
   void err () { if (successful) successful = false; } /* TODO Remove */
   bool in_error () const { return !successful; }
 
-  bool resize (unsigned int count)
+  bool resize (unsigned int count, bool clear = true)
   {
     if (unlikely (!successful)) return false;
-    if (unlikely (!pages.resize (count) || !page_map.resize (count)))
+    if (unlikely (!pages.resize (count, clear) || !page_map.resize (count, clear)))
     {
       pages.resize (page_map.length);
       successful = false;
@@ -350,7 +350,7 @@ struct hb_bit_set_t
   {
     if (unlikely (!successful)) return;
     unsigned int count = other.pages.length;
-    if (unlikely (!resize (count)))
+    if (unlikely (!resize (count, false)))
       return;
     population = other.population;
 
@@ -903,7 +903,7 @@ struct hb_bit_set_t
     {
       auto &cached_page = page_map.arrayZ[i];
       if (cached_page.major == major)
-	return &pages[cached_page.index];
+	return &pages.arrayZ[cached_page.index];
     }
 
     page_map_t map = {major, pages.length};
@@ -915,15 +915,15 @@ struct hb_bit_set_t
       if (unlikely (!resize (pages.length + 1)))
 	return nullptr;
 
-      pages[map.index].init0 ();
-      memmove (page_map + i + 1,
-	       page_map + i,
+      pages.arrayZ[map.index].init0 ();
+      memmove (page_map.arrayZ + i + 1,
+	       page_map.arrayZ + i,
 	       (page_map.length - 1 - i) * page_map.item_size);
       page_map[i] = map;
     }
 
     last_page_lookup = i;
-    return &pages[page_map[i].index];
+    return &pages.arrayZ[page_map.arrayZ[i].index];
   }
   const page_t *page_for (hb_codepoint_t g) const
   {
