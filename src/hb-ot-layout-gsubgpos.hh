@@ -535,7 +535,12 @@ struct hb_ot_apply_context_t :
     bool next (unsigned *unsafe_to = nullptr)
     {
       assert (num_items > 0);
-      while (idx + num_items < end)
+      /* The alternate condition below is faster at string boundaries,
+       * but produces subpar "unsafe-to-concat" values. */
+      signed stop = (signed) end - (signed) num_items;
+      if (c->buffer->flags & HB_BUFFER_FLAG_PRODUCE_UNSAFE_TO_CONCAT)
+        stop = (signed) end - 1;
+      while ((signed) idx < stop)
       {
 	idx++;
 	hb_glyph_info_t &info = c->buffer->info[idx];
@@ -568,7 +573,12 @@ struct hb_ot_apply_context_t :
     bool prev (unsigned *unsafe_from = nullptr)
     {
       assert (num_items > 0);
-      while (idx > num_items - 1)
+      /* The alternate condition below is faster at string boundaries,
+       * but produces subpar "unsafe-to-concat" values. */
+      unsigned stop = num_items - 1;
+      if (c->buffer->flags & HB_BUFFER_FLAG_PRODUCE_UNSAFE_TO_CONCAT)
+        stop = 1 - 1;
+      while (idx > stop)
       {
 	idx--;
 	hb_glyph_info_t &info = c->buffer->out_info[idx];
@@ -2411,6 +2421,7 @@ struct ContextFormat2_5
     const hb_map_t *lookup_map = c->table_tag == HB_OT_TAG_GSUB ? c->plan->gsub_lookups : c->plan->gpos_lookups;
     bool ret = true;
     int non_zero_index = -1, index = 0;
+    auto snapshot = c->serializer->snapshot();
     for (const auto& _ : + hb_enumerate (ruleSet)
 			 | hb_filter (klass_map, hb_first))
     {
@@ -2422,8 +2433,10 @@ struct ContextFormat2_5
       }
 
       if (coverage_glyph_classes.has (_.first) &&
-	  o->serialize_subset (c, _.second, this, lookup_map, &klass_map))
+	  o->serialize_subset (c, _.second, this, lookup_map, &klass_map)) {
 	non_zero_index = index;
+        snapshot = c->serializer->snapshot();
+      }
 
       index++;
     }
@@ -2437,6 +2450,7 @@ struct ContextFormat2_5
       out->ruleSet.pop ();
       index--;
     }
+    c->serializer->revert (snapshot);
 
     return_trace (bool (out->ruleSet));
   }

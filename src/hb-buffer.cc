@@ -980,7 +980,6 @@ hb_buffer_get_unicode_funcs (const hb_buffer_t *buffer)
 void
 hb_buffer_set_direction (hb_buffer_t    *buffer,
 			 hb_direction_t  direction)
-
 {
   if (unlikely (hb_object_is_immutable (buffer)))
     return;
@@ -1842,7 +1841,9 @@ hb_buffer_add_latin1 (hb_buffer_t   *buffer,
  * marks at stat of run.
  *
  * This function does not check the validity of @text, it is up to the caller
- * to ensure it contains a valid Unicode code points.
+ * to ensure it contains a valid Unicode code points.  In contrast,
+ * hb_buffer_add_utf32() can be used that takes similar input but performs
+ * sanity-check on the input.
  *
  * Since: 0.9.31
  **/
@@ -2150,6 +2151,13 @@ hb_buffer_set_message_func (hb_buffer_t *buffer,
 			    hb_buffer_message_func_t func,
 			    void *user_data, hb_destroy_func_t destroy)
 {
+  if (unlikely (hb_object_is_immutable (buffer)))
+  {
+    if (destroy)
+      destroy (user_data);
+    return;
+  }
+
   if (buffer->message_destroy)
     buffer->message_destroy (buffer->message_data);
 
