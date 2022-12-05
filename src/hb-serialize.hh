@@ -223,6 +223,7 @@ struct hb_serialize_context_t
     this->errors = HB_SERIALIZE_ERROR_NONE;
     this->head = this->start;
     this->tail = this->end;
+    this->zerocopy = nullptr;
     this->debug_depth = 0;
 
     fini ();
@@ -343,8 +344,11 @@ struct hb_serialize_context_t
     current = current->next;
     obj->tail = head;
     obj->next = nullptr;
+    assert (obj->head <= obj->tail);
     unsigned len = obj->tail - obj->head;
-    head = obj->head; /* Rewind head. */
+    head = zerocopy ? zerocopy : obj->head; /* Rewind head. */
+    if (zerocopy)
+      assert (!share);
 
     if (!len)
     {
@@ -368,7 +372,13 @@ struct hb_serialize_context_t
     }
 
     tail -= len;
-    memmove (tail, obj->head, len);
+    if (zerocopy)
+    {
+      zerocopy = nullptr;
+      assert (tail == obj->head);
+    }
+    else
+      memmove (tail, obj->head, len);
 
     obj->head = tail;
     obj->tail = tail + len;
@@ -570,6 +580,24 @@ struct hb_serialize_context_t
     return !bool ((errors = (errors | err_type)));
   }
 
+  bool start_zerocopy (size_t size)
+  {
+    if (unlikely (in_error ())) return false;
+
+    if (unlikely (size > INT_MAX || this->tail - this->head < ptrdiff_t (size)))
+    {
+      err (HB_SERIALIZE_ERROR_OUT_OF_ROOM);
+      return false;
+    }
+
+    assert (!this->zerocopy);
+    this->zerocopy = this->head;
+
+    assert (this->current->head == this->head);
+    this->current->head = this->current->tail = this->head = this->tail - size;
+    return true;
+  }
+
   template <typename Type>
   Type *allocate_size (size_t size, bool clear = true)
   {
@@ -595,7 +623,7 @@ struct hb_serialize_context_t
   Type *embed (const Type *obj)
   {
     unsigned int size = obj->get_size ();
-    Type *ret = this->allocate_size<Type> (size);
+    Type *ret = this->allocate_size<Type> (size, false);
     if (unlikely (!ret)) return nullptr;
     hb_memcpy (ret, obj, size);
     return ret;
@@ -706,7 +734,7 @@ struct hb_serialize_context_t
   }
 
   public:
-  char *start, *head, *tail, *end;
+  char *start, *head, *tail, *end, *zerocopy;
   unsigned int debug_depth;
   hb_serialize_error_t errors;
 

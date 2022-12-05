@@ -613,7 +613,6 @@ struct CFF1StringIndex : CFF1Index
     }
 
     byte_str_array_t bytesArray;
-    bytesArray.init ();
     if (!bytesArray.resize (sidmap.get_population ()))
       return_trace (false);
     for (unsigned int i = 0; i < strings.count; i++)
@@ -624,7 +623,6 @@ struct CFF1StringIndex : CFF1Index
     }
 
     bool result = CFF1Index::serialize (c, bytesArray);
-    bytesArray.fini ();
     return_trace (result);
   }
 };
