@@ -1946,21 +1946,20 @@ struct ClassDefFormat2_4
 
   void intersected_class_glyphs (const hb_set_t *glyphs, unsigned klass, hb_set_t *intersect_glyphs) const
   {
-    unsigned count = rangeRecord.len;
     if (klass == 0)
     {
       hb_codepoint_t g = HB_SET_VALUE_INVALID;
-      for (unsigned int i = 0; i < count; i++)
+      for (auto &range : rangeRecord)
       {
 	if (!glyphs->next (&g))
 	  goto done;
-	while (g < rangeRecord[i].first)
+	while (g < range.first)
 	{
 	  intersect_glyphs->add (g);
 	  if (!glyphs->next (&g))
 	    goto done;
         }
-        g = rangeRecord[i].last;
+        g = range.last;
       }
       while (glyphs->next (&g))
 	intersect_glyphs->add (g);
@@ -1969,25 +1968,26 @@ struct ClassDefFormat2_4
       return;
     }
 
-#if 0
-    /* The following implementation is faster asymptotically, but slower
-     * in practice. */
-    if ((count >> 3) > glyphs->get_population ())
+    unsigned count = rangeRecord.len;
+    if (count > glyphs->get_population () * hb_bit_storage (count) * 8)
     {
       for (hb_codepoint_t g = HB_SET_VALUE_INVALID;
 	   glyphs->next (&g);)
-        if (rangeRecord.as_array ().bfind (g))
+      {
+        unsigned i;
+        if (rangeRecord.as_array ().bfind (g, &i) &&
+	    rangeRecord.arrayZ[i].value == klass)
 	  intersect_glyphs->add (g);
+      }
       return;
     }
-#endif
 
-    for (unsigned int i = 0; i < count; i++)
+    for (auto &range : rangeRecord)
     {
-      if (rangeRecord[i].value != klass) continue;
+      if (range.value != klass) continue;
 
-      unsigned end = rangeRecord[i].last + 1;
-      for (hb_codepoint_t g = rangeRecord[i].first - 1;
+      unsigned end = range.last + 1;
+      for (hb_codepoint_t g = range.first - 1;
 	   glyphs->next (&g) && g < end;)
 	intersect_glyphs->add (g);
     }
@@ -1997,25 +1997,24 @@ struct ClassDefFormat2_4
   {
     if (glyphs->is_empty ()) return;
 
-    unsigned count = rangeRecord.len;
     hb_codepoint_t g = HB_SET_VALUE_INVALID;
-    for (unsigned int i = 0; i < count; i++)
+    for (auto &range : rangeRecord)
     {
       if (!glyphs->next (&g))
         break;
-      if (g < rangeRecord[i].first)
+      if (g < range.first)
       {
         intersect_classes->add (0);
         break;
       }
-      g = rangeRecord[i].last;
+      g = range.last;
     }
     if (g != HB_SET_VALUE_INVALID && glyphs->next (&g))
       intersect_classes->add (0);
 
-    for (const auto& record : rangeRecord)
-      if (record.intersects (*glyphs))
-        intersect_classes->add (record.value);
+    for (const auto& range : rangeRecord)
+      if (range.intersects (*glyphs))
+        intersect_classes->add (range.value);
   }
 
   protected:

@@ -94,17 +94,15 @@ struct hb_subset_accelerator_t
   const hb_set_t unicodes;
 
   // cmap
-  OT::SubtableUnicodesCache* cmap_cache;
+  const OT::SubtableUnicodesCache* cmap_cache;
   hb_destroy_func_t destroy_cmap_cache;
 
   // CFF
   bool has_seac;
-  CFF::cff_subset_accelerator_t* cff_accelerator;
+  const CFF::cff_subset_accelerator_t* cff_accelerator;
   hb_destroy_func_t destroy_cff_accelerator;
 
-  // TODO(garretrieger): see if we can make the cff_accelerator and cmap_cache const
   // TODO(garretrieger): cumulative glyf checksum map
-  // TODO(garretrieger): sanitized table cache.
 
   bool in_error () const
   {
