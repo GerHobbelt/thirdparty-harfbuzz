@@ -104,6 +104,11 @@ struct hb_array_t : hb_iter_with_fallback_t<hb_array_t<Type>, Type&>
   bool operator != (const hb_array_t& o) const
   { return this->arrayZ != o.arrayZ || this->length != o.length; }
 
+  /* Faster range-based for loop without bounds-check. */
+  Type *begin () const { return arrayZ; }
+  Type *end () const { return arrayZ + length; }
+
+
   /* Extra operators.
    */
   Type * operator & () const { return arrayZ; }
@@ -321,6 +326,11 @@ struct hb_sorted_array_t :
   /* See comment in hb_array_of::operator != */
   bool operator != (const hb_sorted_array_t& o) const
   { return this->arrayZ != o.arrayZ || this->length != o.length; }
+
+  /* Faster range-based for loop without bounds-check. */
+  Type *begin () const { return this->arrayZ; }
+  Type *end () const { return this->arrayZ + this->length; }
+
 
   hb_sorted_array_t sub_array (unsigned int start_offset, unsigned int *seg_count /* IN/OUT */) const
   { return hb_sorted_array_t (((const hb_array_t<Type> *) (this))->sub_array (start_offset, seg_count)); }

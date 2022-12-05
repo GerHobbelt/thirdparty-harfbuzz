@@ -302,7 +302,7 @@ struct byte_str_ref_t
       set_error ();
       return Null (unsigned char);
     }
-    return str[get_offset () + i];
+    return str.arrayZ[get_offset () + i];
   }
 
   /* Conversion to hb_ubytes_t */
@@ -315,10 +315,8 @@ struct byte_str_ref_t
   { return get_offset () + count <= str.length; }
   void inc (unsigned int count=1)
   {
-    if (get_offset () + count <= str.length)
-      set_offset (get_offset () + count);
-    else
-      set_error ();
+    /* Automatically puts us in error if count is out-of-range. */
+    set_offset (get_offset () + count);
   }
 
   /* We (ab)use ubytes backwards_length as a cursor (called offset),
