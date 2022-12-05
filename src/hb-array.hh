@@ -425,6 +425,45 @@ inline bool hb_array_t<const unsigned char>::operator == (const hb_array_t<const
 }
 
 
+/* Specialize hash() for byte arrays. */
+
+template <>
+inline uint32_t hb_array_t<const char>::hash () const
+{
+  uint32_t current = 0;
+  unsigned i = 0;
+
+#if defined(__OPTIMIZE__) && !defined(HB_NO_PACKED) && \
+    ((defined(__GNUC__) && __GNUC__ >= 5) || defined(__clang__))
+  struct __attribute__((packed)) packed_uint32_t { uint32_t v; };
+  for (; i + 4 <= this->length; i += 4)
+    current = current * 31 + (uint32_t) ((((packed_uint32_t *) &this->arrayZ[i])->v) * 2654435761u);
+#endif
+
+  for (; i < this->length; i++)
+    current = current * 31 + (uint32_t) (this->arrayZ[i] * 2654435761u);
+  return current;
+}
+
+template <>
+inline uint32_t hb_array_t<const unsigned char>::hash () const
+{
+  uint32_t current = 0;
+  unsigned i = 0;
+
+#if defined(__OPTIMIZE__) && !defined(HB_NO_PACKED) && \
+    ((defined(__GNUC__) && __GNUC__ >= 5) || defined(__clang__))
+  struct __attribute__((packed)) packed_uint32_t { uint32_t v; };
+  for (; i + 4 <= this->length; i += 4)
+    current = current * 31 + (uint32_t) ((((packed_uint32_t *) &this->arrayZ[i])->v) * 2654435761u);
+#endif
+
+  for (; i < this->length; i++)
+    current = current * 31 + (uint32_t) (this->arrayZ[i] * 2654435761u);
+  return current;
+}
+
+
 typedef hb_array_t<const char> hb_bytes_t;
 typedef hb_array_t<const unsigned char> hb_ubytes_t;
 

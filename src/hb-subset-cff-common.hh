@@ -104,20 +104,20 @@ struct str_encoder_t
       encode_byte (op);
   }
 
-  void copy_str (const hb_ubytes_t &str)
+  void copy_str (const unsigned char *str, unsigned length)
   {
     unsigned int  offset = buff.length;
     /* Manually resize buffer since faster. */
-    if (likely ((signed) (buff.length + str.length) <= buff.allocated))
-      buff.length += str.length;
-    else if (unlikely (!buff.resize (offset + str.length)))
+    if (likely ((signed) (buff.length + length) <= buff.allocated))
+      buff.length += length;
+    else if (unlikely (!buff.resize (offset + length)))
       return;
 
     /* Since our strings are one or two bytes typically,
      * this is faster than memcpy. */
-    for (unsigned i = 0; i < str.length; i++)
-      buff.arrayZ[i + offset] = str.arrayZ[i];
-    // memcpy (buff.arrayZ + offset, &str[0], str.length);
+    for (unsigned i = 0; i < length; i++)
+      buff.arrayZ[i + offset] = str[i];
+    // memcpy (buff.arrayZ + offset, str, length);
   }
 
   bool is_error () const { return buff.in_error (); }
@@ -183,9 +183,9 @@ struct cff_font_dict_op_serializer_t : op_serializer_t
     }
     else
     {
-      HBUINT8 *d = c->allocate_size<HBUINT8> (opstr.str.length);
+      HBUINT8 *d = c->allocate_size<HBUINT8> (opstr.length);
       if (unlikely (!d)) return_trace (false);
-      memcpy (d, &opstr.str[0], opstr.str.length);
+      memcpy (d, opstr.ptr, opstr.length);
     }
     return_trace (true);
   }
@@ -309,12 +309,16 @@ struct parsed_cs_op_t : op_str_t
   bool for_skip () const { return skip_flag; }
   void set_skip ()       { skip_flag = true; }
 
-  uint16_t subr_num;
+  /* The layout of this struct is designed to fit within the
+   * padding of op_str_t! */
 
   protected:
   bool	  drop_flag : 1;
   bool	  keep_flag : 1;
   bool	  skip_flag : 1;
+
+  public:
+  uint16_t subr_num;
 };
 
 struct parsed_cs_str_t : parsed_values_t<parsed_cs_op_t>
@@ -821,6 +825,8 @@ struct subr_subsetter_t
 				  hb_set_t *closure,
 				  const subr_subset_param_t &param)
   {
+    if (closure->has (subr_num))
+      return;
     closure->add (subr_num);
     collect_subr_refs_in_str (subrs[subr_num], param);
   }
@@ -883,7 +889,7 @@ struct subr_subsetter_t
 	    break;
 
 	  default:
-	    encoder.copy_str (opstr.str);
+	    encoder.copy_str (opstr.ptr, opstr.length);
 	    break;
 	}
       }

@@ -480,8 +480,15 @@ struct arg_stack_t : cff_stack_t<ARG, 513>
 /* an operator prefixed by its operands in a byte string */
 struct op_str_t
 {
-  hb_ubytes_t str;
+  /* This used to have a hb_ubytes_t. Using a pointer and length
+   * in a particular order, saves 8 bytes in this struct and more
+   * in our parsed_cs_op_t subclass. */
+
+  const unsigned char *ptr = nullptr;
+
   op_code_t  op;
+
+  uint8_t length = 0;
 };
 
 /* base of OP_SERIALIZER */
@@ -492,9 +499,9 @@ struct op_serializer_t
   {
     TRACE_SERIALIZE (this);
 
-    HBUINT8 *d = c->allocate_size<HBUINT8> (opstr.str.length);
+    HBUINT8 *d = c->allocate_size<HBUINT8> (opstr.length);
     if (unlikely (!d)) return_trace (false);
-    memcpy (d, &opstr.str[0], opstr.str.length);
+    memcpy (d, opstr.ptr, opstr.length);
     return_trace (true);
   }
 };
@@ -518,7 +525,9 @@ struct parsed_values_t
   {
     VAL *val = values.push ();
     val->op = op;
-    val->str = str_ref.sub_array (opStart, str_ref.get_offset () - opStart);
+    auto arr = str_ref.sub_array (opStart, str_ref.get_offset () - opStart);
+    val->ptr = arr.arrayZ;
+    val->length = arr.length;
     opStart = str_ref.get_offset ();
   }
 
@@ -526,7 +535,9 @@ struct parsed_values_t
   {
     VAL *val = values.push (v);
     val->op = op;
-    val->str = str_ref.sub_array (opStart, str_ref.get_offset () - opStart);
+    auto arr = str_ref.sub_array (opStart, str_ref.get_offset () - opStart);
+    val->ptr = arr.arrayZ;
+    val->length = arr.length;
     opStart = str_ref.get_offset ();
   }
 
