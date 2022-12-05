@@ -60,8 +60,7 @@ struct contour_point_vector_t : hb_vector_t<contour_point_t>
       return;
     auto arrayZ = this->arrayZ + old_len;
     unsigned count = a.length;
-    for (unsigned int i = 0; i < count; i++)
-      arrayZ[i] = a.arrayZ[i];
+    hb_memcpy (arrayZ, a.arrayZ, count * sizeof (arrayZ[0]));
   }
 
   void transform (const float (&matrix)[4])
@@ -231,7 +230,8 @@ struct GlyphVariationData
     {
       return (index < var_data->tupleVarCount.get_count ()) &&
 	     var_data_bytes.check_range (current_tuple, TupleVariationHeader::min_size) &&
-	     var_data_bytes.check_range (current_tuple, hb_max (current_tuple->get_data_size (), current_tuple->get_size (axis_count))) &&
+	     var_data_bytes.check_range (current_tuple, hb_max (current_tuple->get_data_size (),
+								current_tuple->get_size (axis_count))) &&
 	     current_tuple->get_size (axis_count);
     }
 
@@ -526,11 +526,11 @@ struct gvar
 			      unsigned int target, unsigned int prev, unsigned int next,
 			      float contour_point_t::*m)
     {
-      float target_val = points[target].*m;
-      float prev_val = points[prev].*m;
-      float next_val = points[next].*m;
-      float prev_delta =  deltas[prev].*m;
-      float next_delta =  deltas[next].*m;
+      float target_val = points.arrayZ[target].*m;
+      float prev_val = points.arrayZ[prev].*m;
+      float next_val = points.arrayZ[next].*m;
+      float prev_delta =  deltas.arrayZ[prev].*m;
+      float next_delta =  deltas.arrayZ[next].*m;
 
       if (prev_val == next_val)
 	return (prev_delta == next_delta) ? prev_delta : 0.f;
@@ -564,17 +564,18 @@ struct gvar
 	return true; /* so isn't applied at all */
 
       /* Save original points for inferred delta calculation */
-      contour_point_vector_t orig_points;
-      if (unlikely (!orig_points.resize (points.length, false))) return false;
-      for (unsigned int i = 0; i < orig_points.length; i++)
-	orig_points.arrayZ[i] = points.arrayZ[i];
+      contour_point_vector_t orig_points_vec;
+      orig_points_vec.extend (points);
+      if (unlikely (orig_points_vec.in_error ())) return false;
+      auto orig_points = orig_points_vec.as_array ();
 
-      contour_point_vector_t deltas; /* flag is used to indicate referenced point */
-      if (unlikely (!deltas.resize (points.length, false))) return false;
+      contour_point_vector_t deltas_vec; /* flag is used to indicate referenced point */
+      if (unlikely (!deltas_vec.resize (points.length, false))) return false;
+      auto deltas = deltas_vec.as_array ();
 
       hb_vector_t<unsigned> end_points;
       for (unsigned i = 0; i < points.length; ++i)
-	if (points[i].is_end_point)
+	if (points.arrayZ[i].is_end_point)
 	  end_points.push (i);
 
       auto coords = hb_array (font->coords, font->num_coords);
@@ -608,27 +609,37 @@ struct gvar
 	if (unlikely (!y_deltas.resize (num_deltas, false))) return false;
 	if (unlikely (!GlyphVariationData::unpack_deltas (p, y_deltas, end))) return false;
 
-	for (unsigned int i = 0; i < deltas.length; i++)
-	  deltas.arrayZ[i].init ();
-	for (unsigned int i = 0; i < num_deltas; i++)
-	{
-	  unsigned int pt_index = apply_to_all ? i : indices[i];
-	  if (unlikely (pt_index >= deltas.length)) continue;
-	  deltas.arrayZ[pt_index].flag = 1;	/* this point is referenced, i.e., explicit deltas specified */
-	  deltas.arrayZ[pt_index].x += x_deltas.arrayZ[i] * scalar;
-	  deltas.arrayZ[pt_index].y += y_deltas.arrayZ[i] * scalar;
-	}
+	hb_memset (deltas.arrayZ, 0, deltas.length * sizeof (deltas.arrayZ[0]));
+
+	if (scalar != 1.0f)
+	  for (unsigned int i = 0; i < num_deltas; i++)
+	  {
+	    unsigned int pt_index = apply_to_all ? i : indices[i];
+	    if (unlikely (pt_index >= deltas.length)) continue;
+	    deltas.arrayZ[pt_index].flag = 1;	/* this point is referenced, i.e., explicit deltas specified */
+	    deltas.arrayZ[pt_index].x += x_deltas.arrayZ[i] * scalar;
+	    deltas.arrayZ[pt_index].y += y_deltas.arrayZ[i] * scalar;
+	  }
+	else
+	  for (unsigned int i = 0; i < num_deltas; i++)
+	  {
+	    unsigned int pt_index = apply_to_all ? i : indices[i];
+	    if (unlikely (pt_index >= deltas.length)) continue;
+	    deltas.arrayZ[pt_index].flag = 1;	/* this point is referenced, i.e., explicit deltas specified */
+	    deltas.arrayZ[pt_index].x += x_deltas.arrayZ[i];
+	    deltas.arrayZ[pt_index].y += y_deltas.arrayZ[i];
+	  }
 
 	/* infer deltas for unreferenced points */
 	unsigned start_point = 0;
 	for (unsigned c = 0; c < end_points.length; c++)
 	{
-	  unsigned end_point = end_points[c];
+	  unsigned end_point = end_points.arrayZ[c];
 
 	  /* Check the number of unreferenced points in a contour. If no unref points or no ref points, nothing to do. */
 	  unsigned unref_count = 0;
 	  for (unsigned i = start_point; i <= end_point; i++)
-	    if (!deltas[i].flag) unref_count++;
+	    if (!deltas.arrayZ[i].flag) unref_count++;
 
 	  unsigned j = start_point;
 	  if (unref_count == 0 || unref_count > end_point - start_point)
@@ -644,14 +655,14 @@ struct gvar
 	    {
 	      i = j;
 	      j = next_index (i, start_point, end_point);
-	      if (deltas[i].flag && !deltas[j].flag) break;
+	      if (deltas.arrayZ[i].flag && !deltas.arrayZ[j].flag) break;
 	    }
 	    prev = j = i;
 	    for (;;)
 	    {
 	      i = j;
 	      j = next_index (i, start_point, end_point);
-	      if (!deltas[i].flag && deltas[j].flag) break;
+	      if (!deltas.arrayZ[i].flag && deltas.arrayZ[j].flag) break;
 	    }
 	    next = j;
 	    /* Infer deltas for all unref points in the gap between prev and next */
@@ -660,8 +671,8 @@ struct gvar
 	    {
 	      i = next_index (i, start_point, end_point);
 	      if (i == next) break;
-	      deltas[i].x = infer_delta (orig_points.as_array (), deltas.as_array (), i, prev, next, &contour_point_t::x);
-	      deltas[i].y = infer_delta (orig_points.as_array (), deltas.as_array (), i, prev, next, &contour_point_t::y);
+	      deltas.arrayZ[i].x = infer_delta (orig_points, deltas, i, prev, next, &contour_point_t::x);
+	      deltas.arrayZ[i].y = infer_delta (orig_points, deltas, i, prev, next, &contour_point_t::y);
 	      if (--unref_count == 0) goto no_more_gaps;
 	    }
 	  }

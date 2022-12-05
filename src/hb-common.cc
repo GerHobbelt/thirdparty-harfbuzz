@@ -983,7 +983,7 @@ hb_feature_from_string (const char *str, int len,
   }
 
   if (feature)
-    memset (feature, 0, sizeof (*feature));
+    hb_memset (feature, 0, sizeof (*feature));
   return false;
 }
 
@@ -1095,7 +1095,7 @@ hb_variation_from_string (const char *str, int len,
   }
 
   if (variation)
-    memset (variation, 0, sizeof (*variation));
+    hb_memset (variation, 0, sizeof (*variation));
   return false;
 }
 
