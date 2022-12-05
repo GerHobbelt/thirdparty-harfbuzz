@@ -231,8 +231,7 @@ struct GlyphVariationData
       return (index < var_data->tupleVarCount.get_count ()) &&
 	     var_data_bytes.check_range (current_tuple, TupleVariationHeader::min_size) &&
 	     var_data_bytes.check_range (current_tuple, hb_max (current_tuple->get_data_size (),
-								current_tuple->get_size (axis_count))) &&
-	     current_tuple->get_size (axis_count);
+								current_tuple->get_size (axis_count)));
     }
 
     bool move_to_next ()
@@ -281,7 +280,7 @@ struct GlyphVariationData
 
     if (unlikely (p + 1 > end)) return false;
 
-    uint16_t count = *p++;
+    unsigned count = *p++;
     if (count & POINTS_ARE_WORDS)
     {
       if (unlikely (p + 1 > end)) return false;
@@ -289,18 +288,19 @@ struct GlyphVariationData
     }
     if (unlikely (!points.resize (count, false))) return false;
 
-    unsigned int n = 0;
-    uint16_t i = 0;
+    unsigned n = 0;
+    unsigned i = 0;
     while (i < count)
     {
       if (unlikely (p + 1 > end)) return false;
-      uint16_t j;
-      uint8_t control = *p++;
-      uint16_t run_count = (control & POINT_RUN_COUNT_MASK) + 1;
+      unsigned control = *p++;
+      unsigned run_count = (control & POINT_RUN_COUNT_MASK) + 1;
+      if (unlikely (i + run_count > count)) return false;
+      unsigned j;
       if (control & POINTS_ARE_WORDS)
       {
 	if (unlikely (p + run_count * HBUINT16::static_size > end)) return false;
-	for (j = 0; j < run_count && i < count; j++, i++)
+	for (j = 0; j < run_count; j++, i++)
 	{
 	  n += *(const HBUINT16 *)p;
 	  points.arrayZ[i] = n;
@@ -310,13 +310,12 @@ struct GlyphVariationData
       else
       {
 	if (unlikely (p + run_count > end)) return false;
-	for (j = 0; j < run_count && i < count; j++, i++)
+	for (j = 0; j < run_count; j++, i++)
 	{
 	  n += *p++;
 	  points.arrayZ[i] = n;
 	}
       }
-      if (j < run_count) return false;
     }
     return true;
   }
@@ -332,21 +331,24 @@ struct GlyphVariationData
       DELTA_RUN_COUNT_MASK = 0x3F
     };
 
-    unsigned int i = 0;
-    unsigned int count = deltas.length;
+    unsigned i = 0;
+    unsigned count = deltas.length;
     while (i < count)
     {
       if (unlikely (p + 1 > end)) return false;
-      uint8_t control = *p++;
-      unsigned int run_count = (control & DELTA_RUN_COUNT_MASK) + 1;
-      unsigned int j;
+      unsigned control = *p++;
+      unsigned run_count = (control & DELTA_RUN_COUNT_MASK) + 1;
+      if (unlikely (i + run_count > count)) return false;
+      unsigned j;
       if (control & DELTAS_ARE_ZERO)
-	for (j = 0; j < run_count && i < count; j++, i++)
+      {
+	for (j = 0; j < run_count; j++, i++)
 	  deltas.arrayZ[i] = 0;
+      }
       else if (control & DELTAS_ARE_WORDS)
       {
 	if (unlikely (p + run_count * HBUINT16::static_size > end)) return false;
-	for (j = 0; j < run_count && i < count; j++, i++)
+	for (j = 0; j < run_count; j++, i++)
 	{
 	  deltas.arrayZ[i] = * (const HBINT16 *) p;
 	  p += HBUINT16::static_size;
@@ -355,13 +357,11 @@ struct GlyphVariationData
       else
       {
 	if (unlikely (p + run_count > end)) return false;
-	for (j = 0; j < run_count && i < count; j++, i++)
+	for (j = 0; j < run_count; j++, i++)
 	{
 	  deltas.arrayZ[i] = * (const HBINT8 *) p++;
 	}
       }
-      if (j < run_count)
-	return false;
     }
     return true;
   }
@@ -454,7 +454,7 @@ struct gvar
       F2DOT14 *tuples = c->serializer->allocate_size<F2DOT14> (shared_tuple_size);
       if (!tuples) return_trace (false);
       out->sharedTuples = (char *) tuples - (char *) out;
-      memcpy (tuples, this+sharedTuples, shared_tuple_size);
+      hb_memcpy (tuples, this+sharedTuples, shared_tuple_size);
     }
 
     char *subset_data = c->serializer->allocate_size<char> (subset_data_size);
@@ -477,7 +477,7 @@ struct gvar
 	((HBUINT16 *) subset_offsets)[gid] = glyph_offset / 2;
 
       if (var_data_bytes.length > 0)
-	memcpy (subset_data, var_data_bytes.arrayZ, var_data_bytes.length);
+	hb_memcpy (subset_data, var_data_bytes.arrayZ, var_data_bytes.length);
       subset_data += var_data_bytes.length;
       glyph_offset += var_data_bytes.length;
     }
@@ -611,73 +611,82 @@ struct gvar
 
 	hb_memset (deltas.arrayZ, 0, deltas.length * sizeof (deltas.arrayZ[0]));
 
+	unsigned ref_points = 0;
 	if (scalar != 1.0f)
 	  for (unsigned int i = 0; i < num_deltas; i++)
 	  {
 	    unsigned int pt_index = apply_to_all ? i : indices[i];
 	    if (unlikely (pt_index >= deltas.length)) continue;
-	    deltas.arrayZ[pt_index].flag = 1;	/* this point is referenced, i.e., explicit deltas specified */
-	    deltas.arrayZ[pt_index].x += x_deltas.arrayZ[i] * scalar;
-	    deltas.arrayZ[pt_index].y += y_deltas.arrayZ[i] * scalar;
+	    auto &delta = deltas.arrayZ[pt_index];
+	    ref_points += !delta.flag;
+	    delta.flag = 1;	/* this point is referenced, i.e., explicit deltas specified */
+	    delta.x += x_deltas.arrayZ[i] * scalar;
+	    delta.y += y_deltas.arrayZ[i] * scalar;
 	  }
 	else
 	  for (unsigned int i = 0; i < num_deltas; i++)
 	  {
 	    unsigned int pt_index = apply_to_all ? i : indices[i];
 	    if (unlikely (pt_index >= deltas.length)) continue;
-	    deltas.arrayZ[pt_index].flag = 1;	/* this point is referenced, i.e., explicit deltas specified */
-	    deltas.arrayZ[pt_index].x += x_deltas.arrayZ[i];
-	    deltas.arrayZ[pt_index].y += y_deltas.arrayZ[i];
+	    auto &delta = deltas.arrayZ[pt_index];
+	    ref_points += !delta.flag;
+	    delta.flag = 1;	/* this point is referenced, i.e., explicit deltas specified */
+	    delta.x += x_deltas.arrayZ[i];
+	    delta.y += y_deltas.arrayZ[i];
 	  }
 
 	/* infer deltas for unreferenced points */
-	unsigned start_point = 0;
-	for (unsigned c = 0; c < end_points.length; c++)
+	if (ref_points && ref_points < orig_points.length)
 	{
-	  unsigned end_point = end_points.arrayZ[c];
-
-	  /* Check the number of unreferenced points in a contour. If no unref points or no ref points, nothing to do. */
-	  unsigned unref_count = 0;
-	  for (unsigned i = start_point; i <= end_point; i++)
-	    if (!deltas.arrayZ[i].flag) unref_count++;
-
-	  unsigned j = start_point;
-	  if (unref_count == 0 || unref_count > end_point - start_point)
-	    goto no_more_gaps;
-
-	  for (;;)
+	  unsigned start_point = 0;
+	  for (unsigned c = 0; c < end_points.length; c++)
 	  {
-	    /* Locate the next gap of unreferenced points between two referenced points prev and next.
-	     * Note that a gap may wrap around at left (start_point) and/or at right (end_point).
-	     */
-	    unsigned int prev, next, i;
+	    unsigned end_point = end_points.arrayZ[c];
+
+	    /* Check the number of unreferenced points in a contour. If no unref points or no ref points, nothing to do. */
+	    unsigned unref_count = 0;
+	    for (unsigned i = start_point; i < end_point + 1; i++)
+	      unref_count += deltas.arrayZ[i].flag;
+	    unref_count = (end_point - start_point + 1) - unref_count;
+
+	    unsigned j = start_point;
+	    if (unref_count == 0 || unref_count > end_point - start_point)
+	      goto no_more_gaps;
+
 	    for (;;)
 	    {
-	      i = j;
-	      j = next_index (i, start_point, end_point);
-	      if (deltas.arrayZ[i].flag && !deltas.arrayZ[j].flag) break;
+	      /* Locate the next gap of unreferenced points between two referenced points prev and next.
+	       * Note that a gap may wrap around at left (start_point) and/or at right (end_point).
+	       */
+	      unsigned int prev, next, i;
+	      for (;;)
+	      {
+		i = j;
+		j = next_index (i, start_point, end_point);
+		if (deltas.arrayZ[i].flag && !deltas.arrayZ[j].flag) break;
+	      }
+	      prev = j = i;
+	      for (;;)
+	      {
+		i = j;
+		j = next_index (i, start_point, end_point);
+		if (!deltas.arrayZ[i].flag && deltas.arrayZ[j].flag) break;
+	      }
+	      next = j;
+	      /* Infer deltas for all unref points in the gap between prev and next */
+	      i = prev;
+	      for (;;)
+	      {
+		i = next_index (i, start_point, end_point);
+		if (i == next) break;
+		deltas.arrayZ[i].x = infer_delta (orig_points, deltas, i, prev, next, &contour_point_t::x);
+		deltas.arrayZ[i].y = infer_delta (orig_points, deltas, i, prev, next, &contour_point_t::y);
+		if (--unref_count == 0) goto no_more_gaps;
+	      }
 	    }
-	    prev = j = i;
-	    for (;;)
-	    {
-	      i = j;
-	      j = next_index (i, start_point, end_point);
-	      if (!deltas.arrayZ[i].flag && deltas.arrayZ[j].flag) break;
-	    }
-	    next = j;
-	    /* Infer deltas for all unref points in the gap between prev and next */
-	    i = prev;
-	    for (;;)
-	    {
-	      i = next_index (i, start_point, end_point);
-	      if (i == next) break;
-	      deltas.arrayZ[i].x = infer_delta (orig_points, deltas, i, prev, next, &contour_point_t::x);
-	      deltas.arrayZ[i].y = infer_delta (orig_points, deltas, i, prev, next, &contour_point_t::y);
-	      if (--unref_count == 0) goto no_more_gaps;
-	    }
+	  no_more_gaps:
+	    start_point = end_point + 1;
 	  }
-	no_more_gaps:
-	  start_point = end_point + 1;
 	}
 
 	/* apply specified / inferred deltas to points */
