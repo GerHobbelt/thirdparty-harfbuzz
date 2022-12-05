@@ -284,65 +284,54 @@ struct UnsizedByteStr : UnsizedArrayOf <HBUINT8>
 /* A byte string associated with the current offset and an error condition */
 struct byte_str_ref_t
 {
-  byte_str_ref_t () { init (); }
-
-  void init ()
-  {
-    str = hb_ubytes_t ();
-    offset = 0;
-    error = false;
-  }
-
-  void fini () {}
+  byte_str_ref_t ()
+    : str () {}
 
   byte_str_ref_t (const hb_ubytes_t &str_, unsigned int offset_ = 0)
-    : str (str_), offset (offset_), error (false) {}
+    : str (str_) { set_offset (offset_); }
 
   void reset (const hb_ubytes_t &str_, unsigned int offset_ = 0)
   {
     str = str_;
-    offset = offset_;
-    error = false;
+    set_offset (offset_);
   }
 
   const unsigned char& operator [] (int i) {
-    if (unlikely ((unsigned int) (offset + i) >= str.length))
+    if (unlikely ((unsigned int) (get_offset () + i) >= str.length))
     {
       set_error ();
       return Null (unsigned char);
     }
-    return str[offset + i];
+    return str[get_offset () + i];
   }
 
   /* Conversion to hb_ubytes_t */
-  operator hb_ubytes_t () const { return str.sub_array (offset, str.length - offset); }
+  operator hb_ubytes_t () const { return str.sub_array (get_offset ()); }
 
   hb_ubytes_t sub_array (unsigned int offset_, unsigned int len_) const
   { return str.sub_array (offset_, len_); }
 
   bool avail (unsigned int count=1) const
-  { return (!in_error () && offset + count <= str.length); }
+  { return get_offset () + count <= str.length; }
   void inc (unsigned int count=1)
   {
-    if (likely (!in_error () && (offset <= str.length) && (offset + count <= str.length)))
-    {
-      offset += count;
-    }
+    if (get_offset () + count <= str.length)
+      set_offset (get_offset () + count);
     else
-    {
-      offset = str.length;
       set_error ();
-    }
   }
 
-  void set_error ()      { error = true; }
-  bool in_error () const { return error; }
+  /* We (ab)use ubytes backwards_length as a cursor (called offset),
+   * as well as to store error condition. */
 
-  hb_ubytes_t       str;
-  unsigned int  offset; /* beginning of the sub-string within str */
+  unsigned get_offset () const { return str.backwards_length; }
+  void set_offset (unsigned offset) { str.backwards_length = offset; }
+
+  void set_error ()      { str.backwards_length = str.length + 1; }
+  bool in_error () const { return str.backwards_length > str.length; }
 
   protected:
-  bool	  error;
+  hb_ubytes_t       str;
 };
 
 using byte_str_array_t = hb_vector_t<hb_ubytes_t>;
@@ -529,16 +518,16 @@ struct parsed_values_t
   {
     VAL *val = values.push ();
     val->op = op;
-    val->str = str_ref.str.sub_array (opStart, str_ref.offset - opStart);
-    opStart = str_ref.offset;
+    val->str = str_ref.sub_array (opStart, str_ref.get_offset () - opStart);
+    opStart = str_ref.get_offset ();
   }
 
   void add_op (op_code_t op, const byte_str_ref_t& str_ref, const VAL &v)
   {
     VAL *val = values.push (v);
     val->op = op;
-    val->str = str_ref.sub_array ( opStart, str_ref.offset - opStart);
-    opStart = str_ref.offset;
+    val->str = str_ref.sub_array (opStart, str_ref.get_offset () - opStart);
+    opStart = str_ref.get_offset ();
   }
 
   bool has_op (op_code_t op) const
@@ -575,13 +564,13 @@ struct interp_env_t
     if (unlikely (!str_ref.avail ()))
       return OpCode_Invalid;
     op = (op_code_t)(unsigned char)str_ref[0];
+    str_ref.inc ();
     if (op == OpCode_escape) {
       if (unlikely (!str_ref.avail ()))
 	return OpCode_Invalid;
-      op = Make_OpCode_ESC(str_ref[1]);
+      op = Make_OpCode_ESC(str_ref[0]);
       str_ref.inc ();
     }
-    str_ref.inc ();
     return op;
   }
 
