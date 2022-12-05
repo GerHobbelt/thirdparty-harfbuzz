@@ -71,6 +71,11 @@ struct hb_hashmap_t
     uint32_t is_tombstone_ : 1;
     V value;
 
+    item_t () : key (),
+		hash (0),
+		is_used_ (false), is_tombstone_ (false),
+		value () {}
+
     bool is_used () const { return is_used_; }
     void set_used (bool is_used) { is_used_ = is_used; }
     bool is_tombstone () const { return is_tombstone_; }
@@ -88,15 +93,6 @@ struct hb_hashmap_t
       return minus_1;
     };
 
-    void clear ()
-    {
-      new (std::addressof (key)) K ();
-      new (std::addressof (value)) V ();
-      hash = 0;
-      is_used_ = false;
-      is_tombstone_ = false;
-    }
-
     bool operator == (const K &o) { return hb_deref (key) == hb_deref (o); }
     bool operator == (const item_t &o) { return *this == o.key; }
     hb_pair_t<K, V> get_pair() const { return hb_pair_t<K, V> (key, value); }
@@ -107,8 +103,8 @@ struct hb_hashmap_t
   };
 
   hb_object_header_t header;
-  bool successful; /* Allocations successful */
-  unsigned int population; /* Not including tombstones. */
+  unsigned int successful : 1; /* Allocations successful */
+  unsigned int population : 31; /* Not including tombstones. */
   unsigned int occupancy; /* Including tombstones. */
   unsigned int mask;
   unsigned int prime;
@@ -118,7 +114,10 @@ struct hb_hashmap_t
   {
     if (unlikely (!a.successful || !b.successful))
       return;
-    hb_swap (a.population, b.population);
+    unsigned tmp = a.population;
+    a.population = b.population;
+    b.population = tmp;
+    //hb_swap (a.population, b.population);
     hb_swap (a.occupancy, b.occupancy);
     hb_swap (a.mask, b.mask);
     hb_swap (a.prime, b.prime);
@@ -160,7 +159,9 @@ struct hb_hashmap_t
   {
     if (unlikely (!successful)) return false;
 
-    unsigned int power = hb_bit_storage (hb_max (population, new_population) * 2 + 8);
+    if (new_population != 0 && new_population <= population) return true;
+
+    unsigned int power = hb_bit_storage (hb_max ((unsigned) population, new_population) * 2 + 8);
     unsigned int new_size = 1u << power;
     item_t *new_items = (item_t *) hb_malloc ((size_t) new_size * sizeof (item_t));
     if (unlikely (!new_items))
@@ -169,7 +170,7 @@ struct hb_hashmap_t
       return false;
     }
     for (auto &_ : hb_iter (new_items, new_size))
-      _.clear ();
+      new (&_) item_t ();
 
     unsigned int old_size = mask + 1;
     item_t *old_items = items;
@@ -235,7 +236,11 @@ struct hb_hashmap_t
     if (unlikely (!successful)) return;
 
     for (auto &_ : hb_iter (items, mask ? mask + 1 : 0))
-      _.clear ();
+    {
+      /* Reconstruct items. */
+      _.~item_t ();
+      new (&_) item_t ();
+    }
 
     population = occupancy = 0;
   }
