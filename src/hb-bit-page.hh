@@ -30,6 +30,53 @@
 
 #include "hb.hh"
 
+
+/* Compiler-assisted vectorization. */
+
+/* Type behaving similar to vectorized vars defined using __attribute__((vector_size(...))),
+ * basically a fixed-size bitset. */
+template <typename elt_t, unsigned int byte_size>
+struct hb_vector_size_t
+{
+  elt_t& operator [] (unsigned int i) { return v[i]; }
+  const elt_t& operator [] (unsigned int i) const { return v[i]; }
+
+  void clear (unsigned char v = 0) { memset (this, v, sizeof (*this)); }
+
+  template <typename Op>
+  hb_vector_size_t process (const Op& op) const
+  {
+    hb_vector_size_t r;
+    for (unsigned int i = 0; i < ARRAY_LENGTH (v); i++)
+      r.v[i] = op (v[i]);
+    return r;
+  }
+  template <typename Op>
+  hb_vector_size_t process (const Op& op, const hb_vector_size_t &o) const
+  {
+    hb_vector_size_t r;
+    for (unsigned int i = 0; i < ARRAY_LENGTH (v); i++)
+      r.v[i] = op (v[i], o.v[i]);
+    return r;
+  }
+  hb_vector_size_t operator | (const hb_vector_size_t &o) const
+  { return process (hb_bitwise_or, o); }
+  hb_vector_size_t operator & (const hb_vector_size_t &o) const
+  { return process (hb_bitwise_and, o); }
+  hb_vector_size_t operator ^ (const hb_vector_size_t &o) const
+  { return process (hb_bitwise_xor, o); }
+  hb_vector_size_t operator ~ () const
+  { return process (hb_bitwise_neg); }
+
+  hb_array_t<const elt_t> iter () const
+  { return hb_array (v); }
+
+  private:
+  static_assert (0 == byte_size % sizeof (elt_t), "");
+  elt_t v[byte_size / sizeof (elt_t)];
+};
+
+
 struct hb_bit_page_t
 {
   void init0 () { v.clear (); }
@@ -40,17 +87,17 @@ struct hb_bit_page_t
 
   bool is_empty () const
   {
-    for (unsigned i = 0; i < len (); i++)
-      if (v[i])
-	return false;
-    return true;
+    return
+    + hb_iter (v)
+    | hb_none
+    ;
   }
   uint32_t hash () const
   {
-    uint32_t h = 0;
-    for (unsigned i = 0; i < len (); i++)
-      h = h * 31 + hb_hash (v[i]);
-    return h;
+    return
+    + hb_iter (v)
+    | hb_reduce ([] (uint32_t h, const elt_t &_) { return h * 31 + hb_hash (_); }, (uint32_t) 0u)
+    ;
   }
 
   void add (hb_codepoint_t g) { elt (g) |= mask (g); }
@@ -173,10 +220,10 @@ struct hb_bit_page_t
 
   unsigned int get_population () const
   {
-    unsigned int pop = 0;
-    for (unsigned int i = 0; i < len (); i++)
-      pop += hb_popcount (v[i]);
-    return pop;
+    return
+    + hb_iter (v)
+    | hb_reduce ([] (unsigned pop, const elt_t &_) { return pop + hb_popcount (_); }, 0u)
+    ;
   }
 
   bool next (hb_codepoint_t *codepoint) const

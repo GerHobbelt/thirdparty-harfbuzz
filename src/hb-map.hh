@@ -93,8 +93,8 @@ struct hb_hashmap_t
       return minus_1;
     };
 
-    bool operator == (const K &o) { return hb_deref (key) == hb_deref (o); }
-    bool operator == (const item_t &o) { return *this == o.key; }
+    bool operator == (const K &o) const { return hb_deref (key) == hb_deref (o); }
+    bool operator == (const item_t &o) const { return *this == o.key; }
     hb_pair_t<K, V> get_pair() const { return hb_pair_t<K, V> (key, value); }
     hb_pair_t<const K &, const V &> get_pair_ref() const { return hb_pair_t<const K &, const V &> (key, value); }
 
@@ -159,7 +159,7 @@ struct hb_hashmap_t
   {
     if (unlikely (!successful)) return false;
 
-    if (new_population != 0 && new_population <= population) return true;
+    if (new_population != 0 && (new_population + new_population / 2) < mask) return true;
 
     unsigned int power = hb_bit_storage (hb_max ((unsigned) population, new_population) * 2 + 8);
     unsigned int new_size = 1u << power;
@@ -172,7 +172,7 @@ struct hb_hashmap_t
     for (auto &_ : hb_iter (new_items, new_size))
       new (&_) item_t ();
 
-    unsigned int old_size = mask + 1;
+    unsigned int old_size = size ();
     item_t *old_items = items;
 
     /* Switch to new, empty, array. */
@@ -182,17 +182,16 @@ struct hb_hashmap_t
     items = new_items;
 
     /* Insert back old items. */
-    if (old_items)
-      for (unsigned int i = 0; i < old_size; i++)
+    for (unsigned int i = 0; i < old_size; i++)
+    {
+      if (old_items[i].is_real ())
       {
-	if (old_items[i].is_real ())
-	{
-	  set_with_hash (old_items[i].key,
-			 old_items[i].hash,
-			 std::move (old_items[i].value));
-	}
-	old_items[i].~item_t ();
+	set_with_hash (old_items[i].key,
+		       old_items[i].hash,
+		       std::move (old_items[i].value));
       }
+      old_items[i].~item_t ();
+    }
 
     hb_free (old_items);
 
@@ -205,8 +204,8 @@ struct hb_hashmap_t
   const V& get (K key) const
   {
     if (unlikely (!items)) return item_t::default_value ();
-    unsigned int i = bucket_for (key);
-    return items[i].is_real () && items[i] == key ? items[i].value : item_t::default_value ();
+    auto &item = item_for (key);
+    return item.is_real () && item == key ? item.value : item_t::default_value ();
   }
 
   void del (K key) { set_with_hash (key, hb_hash (key), item_t::default_value (), true); }
@@ -219,10 +218,10 @@ struct hb_hashmap_t
   {
     if (unlikely (!items))
       return false;
-    unsigned int i = bucket_for (key);
-    if (items[i].is_real () && items[i] == key)
+    auto &item = item_for (key);
+    if (item.is_real () && item == key)
     {
-      if (vp) *vp = std::addressof (items[i].value);
+      if (vp) *vp = std::addressof (item.value);
       return true;
     }
     else
@@ -231,11 +230,13 @@ struct hb_hashmap_t
   /* Projection. */
   V operator () (K k) const { return get (k); }
 
+  unsigned size () const { return mask ? mask + 1 : 0; }
+
   void clear ()
   {
     if (unlikely (!successful)) return;
 
-    for (auto &_ : hb_iter (items, mask ? mask + 1 : 0))
+    for (auto &_ : hb_iter (items, size ()))
     {
       /* Reconstruct items. */
       _.~item_t ();
@@ -250,10 +251,10 @@ struct hb_hashmap_t
 
   uint32_t hash () const
   {
-    uint32_t h = 0;
-    for (auto item : iter_items ())
-      h ^= item.total_hash ();
-    return h;
+    return
+    + iter_items ()
+    | hb_reduce ([] (uint32_t h, const item_t &_) { return h ^ _.total_hash (); }, (uint32_t) 0u)
+    ;
   }
 
   bool is_equal (const hb_hashmap_t &other) const
@@ -277,7 +278,7 @@ struct hb_hashmap_t
 
   auto iter_items () const HB_AUTO_RETURN
   (
-    + hb_iter (items, mask ? mask + 1 : 0)
+    + hb_iter (items, size ())
     | hb_filter (&item_t::is_real)
   )
   auto iter_ref () const HB_AUTO_RETURN
@@ -322,23 +323,23 @@ struct hb_hashmap_t
   {
     if (unlikely (!successful)) return false;
     if (unlikely ((occupancy + occupancy / 2) >= mask && !resize ())) return false;
-    unsigned int i = bucket_for_hash (key, hash);
+    item_t &item = item_for_hash (key, hash);
 
-    if (is_delete && items[i].key != key)
+    if (is_delete && item.key != key)
       return true; /* Trying to delete non-existent key. */
 
-    if (items[i].is_used ())
+    if (item.is_used ())
     {
       occupancy--;
-      if (!items[i].is_tombstone ())
+      if (!item.is_tombstone ())
 	population--;
     }
 
-    items[i].key = key;
-    items[i].value = std::forward<VV> (value);
-    items[i].hash = hash;
-    items[i].set_used (true);
-    items[i].set_tombstone (is_delete);
+    item.key = key;
+    item.value = std::forward<VV> (value);
+    item.hash = hash;
+    item.set_used (true);
+    item.set_tombstone (is_delete);
 
     occupancy++;
     if (!is_delete)
@@ -347,12 +348,12 @@ struct hb_hashmap_t
     return true;
   }
 
-  unsigned int bucket_for (const K &key) const
+  item_t& item_for (const K &key) const
   {
-    return bucket_for_hash (key, hb_hash (key));
+    return item_for_hash (key, hb_hash (key));
   }
 
-  unsigned int bucket_for_hash (const K &key, uint32_t hash) const
+  item_t& item_for_hash (const K &key, uint32_t hash) const
   {
     hash &= 0x3FFFFFFF; // We only store lower 30bit of hash
     unsigned int i = hash % prime;
@@ -361,12 +362,12 @@ struct hb_hashmap_t
     while (items[i].is_used ())
     {
       if (items[i].hash == hash && items[i] == key)
-	return i;
+	return items[i];
       if (tombstone == (unsigned) -1 && items[i].is_tombstone ())
 	tombstone = i;
       i = (i + ++step) & mask;
     }
-    return tombstone == (unsigned) -1 ? i : tombstone;
+    return items[tombstone == (unsigned) -1 ? i : tombstone];
   }
 
   static unsigned int prime_for (unsigned int shift)
