@@ -179,12 +179,33 @@ main (int argc, char **argv)
 
     hb_hashmap_t<vector_t, vector_t> m1;
 
-    m1.set (vector_t (), vector_t ());
     m1.set (vector_t (), vector_t {1});
     m1.set (vector_t {1}, vector_t {2});
 
+    m1 << hb_pair_t<vector_t, vector_t> {vector_t {2}, vector_t ()};
+
     assert (m1.get (vector_t ()) == vector_t {1});
     assert (m1.get (vector_t {1}) == vector_t {2});
+  }
+
+  /* Test moving values */
+  {
+    using vector_t = hb_vector_t<unsigned>;
+
+    hb_hashmap_t<vector_t, vector_t> m1;
+    vector_t v {3};
+    assert (v.length == 1);
+    m1 << hb_pair_t<vector_t, vector_t> {vector_t {3}, v};
+    assert (v.length == 1);
+    m1 << hb_pair_t<vector_t, vector_t&&> {vector_t {4}, std::move (v)};
+    assert (v.length == 0);
+
+    hb_hashmap_t<vector_t, vector_t> m2;
+    vector_t v2 {3};
+    m2.set (vector_t {4}, v2);
+    assert (v2.length == 1);
+    m2.set (vector_t {5}, std::move (v2));
+    assert (v2.length == 0);
   }
 
   /* Test hb::shared_ptr. */
@@ -203,6 +224,8 @@ main (int argc, char **argv)
   {
     hb_hashmap_t<hb::unique_ptr<hb_set_t>, hb::unique_ptr<hb_set_t>> m;
 
+    m.set (hb::unique_ptr<hb_set_t> (hb_set_get_empty ()),
+	   hb::unique_ptr<hb_set_t> (hb_set_get_empty ()));
     m.get (hb::unique_ptr<hb_set_t> (hb_set_get_empty ()));
     m.iter_ref ();
     m.keys_ref ();

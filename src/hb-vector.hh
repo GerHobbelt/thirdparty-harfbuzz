@@ -95,7 +95,11 @@ struct hb_vector_t
   void reset ()
   {
     if (unlikely (in_error ()))
-      allocated = length; // Big hack!
+      /* Big Hack! We don't know the true allocated size before
+       * an allocation failure happened. But we know it was at
+       * least as big as length. Restore it to that and continue
+       * as if error did not happen. */
+      allocated = length;
     resize (0);
   }
 
@@ -242,16 +246,6 @@ struct hb_vector_t
     return new_array;
   }
 
-  template <typename T = Type,
-	    hb_enable_if (hb_is_trivially_constructible(T))>
-  void
-  grow_vector (unsigned size)
-  {
-    memset (arrayZ + length, 0, (size - length) * sizeof (*arrayZ));
-    length = size;
-  }
-  template <typename T = Type,
-	    hb_enable_if (!hb_is_trivially_constructible(T))>
   void
   grow_vector (unsigned size)
   {
@@ -310,17 +304,6 @@ struct hb_vector_t
     }
   }
 
-  template <typename T = Type,
-	    hb_enable_if (hb_is_trivially_copy_assignable(T))>
-  void
-  shift_down_vector (unsigned i)
-  {
-    memmove (static_cast<void *> (&arrayZ[i - 1]),
-	     static_cast<void *> (&arrayZ[i]),
-	     (length - i) * sizeof (Type));
-  }
-  template <typename T = Type,
-	    hb_enable_if (!hb_is_trivially_copy_assignable(T))>
   void
   shift_down_vector (unsigned i)
   {
@@ -381,7 +364,7 @@ struct hb_vector_t
   Type pop ()
   {
     if (!length) return Null (Type);
-    Type v = arrayZ[length - 1];
+    Type v {std::move (arrayZ[length - 1])};
     arrayZ[length - 1].~Type ();
     length--;
     return v;
