@@ -1900,13 +1900,16 @@ struct ClassDefFormat2_4
 
   bool intersects (const hb_set_t *glyphs) const
   {
-    /* TODO Speed up, using hb_set_next() and bsearch()? */
-    for (auto &range : rangeRecord)
+    if (rangeRecord.len > glyphs->get_population () * hb_bit_storage ((unsigned) rangeRecord.len) / 2)
     {
-      if (range.intersects (*glyphs) && range.value)
-	return true;
+      for (hb_codepoint_t g = HB_SET_VALUE_INVALID; glyphs->next (&g);)
+        if (get_class (g))
+	  return true;
+      return false;
     }
-    return false;
+
+    return hb_any (+ hb_iter (rangeRecord)
+                   | hb_map ([glyphs] (const RangeRecord<Types> &range) { return range.intersects (*glyphs) && range.value; }));
   }
   bool intersects_class (const hb_set_t *glyphs, uint16_t klass) const
   {
@@ -2470,21 +2473,26 @@ struct VarData
     unsigned ri_count = src->regionIndices.len;
     enum delta_size_t { kZero=0, kNonWord, kWord };
     hb_vector_t<delta_size_t> delta_sz;
-    hb_vector_t<unsigned int> ri_map;	/* maps old index to new index */
+    hb_vector_t<unsigned int> ri_map;	/* maps new index to old index */
     delta_sz.resize (ri_count);
     ri_map.resize (ri_count);
     unsigned int new_word_count = 0;
     unsigned int r;
 
+    const HBUINT8 *src_delta_bytes = src->get_delta_bytes ();
+    unsigned src_row_size = src->get_row_size ();
+    unsigned src_word_count = src->wordCount ();
+    unsigned src_long_words = src->longWords ();
+
     bool has_long = false;
-    if (src->longWords ())
+    if (src_long_words)
     {
-      for (r = 0; r < ri_count; r++)
+      for (r = 0; r < src_word_count; r++)
       {
 	for (unsigned int i = 0; i < inner_map.get_next_value (); i++)
 	{
 	  unsigned int old = inner_map.backward (i);
-	  int32_t delta = src->get_item_delta (old, r);
+	  int32_t delta = src->get_item_delta_fast (old, r, src_delta_bytes, src_row_size);
 	  if (delta < -65536 || 65535 < delta)
 	  {
 	    has_long = true;
@@ -2498,11 +2506,13 @@ struct VarData
     signed max_threshold = has_long ? +65535 : +127;
     for (r = 0; r < ri_count; r++)
     {
+      bool short_circuit = src_long_words == has_long && src_word_count <= r;
+
       delta_sz[r] = kZero;
       for (unsigned int i = 0; i < inner_map.get_next_value (); i++)
       {
 	unsigned int old = inner_map.backward (i);
-	int32_t delta = src->get_item_delta (old, r);
+	int32_t delta = src->get_item_delta_fast (old, r, src_delta_bytes, src_row_size);
 	if (delta < min_threshold || max_threshold < delta)
 	{
 	  delta_sz[r] = kWord;
@@ -2510,7 +2520,11 @@ struct VarData
 	  break;
 	}
 	else if (delta != 0)
+	{
 	  delta_sz[r] = kNonWord;
+	  if (short_circuit)
+	    break;
+	}
       }
     }
 
@@ -2520,7 +2534,8 @@ struct VarData
     for (r = 0; r < ri_count; r++)
       if (delta_sz[r])
       {
-	ri_map[r] = (delta_sz[r] == kWord)? word_index++ : non_word_index++;
+	unsigned new_r = (delta_sz[r] == kWord)? word_index++ : non_word_index++;
+	ri_map[new_r] = r;
 	new_ri_count++;
       }
 
@@ -2528,16 +2543,22 @@ struct VarData
 
     regionIndices.len = new_ri_count;
 
-    if (unlikely (!c->extend (this))) return_trace (false);
+    if (unlikely (!c->extend_size (this, get_size (), false))) return_trace (false);
 
-    for (r = 0; r < ri_count; r++)
-      if (delta_sz[r]) regionIndices[ri_map[r]] = region_map[src->regionIndices[r]];
+    for (r = 0; r < new_ri_count; r++)
+      regionIndices[r] = region_map[src->regionIndices[ri_map[r]]];
 
-    for (unsigned int i = 0; i < itemCount; i++)
+    HBUINT8 *delta_bytes = get_delta_bytes ();
+    unsigned row_size = get_row_size ();
+    unsigned count = itemCount;
+    for (unsigned int i = 0; i < count; i++)
     {
-      unsigned int	old = inner_map.backward (i);
-      for (unsigned int r = 0; r < ri_count; r++)
-	if (delta_sz[r]) set_item_delta (i, ri_map[r], src->get_item_delta (old, r));
+      unsigned int old = inner_map.backward (i);
+      for (unsigned int r = 0; r < new_ri_count; r++)
+	set_item_delta_fast (i, r,
+			     src->get_item_delta_fast (old, ri_map[r],
+						       src_delta_bytes, src_row_size),
+			     delta_bytes, row_size);
     }
 
     return_trace (true);
@@ -2545,12 +2566,15 @@ struct VarData
 
   void collect_region_refs (hb_set_t &region_indices, const hb_inc_bimap_t &inner_map) const
   {
+    const HBUINT8 *delta_bytes = get_delta_bytes ();
+    unsigned row_size = get_row_size ();
+
     for (unsigned int r = 0; r < regionIndices.len; r++)
     {
-      unsigned int region = regionIndices[r];
+      unsigned int region = regionIndices.arrayZ[r];
       if (region_indices.has (region)) continue;
       for (unsigned int i = 0; i < inner_map.get_next_value (); i++)
-	if (get_item_delta (inner_map.backward (i), r) != 0)
+	if (get_item_delta_fast (inner_map.backward (i), r, delta_bytes, row_size) != 0)
 	{
 	  region_indices.add (region);
 	  break;
@@ -2565,11 +2589,12 @@ struct VarData
   HBUINT8 *get_delta_bytes ()
   { return &StructAfter<HBUINT8> (regionIndices); }
 
-  int32_t get_item_delta (unsigned int item, unsigned int region) const
+  int32_t get_item_delta_fast (unsigned int item, unsigned int region,
+			       const HBUINT8 *delta_bytes, unsigned row_size) const
   {
     if (unlikely (item >= itemCount || region >= regionIndices.len)) return 0;
 
-    const HBINT8 *p = (const HBINT8 *) get_delta_bytes () + item * get_row_size ();
+    const HBINT8 *p = (const HBINT8 *) delta_bytes + item * row_size;
     unsigned word_count = wordCount ();
     bool is_long = longWords ();
     if (is_long)
@@ -2587,10 +2612,17 @@ struct VarData
 	return (p + HBINT16::static_size * word_count)[region - word_count];
     }
   }
-
-  void set_item_delta (unsigned int item, unsigned int region, int32_t delta)
+  int32_t get_item_delta (unsigned int item, unsigned int region) const
   {
-    HBINT8 *p = (HBINT8 *)get_delta_bytes () + item * get_row_size ();
+     return get_item_delta_fast (item, region,
+				 get_delta_bytes (),
+				 get_row_size ());
+  }
+
+  void set_item_delta_fast (unsigned int item, unsigned int region, int32_t delta,
+			    HBUINT8 *delta_bytes, unsigned row_size)
+  {
+    HBINT8 *p = (HBINT8 *) delta_bytes + item * row_size;
     unsigned word_count = wordCount ();
     bool is_long = longWords ();
     if (is_long)
@@ -2607,6 +2639,12 @@ struct VarData
       else
 	(p + HBINT16::static_size * word_count)[region - word_count] = delta;
     }
+  }
+  void set_item_delta (unsigned int item, unsigned int region, int32_t delta)
+  {
+    set_item_delta_fast (item, region, delta,
+			 get_delta_bytes (),
+			 get_row_size ());
   }
 
   bool longWords () const { return wordSizeCount & 0x8000u /* LONG_WORDS */; }
@@ -3454,6 +3492,7 @@ struct VariationDevice
     if (!layout_variation_idx_delta_map->has (varIdx, &v))
       return_trace (nullptr);
 
+    c->start_zerocopy (this->static_size);
     auto *out = c->embed (this);
     if (unlikely (!out)) return_trace (nullptr);
 
