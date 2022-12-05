@@ -171,12 +171,16 @@ struct PairPosFormat1_3
     unsigned format1 = 0;
     unsigned format2 = 0;
     for (const auto & _ :
-             + hb_zip (this+coverage, pairSet) | hb_filter (glyphset, hb_first) | hb_map (hb_second))
+	  + hb_zip (this+coverage, pairSet)
+	  | hb_filter (glyphset, hb_first)
+	  | hb_map (hb_second)
+	)
     {
       const PairSet& set = (this + _);
       const PairValueRecord *record = &set.firstPairValueRecord;
 
-      for (unsigned i = 0; i < set.len; i++)
+      unsigned count = set.len;
+      for (unsigned i = 0; i < count; i++)
       {
         if (record->intersects (glyphset))
         {
@@ -185,6 +189,9 @@ struct PairPosFormat1_3
         }
         record = &StructAtOffset<const PairValueRecord> (record, record_size);
       }
+
+      if (format1 == valueFormat[0] && format2 == valueFormat[1])
+        break;
     }
 
     return hb_pair (format1, format2);
