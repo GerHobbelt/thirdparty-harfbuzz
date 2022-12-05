@@ -124,7 +124,7 @@ struct str_encoder_t
     //hb_memcpy (buff.arrayZ + offset, str, length);
   }
 
-  bool is_error () const { return buff.in_error (); }
+  bool in_error () const { return buff.in_error (); }
 
   protected:
 
@@ -517,7 +517,7 @@ struct subr_remaps_t
   {
     global_remap.create (&closures.global_closure);
     for (unsigned int i = 0; i < local_remaps.length; i++)
-      local_remaps[i].create (&closures.local_closures[i]);
+      local_remaps.arrayZ[i].create (&closures.local_closures[i]);
   }
 
   subr_remap_t	       global_remap;
@@ -901,7 +901,7 @@ struct subr_subsetter_t
 	}
       }
     }
-    return !encoder.is_error ();
+    return !encoder.in_error ();
   }
 
   protected:
