@@ -2506,7 +2506,8 @@ struct VarData
     signed max_threshold = has_long ? +65535 : +127;
     for (r = 0; r < ri_count; r++)
     {
-      bool short_circuit = src_long_words == has_long && src_word_count <= r;
+      // warning C4805: '==': unsafe mix of type 'unsigned int' and type 'bool' in operation
+      bool short_circuit = (!!src_long_words == has_long && src_word_count <= r);
 
       delta_sz[r] = kZero;
       for (unsigned int i = 0; i < inner_map.get_next_value (); i++)

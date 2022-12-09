@@ -27,6 +27,10 @@
 
 #include "options.hh"
 
+#ifndef MAX
+#define MAX(a, b)  ((a) > (b) ? (a) : (b))
+#endif
+
 typedef int (*main_func_t) (int argc, const char **argv);
 
 template <typename main_t, bool report_status=false>
