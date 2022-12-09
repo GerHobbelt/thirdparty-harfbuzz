@@ -21,9 +21,11 @@ hb_face_t* subset = hb_subset_or_fail (preprocessed, subset_input);
    original face. The preprocessor does not change the functionality of the subsetter, just speeds
    things up.
 
-*  The preprocessing operation may take longer then the time it takes to produce a subset from the
-   source font. Thus the main performance gains are made when a preprocessed face is reused for multiple
-   subsetting operations.
+*  The preprocessing operation may take longer than the time it takes to produce a subset from the
+   source font. Thus the main performance gains are made when a preprocessed face is reused for
+   multiple subsetting operations.
+
+*  Currently the largest performance gains are seen when using a preprocessed face for CFF subsetting.
 
 *  The preprocessed face may contain references to the memory backing the source face. If this memory
    is fully owned by a harfbuzz hb_blob_t* then it will automatically be kept alive for the lifetime
