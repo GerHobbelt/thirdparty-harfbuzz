@@ -448,16 +448,20 @@ hb_subset_input_pin_axis_location (hb_subset_input_t  *input,
 #endif
 #endif
 
-#ifdef HB_EXPERIMENTAL_API
 /**
  * hb_subset_preprocess
  * @input: a #hb_face_t object.
  *
  * Preprocesses the face and attaches data that will be needed by the
  * subsetter. Future subsetting operations can then use the precomputed data
- * to speed up the subsetting operation.
+ * to speed up the subsetting operation. Returns a new hb_face_t*.
  *
- * Since: EXPERIMENTAL
+ * Note: the preprocessed face may contain sub-blobs that reference the memory
+ * backing the source hb_face_t*. Therefore in the case that this memory is not
+ * owned by the source face you will need to ensure that memory lives
+ * as long as the returned hb_face_t*.
+ *
+ * Since: REPLACEME
  **/
 
 HB_EXTERN hb_face_t *
@@ -496,7 +500,8 @@ hb_subset_preprocess (hb_face_t *source)
   hb_subset_input_set_flags(input,
                             HB_SUBSET_FLAGS_NOTDEF_OUTLINE |
                             HB_SUBSET_FLAGS_GLYPH_NAMES |
-                            HB_SUBSET_FLAGS_RETAIN_GIDS);
+                            HB_SUBSET_FLAGS_RETAIN_GIDS |
+                            HB_SUBSET_FLAGS_NO_PRUNE_UNICODE_RANGES);
   input->attach_accelerator_data = true;
 
   // Always use long loca in the preprocessed version. This allows
@@ -514,7 +519,6 @@ hb_subset_preprocess (hb_face_t *source)
 
   return new_source;
 }
-#endif
 
 #ifdef HB_EXPERIMENTAL_API
 /**
