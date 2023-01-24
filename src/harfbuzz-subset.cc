@@ -1,3 +1,6 @@
+
+#if !defined(BUILD_MONOLITHIC)
+
 #include "graph/gsubgpos-context.cc"
 #include "hb-aat-layout.cc"
 #include "hb-aat-map.cc"
@@ -55,3 +58,5 @@
 #include "hb-subset.cc"
 #include "hb-ucd.cc"
 #include "hb-unicode.cc"
+
+#endif
