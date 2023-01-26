@@ -40,12 +40,17 @@ struct info_t
     {
       {"all",		'a', 0, G_OPTION_ARG_NONE,	&this->all,			"Show everything",		nullptr},
 
-      {"show-all",	's', 0, G_OPTION_ARG_NONE,	&this->show_all,		"Show all short information",	nullptr},
+      {"show-all",	0, 0, G_OPTION_ARG_NONE,	&this->show_all,		"Show all short information",	nullptr},
+      {"show-family",	0, 0, G_OPTION_ARG_NONE,	&this->show_family,		"Show family name",		nullptr},
+      {"show-style",	0, 0, G_OPTION_ARG_NONE,	&this->show_style,		"Show style name",		nullptr},
+      {"show-unique-name",0, 0, G_OPTION_ARG_NONE,	&this->show_unique_name,	"Show unique name",		nullptr},
+      {"show-full-name",0, 0, G_OPTION_ARG_NONE,	&this->show_full_name,		"Show full name",		nullptr},
       {"show-upem",	0, 0, G_OPTION_ARG_NONE,	&this->show_upem,		"Show Units-Per-EM",		nullptr},
       {"show-unicode-count",0, 0, G_OPTION_ARG_NONE,	&this->show_unicode_count,	"Show Unicode count",		nullptr},
       {"show-glyph-count",0, 0, G_OPTION_ARG_NONE,	&this->show_glyph_count,	"Show glyph count",		nullptr},
 
-      {"list-all",	'l', 0, G_OPTION_ARG_NONE,	&this->list_all,		"List all long information",	nullptr},
+      {"list-all",	0, 0, G_OPTION_ARG_NONE,	&this->list_all,		"List all long information",	nullptr},
+      {"list-names",	0, 0, G_OPTION_ARG_NONE,	&this->list_names,		"List names",			nullptr},
       {"list-tables",	0, 0, G_OPTION_ARG_NONE,	&this->list_tables,		"List tables",			nullptr},
       {"list-unicodes",	0, 0, G_OPTION_ARG_NONE,	&this->list_unicodes,		"List characters",		nullptr},
       {"list-glyphs",	0, 0, G_OPTION_ARG_NONE,	&this->list_glyphs,		"List glyphs",			nullptr},
@@ -74,11 +79,16 @@ struct info_t
   hb_bool_t all = false;
 
   hb_bool_t show_all = false;
+  hb_bool_t show_family = false;
+  hb_bool_t show_style = false;
+  hb_bool_t show_unique_name = false;
+  hb_bool_t show_full_name = false;
   hb_bool_t show_upem = false;
   hb_bool_t show_unicode_count = false;
   hb_bool_t show_glyph_count = false;
 
   hb_bool_t list_all = false;
+  hb_bool_t list_names = false;
   hb_bool_t list_tables = false;
   hb_bool_t list_unicodes = false;
   hb_bool_t list_glyphs = false;
@@ -102,19 +112,24 @@ struct info_t
       show_all =
       list_all =
       true;
-      first_item = false;
     }
 
     if (show_all)
     {
+      show_family =
+      show_style =
+      show_unique_name =
+      show_full_name =
       show_upem =
       show_unicode_count =
       show_glyph_count =
       true;
+      first_item = false;
     }
 
     if (list_all)
     {
+      list_names =
       list_tables =
       list_unicodes =
       list_glyphs =
@@ -126,10 +141,15 @@ struct info_t
       true;
     }
 
+    if (show_family)	  _show_family ();
+    if (show_style)	  _show_style ();
+    if (show_unique_name) _show_unique_name ();
+    if (show_full_name)	  _show_full_name ();
     if (show_upem)	  _show_upem ();
     if (show_unicode_count) _show_unicode_count ();
     if (show_glyph_count) _show_glyph_count ();
 
+    if (list_names)	  _list_names ();
     if (list_tables)	  _list_tables ();
     if (list_unicodes)	  _list_unicodes ();
     if (list_glyphs)	  _list_glyphs ();
@@ -152,8 +172,30 @@ struct info_t
       first_item = false;
       return;
     }
-    printf ("\n---\n\n");
+    printf ("\n===\n\n");
   }
+
+  void _show_name (const char *label, hb_ot_name_id_t name_id)
+  {
+    if (verbose)
+    {
+      printf ("%s: ", label);
+    }
+
+    auto language = hb_language_get_default ();
+
+    char name[128];
+    unsigned name_len = sizeof name;
+    hb_ot_name_get_utf8 (face, name_id,
+			 language,
+			 &name_len, name);
+
+    printf ("%s\n", name);
+  }
+  void _show_family ()		{ _show_name ("Family", 1); }
+  void _show_style ()		{ _show_name ("Style", 2); }
+  void _show_unique_name ()	{ _show_name ("Unique name", 3); }
+  void _show_full_name ()	{ _show_name ("Full name", 4); }
 
   void _show_upem ()
   {
@@ -190,13 +232,38 @@ struct info_t
     printf ("%u\n", hb_face_get_glyph_count (face));
   }
 
+  void _list_names ()
+  {
+    if (verbose)
+    {
+      separator ();
+      printf ("Name information:\n\n");
+      printf ("Id	Text\n------------\n");
+    }
+
+    auto language = hb_language_get_default ();
+
+    unsigned count;
+    const auto *entries = hb_ot_name_list_names (face, &count);
+    for (unsigned i = 0; i < count; i++)
+    {
+      char name[128];
+      unsigned name_len = sizeof name;
+      hb_ot_name_get_utf8 (face, entries[i].name_id,
+			   language,
+			   &name_len, name);
+
+      printf ("%u	%s\n", entries[i].name_id, name);
+    }
+  }
+
   void _list_tables ()
   {
     if (verbose)
     {
       separator ();
-      printf ("Font table information:\n\n");
-      printf ("Tag	Size\n\n");
+      printf ("Table information:\n\n");
+      printf ("Tag	Size\n------------\n");
     }
 
     unsigned count = hb_face_get_table_tags (face, 0, nullptr, nullptr);
@@ -224,7 +291,7 @@ struct info_t
     {
       separator ();
       printf ("Character-set information:\n\n");
-      printf ("Unicode	Glyph name\n\n");
+      printf ("Unicode	Glyph name\n------------------\n");
     }
 
     hb_set_t *unicodes = hb_set_create ();
@@ -284,7 +351,7 @@ struct info_t
     {
       separator ();
       printf ("Glyph-set information:\n\n");
-      printf ("GlyphID	Glyph name\n\n");
+      printf ("GlyphID	Glyph name\n------------------\n");
     }
 
     unsigned num_glyphs = hb_face_get_glyph_count (face);
@@ -447,7 +514,7 @@ struct info_t
     if (verbose && count)
     {
       printf ("Varitation axes:\n\n");
-      printf ("Tag:	Minimum	Default	Maximum	Name\n");
+      printf ("Tag 	Minimum	Default	Maximum	Name\n------------------------------------\n");
     }
     for (unsigned i = 0; i < count; i++)
     {
@@ -462,7 +529,7 @@ struct info_t
 			   language,
 			   &name_len, name);
 
-      printf ("%c%c%c%c%s:	%g	%g	%g	%s\n",
+      printf ("%c%c%c%c%s	%g	%g	%g	%s\n",
 	      HB_UNTAG (axis.tag),
 	      axis.flags & HB_OT_VAR_AXIS_FLAG_HIDDEN ? "*" : "",
 	      (double) axis.min_value,
