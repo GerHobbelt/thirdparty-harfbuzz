@@ -39,8 +39,10 @@ struct info_t
     GOptionEntry misc_entries[] =
     {
       {"direction",	0, 0, G_OPTION_ARG_STRING,	&this->direction_str,		"Set direction (default: ltr)",		"ltr/rtl/ttb/btt"},
-      {"language",	0, 0, G_OPTION_ARG_STRING,	&this->language_str,		"Set language (default: $LANG)",	"BCP 47 tag"},
-      {"script",	0, 0, G_OPTION_ARG_STRING,	&this->script_str,		"Set script (default: none)",		"ISO-15924 tag"},
+      {"script",	0, 0, G_OPTION_ARG_STRING,	&this->script_str,		"Set script (default: none)",		"ISO-15924 tag; eg. 'Latn'"},
+      {"language",	0, 0, G_OPTION_ARG_STRING,	&this->language_str,		"Set language (default: $LANG)",	"BCP 47 tag; eg. 'en'"},
+      {"ot-script",	0, 0, G_OPTION_ARG_STRING,	&this->ot_script_str,		"Set OpenType script tag (default: none)","tag; eg. 'latn'"},
+      {"ot-language",	0, 0, G_OPTION_ARG_STRING,	&this->ot_language_str,		"Set OpenType language tag (default: none)",	"tag; eg. 'ENG'"},
 
       {nullptr}
     };
@@ -67,6 +69,9 @@ struct info_t
       {"show-glyph-count",0, 0, G_OPTION_ARG_NONE,	&this->show_glyph_count,	"Show glyph count",		nullptr},
       {"show-extents",	0, 0, G_OPTION_ARG_NONE,	&this->show_extents,		"Show extents",			nullptr},
 
+      {"get-metric",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_metric,		"Get metric",			"metric tag; eg. 'hasc'"},
+      {"get-baseline",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_baseline,		"Get baseline",			"baseline tag; eg. 'hang'"},
+
       {"list-all",	0, 0, G_OPTION_ARG_NONE,	&this->list_all,		"List all long information",	nullptr},
       {"list-names",	0, 0, G_OPTION_ARG_NONE,	&this->list_names,		"List names",			nullptr},
       {"list-tables",	'l', 0, G_OPTION_ARG_NONE,	&this->list_tables,		"List tables",			nullptr},
@@ -77,8 +82,9 @@ struct info_t
 #ifndef HB_NO_VAR
       {"list-variations",0, 0, G_OPTION_ARG_NONE,	&this->list_variations,		"List variations",		nullptr},
 #endif
+      {"list-palettes",	0, 0, G_OPTION_ARG_NONE,	&this->list_palettes,		"List color palettes",		nullptr},
 
-      {"dump-table",	0, 0, G_OPTION_ARG_STRING,	&this->dump_table,		"Dump font table",		"TABLE-TAG"},
+      {"dump-table",	0, 0, G_OPTION_ARG_STRING,	&this->dump_table,		"Dump font table",		"table tag; eg. 'cmap'"},
 
       {nullptr}
     };
@@ -103,6 +109,8 @@ struct info_t
   hb_direction_t direction = HB_DIRECTION_LTR;
   hb_script_t script = HB_SCRIPT_INVALID;
   hb_language_t language = HB_LANGUAGE_INVALID;
+  char *ot_script_str = nullptr;
+  char *ot_language_str = nullptr;
 
   hb_bool_t all = false;
 
@@ -118,6 +126,9 @@ struct info_t
   hb_bool_t show_glyph_count = false;
   hb_bool_t show_extents = false;
 
+  char **get_metric = nullptr;
+  char **get_baseline = nullptr;
+
   hb_bool_t list_all = false;
   hb_bool_t list_names = false;
   hb_bool_t list_tables = false;
@@ -128,6 +139,7 @@ struct info_t
 #ifndef HB_NO_VAR
   hb_bool_t list_variations = false;
 #endif
+  hb_bool_t list_palettes = false;
 
   char *dump_table = nullptr;
 
@@ -181,6 +193,7 @@ struct info_t
 #ifndef HB_NO_VAR
       list_variations =
 #endif
+      list_palettes =
       true;
     }
 
@@ -195,6 +208,9 @@ struct info_t
     if (show_glyph_count) _show_glyph_count ();
     if (show_extents)	  _show_extents ();
 
+    if (get_metric)	  _get_metric ();
+    if (get_baseline)	  _get_baseline ();
+
     if (list_names)	  _list_names ();
     if (list_tables)	  _list_tables ();
     if (list_unicodes)	  _list_unicodes ();
@@ -204,6 +220,7 @@ struct info_t
 #ifndef HB_NO_VAR
     if (list_variations)  _list_variations ();
 #endif
+    if (list_palettes)	  _list_palettes ();
 
     if (dump_table)	  _dump_table ();
 
@@ -312,6 +329,78 @@ struct info_t
 
     if (verbose) printf ("Line gap: ");
     printf ("%d\n", extents.line_gap);
+  }
+
+  void _get_metric ()
+  {
+    bool fallback = false;
+    for (char **p = get_metric; *p; p++)
+    {
+      hb_ot_metrics_tag_t tag = (hb_ot_metrics_tag_t) hb_tag_from_string (*p, -1);
+      hb_position_t position;
+
+      if (verbose)
+	printf ("Metric %c%c%c%c: ", HB_UNTAG (tag));
+
+      if (hb_ot_metrics_get_position (font, tag, &position))
+	printf ("%d\n", position);
+      else
+      {
+	hb_ot_metrics_get_position_with_fallback (font, tag, &position);
+	printf ("%d	*\n", position);
+	fallback = true;
+      }
+    }
+
+    if (verbose && fallback)
+    {
+      printf ("\n[*] Fallback value\n");
+    }
+  }
+
+  void _get_baseline ()
+  {
+
+    hb_tag_t script_tags[HB_OT_MAX_TAGS_PER_SCRIPT];
+    hb_tag_t language_tags[HB_OT_MAX_TAGS_PER_LANGUAGE];
+    unsigned script_count = HB_OT_MAX_TAGS_PER_SCRIPT;
+    unsigned language_count = HB_OT_MAX_TAGS_PER_LANGUAGE;
+
+    hb_ot_tags_from_script_and_language (script, language,
+					 &script_count, script_tags,
+					 &language_count, language_tags);
+
+    hb_tag_t script_tag = script_count ? script_tags[script_count - 1] : HB_TAG_NONE;
+    hb_tag_t language_tag = language_count ? language_tags[0] : HB_TAG_NONE;
+
+    if (ot_script_str)
+      script_tag = hb_tag_from_string (ot_script_str, -1);
+    if (ot_language_str)
+      language_tag = hb_tag_from_string (ot_language_str, -1);
+
+    bool fallback = false;
+    for (char **p = get_baseline; *p; p++)
+    {
+      hb_ot_layout_baseline_tag_t tag = (hb_ot_layout_baseline_tag_t) hb_tag_from_string (*p, -1);
+      hb_position_t position;
+
+      if (verbose)
+	printf ("Baseline %c%c%c%c: ", HB_UNTAG (tag));
+
+      if (hb_ot_layout_get_baseline (font, tag, direction, script_tag, language_tag, &position))
+	printf ("%d\n", position);
+      else
+      {
+	hb_ot_layout_get_baseline_with_fallback (font, tag, direction, script_tag, language_tag, &position);
+	printf ("%d	*\n", position);
+	fallback = true;
+      }
+    }
+
+    if (verbose && fallback)
+    {
+      printf ("\n[*] Fallback value\n");
+    }
   }
 
   void _list_names ()
@@ -521,6 +610,11 @@ struct info_t
   void
   _list_features_no_script ()
   {
+    if (verbose)
+    {
+      printf ("Showing all font features with duplicates removed.\n\n");
+    }
+
     hb_tag_t table_tags[] = {HB_OT_TAG_GSUB, HB_OT_TAG_GPOS, HB_TAG_NONE};
 
     hb_set_t *features = hb_set_create ();
@@ -594,7 +688,7 @@ struct info_t
 
     hb_tag_t table_tags[] = {HB_OT_TAG_GSUB, HB_OT_TAG_GPOS, HB_TAG_NONE};
 
-    if (script == HB_SCRIPT_INVALID)
+    if (script == HB_SCRIPT_INVALID && !ot_script_str)
     {
       _list_features_no_script ();
       return;
@@ -616,16 +710,41 @@ struct info_t
 					   &script_count, script_tags,
 					   &language_count, language_tags);
 
+      if (ot_script_str)
+      {
+	script_tags[0] = hb_tag_from_string (ot_script_str, -1);
+	script_count = 1;
+      }
+      if (ot_language_str)
+      {
+	language_tags[0] = hb_tag_from_string (ot_language_str, -1);
+	language_count = 1;
+      }
+
       unsigned script_index;
+      hb_tag_t chosen_script;
       hb_ot_layout_table_select_script (face, table_tag,
 					script_count, script_tags,
-					&script_index, nullptr);
+					&script_index, &chosen_script);
 
       unsigned language_index;
-      hb_ot_layout_script_select_language (face, table_tag,
+      hb_tag_t chosen_language;
+      hb_ot_layout_script_select_language2 (face, table_tag,
 					   script_index,
 					   language_count, language_tags,
-					   &language_index);
+					   &language_index, &chosen_language);
+
+      if (verbose)
+      {
+        if (chosen_script)
+	{
+	  printf ("	Script: %c%c%c%c\n", HB_UNTAG (chosen_script));
+	  if (chosen_language)
+	    printf ("	Language: %c%c%c%c\n", HB_UNTAG (chosen_language));
+	  else
+	    printf ("	Language: Default\n");
+	}
+      }
 
       unsigned feature_array[32];
       unsigned feature_count = sizeof feature_array / sizeof feature_array[0];
@@ -686,7 +805,7 @@ struct info_t
     if (verbose)
     {
       separator ();
-      printf ("Face variations information:\n\n");
+      printf ("Variations information:\n\n");
     }
 
     hb_ot_var_axis_info_t *axes;
@@ -724,7 +843,7 @@ struct info_t
 	      name);
     }
     if (verbose && has_hidden)
-      printf ("\n[*] Hidden axis\n\n");
+      printf ("\n[*] Hidden axis\n");
 
     free (axes);
     axes = nullptr;
@@ -734,7 +853,7 @@ struct info_t
     {
       if (verbose)
       {
-	printf ("\nNamed instances:\n\n");
+	printf ("\n\nNamed instances:\n\n");
       printf ("Index	Name				Position\n------------------------------------------------\n");
       }
 
@@ -763,6 +882,68 @@ struct info_t
     }
   }
 #endif
+
+  void
+  _list_palettes ()
+  {
+    if (verbose)
+    {
+      separator ();
+      printf ("Color palettes information:\n");
+    }
+
+    {
+      if (verbose)
+      {
+	printf ("\nPalettes:\n\n");
+	printf ("Index	Name	Flags\n---------------------\n");
+      }
+      unsigned count = hb_ot_color_palette_get_count (face);
+      for (unsigned i = 0; i < count; i++)
+      {
+	hb_ot_name_id_t name_id = hb_ot_color_palette_get_name_id (face, i);
+	hb_ot_color_palette_flags_t flags = hb_ot_color_palette_get_flags (face, i);
+
+	char name[64];
+	unsigned name_len = sizeof name;
+	hb_ot_name_get_utf8 (face, name_id,
+			     language,
+			     &name_len, name);
+
+	printf ("%u	%s	", i, name);
+	if (flags)
+	{
+	  if (flags & HB_OT_COLOR_PALETTE_FLAG_USABLE_WITH_LIGHT_BACKGROUND)
+	    printf ("Usable with light background,");
+	  if (flags & HB_OT_COLOR_PALETTE_FLAG_USABLE_WITH_DARK_BACKGROUND)
+	    printf ("Usable with dark background,");
+	}
+	printf ("\n");
+      }
+    }
+
+    {
+      if (verbose)
+      {
+	printf ("\nColors:\n\n");
+	printf ("Index	Name\n------------\n");
+      }
+      unsigned count = hb_ot_color_palette_get_colors (face, 0, 0, nullptr, nullptr);
+      for (unsigned i = 0; i < count; i++)
+      {
+	hb_ot_name_id_t name_id = hb_ot_color_palette_color_get_name_id (face, i);
+
+	char name[64];
+	unsigned name_len = sizeof name;
+	hb_ot_name_get_utf8 (face, name_id,
+			     language,
+			     &name_len, name);
+
+	printf ("%u	%s\n", i, name);
+      }
+    }
+  }
+
 
   void
   _dump_table ()
