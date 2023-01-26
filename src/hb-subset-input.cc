@@ -27,37 +27,20 @@
 #include "hb-subset.hh"
 #include "hb-set.hh"
 #include "hb-utf.hh"
-/**
- * hb_subset_input_create_or_fail:
- *
- * Creates a new subset input object.
- *
- * Return value: (transfer full): New subset input, or `NULL` if failed. Destroy
- * with hb_subset_input_destroy().
- *
- * Since: 1.8.0
- **/
-hb_subset_input_t *
-hb_subset_input_create_or_fail (void)
+
+
+hb_subset_input_t::hb_subset_input_t ()
 {
-  hb_subset_input_t *input = hb_object_create<hb_subset_input_t>();
+  for (auto& set : sets_iter ())
+    set = hb::shared_ptr<hb_set_t> (hb_set_create ());
 
-  if (unlikely (!input))
-    return nullptr;
+  if (in_error ())
+    return;
 
-  for (auto& set : input->sets_iter ())
-    set = hb_set_create ();
+  flags = HB_SUBSET_FLAGS_DEFAULT;
 
-  if (input->in_error ())
-  {
-    hb_subset_input_destroy (input);
-    return nullptr;
-  }
-
-  input->flags = HB_SUBSET_FLAGS_DEFAULT;
-
-  hb_set_add_range (input->sets.name_ids, 0, 6);
-  hb_set_add (input->sets.name_languages, 0x0409);
+  hb_set_add_range (sets.name_ids, 0, 6);
+  hb_set_add (sets.name_languages, 0x0409);
 
   hb_tag_t default_drop_tables[] = {
     // Layout disabled by default
@@ -83,7 +66,7 @@ hb_subset_input_create_or_fail (void)
     HB_TAG ('S', 'i', 'l', 'f'),
     HB_TAG ('S', 'i', 'l', 'l'),
   };
-  input->sets.drop_tables->add_array (default_drop_tables, ARRAY_LENGTH (default_drop_tables));
+  sets.drop_tables->add_array (default_drop_tables, ARRAY_LENGTH (default_drop_tables));
 
   hb_tag_t default_no_subset_tables[] = {
     HB_TAG ('a', 'v', 'a', 'r'),
@@ -96,8 +79,8 @@ hb_subset_input_create_or_fail (void)
     HB_TAG ('M', 'V', 'A', 'R'),
     HB_TAG ('c', 'v', 'a', 'r'),
   };
-  input->sets.no_subset_tables->add_array (default_no_subset_tables,
-                                         ARRAY_LENGTH (default_no_subset_tables));
+  sets.no_subset_tables->add_array (default_no_subset_tables,
+					 ARRAY_LENGTH (default_no_subset_tables));
 
   //copied from _layout_features_groups in fonttools
   hb_tag_t default_layout_features[] = {
@@ -199,15 +182,35 @@ hb_subset_input_create_or_fail (void)
     HB_TAG ('b', 'l', 'w', 'm'),
   };
 
-  input->sets.layout_features->add_array (default_layout_features, ARRAY_LENGTH (default_layout_features));
+  sets.layout_features->add_array (default_layout_features, ARRAY_LENGTH (default_layout_features));
 
-  input->sets.layout_scripts->invert (); // Default to all scripts.
+  sets.layout_scripts->invert (); // Default to all scripts.
+}
+
+/**
+ * hb_subset_input_create_or_fail:
+ *
+ * Creates a new subset input object.
+ *
+ * Return value: (transfer full): New subset input, or `NULL` if failed. Destroy
+ * with hb_subset_input_destroy().
+ *
+ * Since: 1.8.0
+ **/
+hb_subset_input_t *
+hb_subset_input_create_or_fail (void)
+{
+  hb_subset_input_t *input = hb_object_create<hb_subset_input_t>();
+
+  if (unlikely (!input))
+    return nullptr;
 
   if (input->in_error ())
   {
     hb_subset_input_destroy (input);
     return nullptr;
   }
+
   return input;
 }
 
@@ -240,14 +243,6 @@ void
 hb_subset_input_destroy (hb_subset_input_t *input)
 {
   if (!hb_object_destroy (input)) return;
-
-  for (hb_set_t* set : input->sets_iter ())
-    hb_set_destroy (set);
-
-#ifdef HB_EXPERIMENTAL_API
-  for (auto _ : input->name_table_overrides)
-    _.second.fini ();
-#endif
 
   hb_free (input);
 }
