@@ -24,20 +24,19 @@
  * Google Author(s): Behdad Esfahbod
  */
 
-#ifndef HB_BUFFER_DESERIALIZE_TEXT_UNICODES_HH
-#define HB_BUFFER_DESERIALIZE_TEXT_UNICODES_HH
+#ifndef HB_BUFFER_DESERIALIZE_TEXT_UNICODE_HH
+#define HB_BUFFER_DESERIALIZE_TEXT_UNICODE_HH
 
 #include "hb.hh"
 
 %%{
 
-machine deserialize_text_unicodes;
+machine deserialize_text_unicode;
 alphtype unsigned char;
 write data;
 
 action clear_item {
 	hb_memset (&info, 0, sizeof (info));
-	hb_memset (&pos , 0, sizeof (pos ));
 }
 
 action add_item {
@@ -62,7 +61,7 @@ num	= '-'? unum;
 
 cluster	= '=' (unum >tok %parse_cluster);
 
-unicode = 'U' '+' xdigit+ >tok %parse_hexdigits;
+unicode = [Uu] '+'? xdigit+ >tok %parse_hexdigits;
 
 unicode_item	=
 	(
@@ -80,11 +79,11 @@ main := space* unicodes;
 }%%
 
 static hb_bool_t
-_hb_buffer_deserialize_text_unicodes (hb_buffer_t *buffer,
-				      const char *buf,
-				      unsigned int buf_len,
-				      const char **end_ptr,
-				      hb_font_t *font)
+_hb_buffer_deserialize_text_unicode (hb_buffer_t *buffer,
+				     const char *buf,
+				     unsigned int buf_len,
+				     const char **end_ptr,
+				     hb_font_t *font)
 {
   const char *p = buf, *pe = buf + buf_len;
 
@@ -96,7 +95,7 @@ _hb_buffer_deserialize_text_unicodes (hb_buffer_t *buffer,
   const char *tok = nullptr;
   int cs;
   hb_glyph_info_t info = {0};
-  hb_glyph_position_t pos = {0};
+  const hb_glyph_position_t pos = {0};
   %%{
     write init;
     write exec;
@@ -107,4 +106,4 @@ _hb_buffer_deserialize_text_unicodes (hb_buffer_t *buffer,
   return p == pe && *(p-1) != ']';
 }
 
-#endif /* HB_BUFFER_DESERIALIZE_TEXT_UNICODES_HH */
+#endif /* HB_BUFFER_DESERIALIZE_TEXT_UNICODE_HH */
