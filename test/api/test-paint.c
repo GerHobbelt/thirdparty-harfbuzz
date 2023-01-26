@@ -173,7 +173,7 @@ print_color_line (paint_data_t *data,
   stops = alloca (len * sizeof (hb_color_stop_t));
   hb_color_line_get_color_stops (color_line, 0, &len, stops);
 
-  print (data, "colors");
+  print (data, "colors %d", hb_color_line_get_extend (color_line));
   data->level += 1;
   for (unsigned int i = 0; i < len; i++)
     print (data, "%.3g %d %d %d %d",
@@ -323,6 +323,7 @@ static paint_test_t paint_tests[] = {
   { TEST_GLYPHS, 0,  106,   0, "test-106" },
   { TEST_GLYPHS, 0,  116,   0, "test-116" }, // compositing
   { TEST_GLYPHS, 0,  123,   0, "test-123" },
+  { TEST_GLYPHS, 0,  154,   0, "test-154" },
   { TEST_GLYPHS, 0,  165,   0, "test-165" }, // linear gradient
   { TEST_GLYPHS, 0,  175,   0, "test-175" }, // layers
   { BAD_COLRV1,  0,  154,   0, "bad-154" },  // recursion

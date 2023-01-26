@@ -471,6 +471,8 @@ hb_face_get_index (const hb_face_t *face)
  *
  * Sets the units-per-em (upem) for a face object to the specified value.
  *
+ * This API is used in rare circumstances.
+ *
  * Since: 0.9.2
  **/
 void
@@ -487,7 +489,10 @@ hb_face_set_upem (hb_face_t    *face,
  * hb_face_get_upem:
  * @face: A face object
  *
- * Fetches the units-per-em (upem) value of the specified face object.
+ * Fetches the units-per-em (UPEM) value of the specified face object.
+ *
+ * Typical UPEM values for fonts are 1000, or 2048, but any value
+ * in between 16 and 16,384 is allowed for OpenType fonts.
  *
  * Return value: The upem value of @face
  *
@@ -505,6 +510,8 @@ hb_face_get_upem (const hb_face_t *face)
  * @glyph_count: The glyph-count value to assign
  *
  * Sets the glyph count for a face object to the specified value.
+ *
+ * This API is used in rare circumstances.
  *
  * Since: 0.9.7
  **/

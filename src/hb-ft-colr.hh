@@ -305,7 +305,10 @@ _hb_ft_paint (hb_ft_paint_context_t *c,
         bool has_clip_box;
         FT_ClipBox clip_box;
         has_clip_box = FT_Get_Color_Glyph_ClipBox (ft_face, paint.u.colr_glyph.glyphID, &clip_box);
-        has_clip_box = 0;
+
+	/* The FreeType ClipBox is in scaled coordinates, whereas we need
+	 * unscaled clipbox here. Oh well... */
+        has_clip_box = false;
 
         if (has_clip_box)
           c->funcs->push_clip_rectangle (c->data,
