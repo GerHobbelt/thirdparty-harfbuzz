@@ -29,6 +29,8 @@
 
 #include <hb-config.hh>
 
+#if defined(HAVE_GLIB)
+
 #include <hb-glib.h>
 
 #include <stdlib.h>
@@ -319,5 +321,7 @@ hb_test_open_font_file (const char *font_path)
 }
 
 HB_END_DECLS
+
+#endif
 
 #endif /* HB_TEST_H */

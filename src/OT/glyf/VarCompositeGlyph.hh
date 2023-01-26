@@ -5,6 +5,8 @@
 #include "../../hb-open-type.hh"
 #include "coord-setter.hh"
 
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 namespace OT {
 namespace glyf_impl {

@@ -33,6 +33,8 @@
 
 #include "hb.h"
 
+#if defined(HAVE_GLIB)
+
 #include <glib-object.h>
 
 HB_BEGIN_DECLS
@@ -132,5 +134,7 @@ hb_gobject_ot_math_glyph_part_get_type (void);
 
 
 HB_END_DECLS
+
+#endif
 
 #endif /* HB_GOBJECT_H */

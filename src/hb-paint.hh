@@ -29,6 +29,9 @@
 #include "hb-face.hh"
 #include "hb-font.hh"
 
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 #define HB_PAINT_FUNCS_IMPLEMENT_CALLBACKS \
   HB_PAINT_FUNC_IMPLEMENT (push_transform) \
   HB_PAINT_FUNC_IMPLEMENT (pop_transform) \

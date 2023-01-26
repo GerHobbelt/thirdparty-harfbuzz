@@ -21,6 +21,8 @@ ____________________________________________________________________________*/
 #include "hb.h"
 #include "hb-ot.h"
 
+#undef verbose
+
 static const bool verbose = true;
 
 struct TestData

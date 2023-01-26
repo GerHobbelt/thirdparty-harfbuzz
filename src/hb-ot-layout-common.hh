@@ -2252,8 +2252,8 @@ struct VarRegionAxis
   {
     TRACE_SANITIZE (this);
     return_trace (c->check_struct (this) &&
-		  startCoord <= peakCoord && peakCoord <= endCoord &&
-		  (startCoord >= 0 || endCoord <= 0 || peakCoord == 0));
+		  startCoord.to_int() <= peakCoord.to_int() && peakCoord.to_int() <= endCoord.to_int() &&
+		  (startCoord.to_int() >= 0 || endCoord.to_int() <= 0 || peakCoord.to_int() == 0));
   }
 
   public:
