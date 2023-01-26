@@ -36,6 +36,7 @@ typedef struct hb_extents_t
     xmin (xmin), ymin (ymin), xmax (xmax), ymax (ymax) {}
 
   bool is_empty () const { return xmin >= xmax || ymin >= ymax; }
+  bool is_void () const { return xmin > xmax; }
 
   void union_ (const hb_extents_t &o)
   {
@@ -51,6 +52,23 @@ typedef struct hb_extents_t
     ymin = hb_max (ymin, o.ymin);
     xmax = hb_min (xmax, o.xmax);
     ymax = hb_min (ymax, o.ymax);
+  }
+
+  void
+  add_point (float x, float y)
+  {
+    if (unlikely (is_void ()))
+    {
+      xmin = xmax = x;
+      ymin = ymax = y;
+    }
+    else
+    {
+      xmin = hb_min (xmin, x);
+      ymin = hb_min (ymin, y);
+      xmax = hb_max (xmax, x);
+      ymax = hb_max (ymax, y);
+    }
   }
 
   float xmin = 0.f;
@@ -84,7 +102,7 @@ typedef struct hb_transform_t
     *this = r;
   }
 
-  void transform_distance (float &dx, float &dy)
+  void transform_distance (float &dx, float &dy) const
   {
     float new_x = xx * dx + xy * dy;
     float new_y = yx * dx + yy * dy;
@@ -92,14 +110,14 @@ typedef struct hb_transform_t
     dy = new_y;
   }
 
-  void transform_point (float &x, float &y)
+  void transform_point (float &x, float &y) const
   {
     transform_distance (x, y);
     x += x0;
     y += y0;
   }
 
-  void transform_extents (hb_extents_t extents)
+  void transform_extents (hb_extents_t extents) const
   {
     float quad_x[4], quad_y[4];
 
@@ -187,9 +205,9 @@ struct hb_paint_extents_context_t {
 
   hb_paint_extents_context_t ()
   {
+    transforms.push (hb_transform_t{});
     clips.push (hb_bounds_t{hb_bounds_t::UNBOUNDED});
     groups.push (hb_bounds_t{hb_bounds_t::EMPTY});
-    transforms.push (hb_transform_t{});
   }
 
   hb_extents_t get_extents ()
@@ -204,9 +222,9 @@ struct hb_paint_extents_context_t {
 
   void push_transform (const hb_transform_t &trans)
   {
-    hb_transform_t r = transforms.tail ();
-    r.multiply (trans);
-    transforms.push (r);
+    hb_transform_t t = transforms.tail ();
+    t.multiply (trans);
+    transforms.push (t);
   }
 
   void pop_transform ()
@@ -217,11 +235,10 @@ struct hb_paint_extents_context_t {
   void push_clip (hb_extents_t extents)
   {
     /* Transform extents and push a new clip. */
-    hb_transform_t &r = transforms.tail ();
-    r.transform_extents (extents);
+    const hb_transform_t &t = transforms.tail ();
+    t.transform_extents (extents);
 
-    hb_bounds_t b {extents};
-    clips.push (b);
+    clips.push (hb_bounds_t {extents});
   }
 
   void pop_clip ()
@@ -231,7 +248,7 @@ struct hb_paint_extents_context_t {
 
   void push_group ()
   {
-    groups.push (hb_bounds_t{hb_bounds_t::EMPTY});
+    groups.push (hb_bounds_t {hb_bounds_t::EMPTY});
   }
 
   void pop_group (hb_paint_composite_mode_t mode)
@@ -270,9 +287,10 @@ struct hb_paint_extents_context_t {
     group.union_ (clip);
   }
 
+  protected:
+  hb_vector_t<hb_transform_t> transforms;
   hb_vector_t<hb_bounds_t> clips;
   hb_vector_t<hb_bounds_t> groups;
-  hb_vector_t<hb_transform_t> transforms;
 };
 
 HB_INTERNAL hb_paint_funcs_t *

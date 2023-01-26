@@ -61,75 +61,57 @@ hb_paint_extents_pop_transform (hb_paint_funcs_t *funcs HB_UNUSED,
 }
 
 static void
-add_point (hb_extents_t *extents,
-           float x, float y)
-{
-  if (extents->xmax < extents->xmin)
-  {
-    extents->xmin = extents->xmax = x;
-    extents->ymin = extents->ymax = y;
-  }
-  else
-  {
-    extents->xmin = hb_min (extents->xmin, x);
-    extents->ymin = hb_min (extents->ymin, y);
-    extents->xmax = hb_max (extents->xmax, x);
-    extents->ymax = hb_max (extents->ymax, y);
-  }
-}
-
-static void
-hb_draw_extents_move_to (hb_draw_funcs_t *dfuncs,
+hb_draw_extents_move_to (hb_draw_funcs_t *dfuncs HB_UNUSED,
 			 void *data,
 			 hb_draw_state_t *st,
 			 float to_x, float to_y,
-			 void *)
+			 void *user_data HB_UNUSED)
 {
   hb_extents_t *extents = (hb_extents_t *) data;
 
-  add_point (extents, to_x, to_y);
+  extents->add_point (to_x, to_y);
 }
 
 static void
-hb_draw_extents_line_to (hb_draw_funcs_t *dfuncs,
+hb_draw_extents_line_to (hb_draw_funcs_t *dfuncs HB_UNUSED,
 			 void *data,
 			 hb_draw_state_t *st,
 			 float to_x, float to_y,
-			 void *)
+			 void *user_data HB_UNUSED)
 {
   hb_extents_t *extents = (hb_extents_t *) data;
 
-  add_point (extents, to_x, to_y);
+  extents->add_point (to_x, to_y);
 }
 
 static void
-hb_draw_extents_quadratic_to (hb_draw_funcs_t *dfuncs,
+hb_draw_extents_quadratic_to (hb_draw_funcs_t *dfuncs HB_UNUSED,
 			      void *data,
 			      hb_draw_state_t *st,
 			      float control_x, float control_y,
 			      float to_x, float to_y,
-			      void *)
+			      void *user_data HB_UNUSED)
 {
   hb_extents_t *extents = (hb_extents_t *) data;
 
-  add_point (extents, control_x, control_y);
-  add_point (extents, to_x, to_y);
+  extents->add_point (control_x, control_y);
+  extents->add_point (to_x, to_y);
 }
 
 static void
-hb_draw_extents_cubic_to (hb_draw_funcs_t *dfuncs,
+hb_draw_extents_cubic_to (hb_draw_funcs_t *dfuncs HB_UNUSED,
 			  void *data,
 			  hb_draw_state_t *st,
 			  float control1_x, float control1_y,
 			  float control2_x, float control2_y,
 			  float to_x, float to_y,
-			  void *)
+			  void *user_data HB_UNUSED)
 {
   hb_extents_t *extents = (hb_extents_t *) data;
 
-  add_point (extents, control1_x, control1_y);
-  add_point (extents, control2_x, control2_y);
-  add_point (extents, to_x, to_y);
+  extents->add_point (control1_x, control1_y);
+  extents->add_point (control2_x, control2_y);
+  extents->add_point (to_x, to_y);
 }
 
 static inline void free_static_draw_extents_funcs ();

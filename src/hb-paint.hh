@@ -138,38 +138,80 @@ struct hb_paint_funcs_t
                     mode,
                     !user_data ? nullptr : user_data->pop_group); }
 
+
+  /* Internal specializations. */
+
   void push_root_transform (void *paint_data,
                             const hb_font_t *font)
   {
-    int xscale = font->x_scale, yscale = font->y_scale;
     float upem = font->face->get_upem ();
+    int xscale = font->x_scale, yscale = font->y_scale;
     float slant = font->slant_xy;
 
-    func.push_transform (this, paint_data,
-                         xscale/upem, 0, slant * yscale/upem, yscale/upem, 0, 0,
-                         !user_data ? nullptr : user_data->push_transform);
-  }
-  void pop_root_transform (void *paint_data)
-  {
-    func.pop_transform (this, paint_data,
-                        !user_data ? nullptr : user_data->pop_transform);
+    push_transform (paint_data,
+		    xscale/upem, 0, slant * yscale/upem, yscale/upem, 0, 0);
   }
 
   void push_inverse_root_transform (void *paint_data,
                                     hb_font_t *font)
   {
-    int xscale = font->x_scale, yscale = font->y_scale;
     float upem = font->face->get_upem ();
+    int xscale = font->x_scale ? font->x_scale : upem;
+    int yscale = font->y_scale ? font->y_scale : upem;
     float slant = font->slant_xy;
 
-    func.push_transform (this, paint_data,
-                         upem/xscale, 0, -slant * upem/xscale, upem/yscale, 0, 0,
-                         !user_data ? nullptr : user_data->push_transform);
+    push_transform (paint_data,
+		    upem/xscale, 0, -slant * upem/xscale, upem/yscale, 0, 0);
   }
-  void pop_inverse_root_transform (void *paint_data)
+
+  HB_NODISCARD
+  bool push_translate (void *paint_data,
+                       float dx, float dy)
   {
-    func.pop_transform (this, paint_data,
-                        !user_data ? nullptr : user_data->pop_transform);
+    if (!dx && !dy)
+      return false;
+
+    push_transform (paint_data,
+		    1.f, 0.f, 0.f, 1.f, dx, dy);
+    return true;
+  }
+
+  HB_NODISCARD
+  bool push_scale (void *paint_data,
+                   float sx, float sy)
+  {
+    if (sx == 1.f && sy == 1.f)
+      return false;
+
+    push_transform (paint_data,
+		    sx, 0.f, 0.f, sy, 0.f, 0.f);
+    return true;
+  }
+
+  HB_NODISCARD
+  bool push_rotate (void *paint_data,
+                    float a)
+  {
+    if (!a)
+      return false;
+
+    float cc = cosf (a * (float) M_PI);
+    float ss = sinf (a * (float) M_PI);
+    push_transform (paint_data, cc, ss, -ss, cc, 0.f, 0.f);
+    return true;
+  }
+
+  HB_NODISCARD
+  bool push_skew (void *paint_data,
+                  float sx, float sy)
+  {
+    if (!sx && !sy)
+      return false;
+
+    float x = +tanf (sx * (float) M_PI);
+    float y = -tanf (sy * (float) M_PI);
+    push_transform (paint_data, 1.f, y, x, 1.f, 0.f, 0.f);
+    return true;
   }
 };
 DECLARE_NULL_INSTANCE (hb_paint_funcs_t);

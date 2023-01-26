@@ -45,6 +45,7 @@ struct blend_arg_t : number_t
     numValues = numValues_;
     valueIndex = valueIndex_;
     unsigned numBlends = blends_.length;
+    deltas.alloc (numBlends, true); /* Exact-size allocation. */
     if (unlikely (!deltas.resize (numBlends)))
       return;
     for (unsigned int i = 0; i < numBlends; i++)
@@ -118,6 +119,7 @@ struct cff2_cs_interp_env_t : cs_interp_env_t<ELEM, CFF2Subrs>
       region_count = varStore->varStore.get_region_index_count (get_ivs ());
       if (do_blend)
       {
+        scalars.alloc (region_count, true);
 	if (unlikely (!scalars.resize (region_count)))
 	  SUPER::set_error ();
 	else
