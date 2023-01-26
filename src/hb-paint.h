@@ -39,8 +39,6 @@ HB_BEGIN_DECLS
  *
  * Glyph paint callbacks.
  *
- * All the callbacks are necessary.
- *
  * The callbacks assume that the caller maintains a stack
  * of current transforms, clips and intermediate surfaces,
  * as evidenced by the pairs of push/pop callbacks. The
@@ -58,7 +56,7 @@ HB_BEGIN_DECLS
  * gradient and composite callbacks are not needed.
  *
  * The paint-image callback is only needed for glyphs
- * with blobs in the CBDT, sbix or SVG tables.
+ * with image blobs in the CBDT, sbix or SVG tables.
  *
  * Since: REPLACEME
  **/
@@ -89,7 +87,7 @@ hb_paint_funcs_is_immutable (hb_paint_funcs_t *funcs);
  * @yy: yy component of the transform matrix
  * @dx: dx component of the transform matrix
  * @dy: dy component of the transform matrix
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to apply
  * a transform to subsequent paint calls.
@@ -111,7 +109,7 @@ typedef void (*hb_paint_push_transform_func_t) (hb_paint_funcs_t *funcs,
  * hb_paint_pop_transform_func_t:
  * @funcs: paint functions object
  * @paint_data: The data accompanying the paint functions
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to undo
  * the effect of a prior call to the #hb_paint_funcs_push_transform_func_t
@@ -128,7 +126,7 @@ typedef void (*hb_paint_pop_transform_func_t) (hb_paint_funcs_t *funcs,
  * @funcs: paint functions object
  * @paint_data: The data accompanying the paint functions
  * @glyph: the glyph ID
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to clip
  * subsequent paint calls to the outline of a glyph.
@@ -160,7 +158,7 @@ typedef void (*hb_paint_push_clip_glyph_func_t) (hb_paint_funcs_t *funcs,
  * @ymin: min Y for the rectangle
  * @xmax: max X for the rectangle
  * @ymax: max Y for the rectangle
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to clip
  * subsequent paint calls to a rectangle.
@@ -184,7 +182,7 @@ typedef void (*hb_paint_push_clip_rectangle_func_t) (hb_paint_funcs_t *funcs,
  * hb_paint_pop_clip_func_t:
  * @funcs: paint functions object
  * @paint_data: The data accompanying the paint functions
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to undo
  * the effect of a prior call to the #hb_paint_funcs_push_clip_glyph_func_t
@@ -202,7 +200,7 @@ typedef void (*hb_paint_pop_clip_func_t) (hb_paint_funcs_t *funcs,
  * @paint_data: The data accompanying the paint functions
  * @color_index: Index of a color in the fonts selected color palette
  * @alpha: alpha to apply in addition
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to paint a
  * color everywhere within the current clip.
@@ -223,29 +221,45 @@ typedef void (*hb_paint_color_func_t) (hb_paint_funcs_t *funcs,
                                        void *user_data);
 
 /**
+ * HB_PAINT_IMAGE_FORMAT_PNG:
+ *
+ * Tag identifying png images in #hb_paint_image_func_t callbacks.
+ */
+#define HB_PAINT_IMAGE_FORMAT_PNG HB_TAG('p','n','g',' ')
+
+/**
+ * HB_PAINT_IMAGE_FORMAT_SVG:
+ *
+ * Tag identifying svg images in #hb_paint_image_func_t callbacks.
+ */
+#define HB_PAINT_IMAGE_FORMAT_SVG HB_TAG('s','v','g',' ')
+
+/**
  * hb_paint_image_func_t:
  * @funcs: paint functions object
  * @paint_data: The data accompanying the paint functions
  * @image: the image data
- * @mimetype: the mime type for the image data
+ * @format: the image format as a tag
  * @extents: (nullable): glyph extents
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to paint the
  * glyph image.
  *
  * This method is intended for glyphs with image blobs in the CBDT,
- * sbix or SVG tables. The @mimetype identifies the kind of data
- * that is contained in @image. Possible values include "image/png"
- * and "image/svg+xml". The glyph extents are provided if available,
- * and should be used to position the image.
+ * sbix or SVG tables. The @format identifies the kind of data that
+ * is contained in @image. Possible values include #HB_PAINT_IMAGE_FORMAT_PNG
+ * and HB_PAINT_IMAGE_FORMAT_SVG.
+ *
+ * The glyph extents are provided if available, and should be used
+ * to position the image.
  *
  * Since: REPLACEME
  */
 typedef void (*hb_paint_image_func_t) (hb_paint_funcs_t *funcs,
                                        void *paint_data,
                                        hb_blob_t *image,
-                                       const char *mimetype,
+                                       hb_tag_t format,
                                        hb_glyph_extents_t *extents,
                                        void *user_data);
 
@@ -268,6 +282,13 @@ typedef struct hb_color_line_t hb_color_line_t;
  *
  * Color lines typically have offsets ranging between 0 and 1,
  * but that is not required.
+ *
+ * The @color_index can be either an index into one of the fonts
+ * color palettes, or the special value 0xFFFF, which indicates that
+ * the foreground color should be used.
+ *
+ * in either case, the @alpha value should be applied in addition
+ * (i.e. multiplied with) the alpha value found in the color.
  *
  * Since: REPLACEME
  */
@@ -303,7 +324,7 @@ hb_color_line_get_extend (hb_color_line_t *color_line);
  * @y1: Y coordinate of the second point
  * @x2: X coordinate of the third point
  * @y2: Y coordinate of the third point
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to paint a linear
  * gradient everywhere within the current clip.
@@ -336,7 +357,7 @@ typedef void (*hb_paint_linear_gradient_func_t) (hb_paint_funcs_t *funcs,
  * @x1: X coordinate of the second circle's center
  * @y1: Y coordinate of the second circle's center
  * @r1: radius of the second circle
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to paint a radial
  * gradient everywhere within the current clip.
@@ -364,9 +385,9 @@ typedef void (*hb_paint_radial_gradient_func_t) (hb_paint_funcs_t *funcs,
  * @color_line: Color information for the gradient
  * @x0: X coordinate of the circle's center
  * @y0: Y coordinate of the circle's center
- * @start_angle: the start angle
- * @end_angle: the end angle
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @start_angle: the start angle, in radians
+ * @end_angle: the end angle, in radians
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to paint a sweep
  * gradient everywhere within the current clip.
@@ -388,6 +409,16 @@ typedef void (*hb_paint_sweep_gradient_func_t)  (hb_paint_funcs_t *funcs,
                                                  float end_angle,
                                                  void *user_data);
 
+/**
+ * hb_paint_composite_mode_t:
+ *
+ * The values of this enumeration describe the compositing modes
+ * that can be used when combining temporary redirected drawing
+ * with the backdrop.
+ *
+ * See the OpenType spec COLR section (https://learn.microsoft.com/en-us/typography/opentype/spec/colr)
+ * for details.
+ */
 typedef enum {
   HB_PAINT_COMPOSITE_MODE_CLEAR,
   HB_PAINT_COMPOSITE_MODE_SRC,
@@ -423,7 +454,7 @@ typedef enum {
  * hb_paint_push_group_func_t:
  * @funcs: paint functions object
  * @paint_data: The data accompanying the paint functions
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to use
  * an intermediate surface for subsequent paint calls.
@@ -443,7 +474,7 @@ typedef void (*hb_paint_push_group_func_t) (hb_paint_funcs_t *funcs,
  * @funcs: paint functions object
  * @paint_data: The data accompanying the paint functions
  * @mode: the compositing mode to use
- * @user_data: user data passed to the hb_font_paint_glyph() call
+ * @user_data: User data pointer passed by the caller
  *
  * A virtual method for the #hb_paint_funcs_t to undo
  * the effect of a prior call to the #hb_paint_funcs_push_group_func_t
@@ -693,7 +724,7 @@ hb_paint_color (hb_paint_funcs_t *funcs, void *paint_data,
 HB_EXTERN void
 hb_paint_image (hb_paint_funcs_t *funcs, void *paint_data,
                 hb_blob_t *image,
-                const char *mimetype,
+                hb_tag_t format,
                 hb_glyph_extents_t *extents);
 
 HB_EXTERN void

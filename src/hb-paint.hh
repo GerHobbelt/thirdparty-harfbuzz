@@ -26,6 +26,8 @@
 #define HB_PAINT_HH
 
 #include "hb.hh"
+#include "hb-face.hh"
+#include "hb-font.hh"
 
 #define HB_PAINT_FUNCS_IMPLEMENT_CALLBACKS \
   HB_PAINT_FUNC_IMPLEMENT (push_transform) \
@@ -95,10 +97,10 @@ struct hb_paint_funcs_t
                 !user_data ? nullptr : user_data->color); }
   void image (void *paint_data,
               hb_blob_t *image,
-              const char *mimetype,
+              hb_tag_t format,
               hb_glyph_extents_t *extents)
   { func.image (this, paint_data,
-                image, mimetype, extents,
+                image, format, extents,
                 !user_data ? nullptr : user_data->image); }
   void linear_gradient (void *paint_data,
                         hb_color_line_t *color_line,
@@ -135,15 +137,18 @@ struct hb_paint_funcs_t
   void push_root_transform (void *paint_data,
                             hb_font_t *font)
   {
-    int xscale, yscale;
-    float upem;
-    hb_font_get_scale (font, &xscale, &yscale);
-    upem = hb_face_get_upem (hb_font_get_face (font));
-    func.push_transform (this, paint_data, xscale/upem, 0, 0, yscale/upem, 0, 0,
-                         !user_data ? nullptr : user_data->push_transform); }
+    int xscale = font->x_scale, yscale = font->y_scale;
+    float upem = font->face->get_upem ();
+    float slant = font->slant_xy;
+
+    func.push_transform (this, paint_data, xscale/upem, 0, slant * yscale/upem, yscale/upem, 0, 0,
+                         !user_data ? nullptr : user_data->push_transform);
+  }
   void pop_root_transform (void *paint_data)
-  { func.pop_transform (this, paint_data,
-                        !user_data ? nullptr : user_data->pop_transform); }
+  {
+    func.pop_transform (this, paint_data,
+                        !user_data ? nullptr : user_data->pop_transform);
+  }
 };
 DECLARE_NULL_INSTANCE (hb_paint_funcs_t);
 

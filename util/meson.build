@@ -1,5 +1,6 @@
 hb_view_sources = [
   'hb-view.cc',
+  'hb-cairo-utils.c'
 ]
 
 hb_shape_sources = [
@@ -15,13 +16,6 @@ hb_subset_cli_sources = [
 ]
 
 util_deps = [freetype_dep, cairo_dep, cairo_ft_dep, glib_dep]
-
-hb_test = executable('hb-test', [ 'hb-test.c' ],
-   cpp_args: cpp_args,
-      include_directories: [incconfig, incsrc],
-      dependencies: [util_deps, chafa_dep],
-      link_with: [libharfbuzz],
-   ) 
 
 if conf.get('HAVE_GLIB', 0) == 1
   if conf.get('HAVE_CAIRO', 0) == 1
