@@ -38,10 +38,18 @@ struct info_t
   {
     GOptionEntry entries[] =
     {
-      {"list-all",	0, 0, G_OPTION_ARG_NONE,	&this->list_all,		"List everything",		nullptr},
+      {"all",		'a', 0, G_OPTION_ARG_NONE,	&this->all,			"Show everything",		nullptr},
+
+      {"show-all",	's', 0, G_OPTION_ARG_NONE,	&this->show_all,		"Show all short information",	nullptr},
+      {"show-upem",	0, 0, G_OPTION_ARG_NONE,	&this->show_upem,		"Show Units-Per-EM",		nullptr},
+      {"show-unicode-count",0, 0, G_OPTION_ARG_NONE,	&this->show_unicode_count,	"Show Unicode count",		nullptr},
+      {"show-glyph-count",0, 0, G_OPTION_ARG_NONE,	&this->show_glyph_count,	"Show glyph count",		nullptr},
+
+      {"list-all",	'l', 0, G_OPTION_ARG_NONE,	&this->list_all,		"List all long information",	nullptr},
       {"list-tables",	0, 0, G_OPTION_ARG_NONE,	&this->list_tables,		"List tables",			nullptr},
       {"list-unicodes",	0, 0, G_OPTION_ARG_NONE,	&this->list_unicodes,		"List characters",		nullptr},
       {"list-glyphs",	0, 0, G_OPTION_ARG_NONE,	&this->list_glyphs,		"List glyphs",			nullptr},
+      {"list-scripts",	0, 0, G_OPTION_ARG_NONE,	&this->list_scripts,		"List layout scripts",		nullptr},
       {"list-features",	0, 0, G_OPTION_ARG_NONE,	&this->list_features,		"List layout features",		nullptr},
 #ifndef HB_NO_VAR
       {"list-variations",0, 0, G_OPTION_ARG_NONE,	&this->list_variations,		"List variations",		nullptr},
@@ -63,10 +71,18 @@ struct info_t
   hb_bool_t verbose = true;
   hb_bool_t first_item = true;
 
+  hb_bool_t all = false;
+
+  hb_bool_t show_all = false;
+  hb_bool_t show_upem = false;
+  hb_bool_t show_unicode_count = false;
+  hb_bool_t show_glyph_count = false;
+
   hb_bool_t list_all = false;
   hb_bool_t list_tables = false;
   hb_bool_t list_unicodes = false;
   hb_bool_t list_glyphs = false;
+  hb_bool_t list_scripts = false;
   hb_bool_t list_features = false;
 #ifndef HB_NO_VAR
   hb_bool_t list_variations = false;
@@ -81,11 +97,28 @@ struct info_t
     font = hb_font_reference (((font_options_t *) app)->font);
     verbose = !app->quiet;
 
+    if (all)
+    {
+      show_all =
+      list_all =
+      true;
+      first_item = false;
+    }
+
+    if (show_all)
+    {
+      show_upem =
+      show_unicode_count =
+      show_glyph_count =
+      true;
+    }
+
     if (list_all)
     {
       list_tables =
       list_unicodes =
       list_glyphs =
+      list_scripts =
       list_features =
 #ifndef HB_NO_VAR
       list_variations =
@@ -93,9 +126,14 @@ struct info_t
       true;
     }
 
+    if (show_upem)	  _show_upem ();
+    if (show_unicode_count) _show_unicode_count ();
+    if (show_glyph_count) _show_glyph_count ();
+
     if (list_tables)	  _list_tables ();
     if (list_unicodes)	  _list_unicodes ();
     if (list_glyphs)	  _list_glyphs ();
+    if (list_scripts)	  _list_scripts ();
     if (list_features)	  _list_features ();
 #ifndef HB_NO_VAR
     if (list_variations)  _list_variations ();
@@ -115,6 +153,41 @@ struct info_t
       return;
     }
     printf ("\n---\n\n");
+  }
+
+  void _show_upem ()
+  {
+    if (verbose)
+    {
+      printf ("Units-Per-EM: ");
+    }
+
+    printf ("%u\n", hb_face_get_upem (face));
+  }
+
+  void _show_unicode_count ()
+  {
+    if (verbose)
+    {
+      printf ("Unicode count: ");
+    }
+
+    hb_set_t *unicodes = hb_set_create ();
+    hb_face_collect_unicodes (face, unicodes);
+
+    printf ("%u\n", hb_set_get_population (unicodes));
+
+    hb_set_destroy (unicodes);
+  }
+
+  void _show_glyph_count ()
+  {
+    if (verbose)
+    {
+      printf ("Glyph count: ");
+    }
+
+    printf ("%u\n", hb_face_get_glyph_count (face));
   }
 
   void _list_tables ()
@@ -227,17 +300,15 @@ struct info_t
   }
 
   void
-  _list_features ()
+  _list_scripts ()
   {
     if (verbose)
     {
       separator ();
-      printf ("Layout features information:\n\n");
+      printf ("Layout script information:\n\n");
     }
 
     hb_tag_t table_tags[] = {HB_OT_TAG_GSUB, HB_OT_TAG_GPOS, HB_TAG_NONE};
-    auto language = hb_language_get_default ();
-    hb_set_t *features = hb_set_create ();
 
     for (unsigned int i = 0; table_tags[i]; i++)
     {
@@ -281,6 +352,27 @@ struct info_t
 	script_offset += script_count;
       }
       while (script_count == sizeof script_array / sizeof script_array[0]);
+
+    }
+
+  }
+
+  void
+  _list_features ()
+  {
+    if (verbose)
+    {
+      separator ();
+      printf ("Layout features information:\n\n");
+    }
+
+    hb_tag_t table_tags[] = {HB_OT_TAG_GSUB, HB_OT_TAG_GPOS, HB_TAG_NONE};
+    auto language = hb_language_get_default ();
+    hb_set_t *features = hb_set_create ();
+
+    for (unsigned int i = 0; table_tags[i]; i++)
+    {
+      printf ("Table: %c%c%c%c\n", HB_UNTAG (table_tags[i]));
 
       hb_set_clear (features);
       hb_tag_t feature_array[32];
@@ -355,7 +447,7 @@ struct info_t
     if (verbose && count)
     {
       printf ("Varitation axes:\n\n");
-      printf ("Tag:	Minimum	Default	Maximum	Name\n\n");
+      printf ("Tag:	Minimum	Default	Maximum	Name\n");
     }
     for (unsigned i = 0; i < count; i++)
     {
@@ -378,7 +470,7 @@ struct info_t
 	      (double) axis.max_value,
 	      name);
     }
-    if (has_hidden)
+    if (verbose && has_hidden)
       printf ("\n[*] Hidden axis\n\n");
 
     free (axes);
@@ -389,7 +481,7 @@ struct info_t
     {
       if (verbose)
       {
-	printf ("Named instances:\n\n");
+	printf ("\nNamed instances:\n\n");
       }
 
       for (unsigned i = 0; i < count; i++)
@@ -430,6 +522,10 @@ struct main_font_t :
   int operator () (int argc, char **argv)
   {
     add_options ();
+
+    if (argc == 2)
+      consumer_t::show_all = true;
+
     parse (&argc, &argv);
 
     consumer_t::operator () (this);
