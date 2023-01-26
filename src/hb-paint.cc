@@ -75,7 +75,7 @@ hb_paint_color_nil (hb_paint_funcs_t *funcs, void *paint_data,
                     hb_color_t color,
                     void *user_data) {}
 
-static void
+static hb_bool_t
 hb_paint_image_nil (hb_paint_funcs_t *funcs, void *paint_data,
                     hb_blob_t *image,
                     unsigned int width,
@@ -83,7 +83,7 @@ hb_paint_image_nil (hb_paint_funcs_t *funcs, void *paint_data,
                     hb_tag_t format,
                     float slant_xy,
                     hb_glyph_extents_t *extents,
-                    void *user_data) {}
+                    void *user_data) { return false; }
 
 static void
 hb_paint_linear_gradient_nil (hb_paint_funcs_t *funcs, void *paint_data,
@@ -392,7 +392,7 @@ hb_paint_funcs_is_immutable (hb_paint_funcs_t *funcs)
  * may be out of order. It is the callers responsibility to ensure that
  * color stops are sorted by their offset before they are used.
  *
- * Return value: the total number of color stops in @cl
+ * Return value: the total number of color stops in @color_line
  *
  * Since: REPLACEME
  */
@@ -414,6 +414,8 @@ hb_color_line_get_color_stops (hb_color_line_t *color_line,
  * @color_line: a #hb_color_line_t object
  *
  * Fetches the extend mode of the color line object.
+ *
+ * Return value: the extend mode of @color_line
  *
  * Since: REPLACEME
  */

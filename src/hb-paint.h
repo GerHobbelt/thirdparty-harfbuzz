@@ -270,17 +270,19 @@ typedef void (*hb_paint_color_func_t) (hb_paint_funcs_t *funcs,
  * The image dimensions and glyph extents are provided if available,
  * and should be used to size and position the image.
  *
+ * Return value: Whether the operation was successful.
+ *
  * Since: REPLACEME
  */
-typedef void (*hb_paint_image_func_t) (hb_paint_funcs_t *funcs,
-                                       void *paint_data,
-                                       hb_blob_t *image,
-                                       unsigned int width,
-                                       unsigned int height,
-                                       hb_tag_t format,
-                                       float slant,
-                                       hb_glyph_extents_t *extents,
-                                       void *user_data);
+typedef hb_bool_t (*hb_paint_image_func_t) (hb_paint_funcs_t *funcs,
+					    void *paint_data,
+					    hb_blob_t *image,
+					    unsigned int width,
+					    unsigned int height,
+					    hb_tag_t format,
+					    float slant,
+					    hb_glyph_extents_t *extents,
+					    void *user_data);
 
 /**
  * hb_color_stop_t:
@@ -324,6 +326,22 @@ typedef enum {
 
 typedef struct hb_color_line_t hb_color_line_t;
 
+/**
+ * hb_color_line_get_color_stops_func_t:
+ * @color_line: a #hb_color_line_t object
+ * @color_line_data: the data accompanying @color_line
+ * @start: the index of the first color stop to return
+ * @count: (inout) (optional): Input = the maximum number of feature tags to return;
+ *     Output = the actual number of feature tags returned (may be zero)
+ * @color_stops: (out) (array length=count) (optional): Array of #hb_color_stop_t to populate
+ * @user_data: the data accompanying this method
+ *
+ * A virtual method for the #hb_color_line_t to fetch color stops.
+ *
+ * Return value: the total number of color stops in @color_line
+ *
+ * Since: REPLACEME
+ */
 typedef unsigned int (*hb_color_line_get_color_stops_func_t) (hb_color_line_t *color_line,
 							      void *color_line_data,
 							      unsigned int start,
@@ -331,6 +349,18 @@ typedef unsigned int (*hb_color_line_get_color_stops_func_t) (hb_color_line_t *c
 							      hb_color_stop_t *color_stops,
 							      void *user_data);
 
+/**
+ * hb_color_line_get_extend_func_t:
+ * @color_line: a #hb_color_line_t object
+ * @color_line_data: the data accompanying @color_line
+ * @user_data: the data accompanying this method
+ *
+ * A virtual method for the @hb_color_line_t to fetches the extend mode.
+ *
+ * Return value: the extend mode of @color_line
+ *
+ * Since: REPLACEME
+ */
 typedef hb_paint_extend_t (*hb_color_line_get_extend_func_t) (hb_color_line_t *color_line,
 							      void *color_line_data,
 							      void *user_data);

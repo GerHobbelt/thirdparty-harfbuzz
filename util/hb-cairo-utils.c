@@ -106,7 +106,7 @@ _hb_cairo_destroy_blob (void *p)
   hb_blob_destroy ((hb_blob_t *) p);
 }
 
-void
+hb_bool_t
 hb_cairo_paint_glyph_image (cairo_t *cr,
                             hb_blob_t *blob,
                             unsigned width,
@@ -116,7 +116,7 @@ hb_cairo_paint_glyph_image (cairo_t *cr,
                             hb_glyph_extents_t *extents)
 {
   if (!extents) /* SVG currently. */
-    return;
+    return FALSE;
 
   cairo_surface_t *surface = NULL;
 
@@ -140,14 +140,15 @@ hb_cairo_paint_glyph_image (cairo_t *cr,
     /* Byte-endian conversion. */
     unsigned data_size = hb_blob_get_length (blob);
     if (data_size < width * height * 4)
-      return;
+      return FALSE;
 
     unsigned char *data;
+#ifdef __BYTE_ORDER
     if (__BYTE_ORDER == __BIG_ENDIAN)
     {
       data = (unsigned char *) hb_blob_get_data_writable (blob, NULL);
       if (!data)
-        return;
+        return FALSE;
 
       unsigned count = width * height * 4;
       for (unsigned i = 0; i < count; i += 4)
@@ -162,6 +163,7 @@ hb_cairo_paint_glyph_image (cairo_t *cr,
       }
     }
     else
+#endif
       data = (unsigned char *) hb_blob_get_data (blob, NULL);
 
     surface = cairo_image_surface_create_for_data (data,
@@ -176,7 +178,16 @@ hb_cairo_paint_glyph_image (cairo_t *cr,
   }
 
   if (!surface)
-    return;
+    return FALSE;
+
+  cairo_save (cr);
+  /* this clip is here to work around recording surface limitations */
+  cairo_rectangle (cr,
+                   extents->x_bearing,
+                   extents->y_bearing,
+                   extents->width,
+                   extents->height);
+  cairo_clip (cr);
 
   cairo_pattern_t *pattern = cairo_pattern_create_for_surface (surface);
   cairo_pattern_set_extend (pattern, CAIRO_EXTEND_PAD);
@@ -198,6 +209,10 @@ hb_cairo_paint_glyph_image (cairo_t *cr,
 
   cairo_pattern_destroy (pattern);
   cairo_surface_destroy (surface);
+
+  cairo_restore (cr);
+
+  return TRUE;
 }
 
 static void

@@ -144,6 +144,7 @@
 
 
 #include "hb-config.hh"
+#include "hb-limits.hh"
 
 
 /*

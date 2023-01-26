@@ -162,9 +162,9 @@ static void _hb_ft_hb_font_changed (hb_font_t *font, FT_Face ft_face)
   {
 #ifdef HAVE_FT_GET_TRANSFORM
     /* Bitmap font, eg. bitmap color emoji. */
-    /* TODO Pick largest size? */
-    int x_scale  = ft_face->available_sizes[0].x_ppem;
-    int y_scale = ft_face->available_sizes[0].y_ppem;
+    /* Pick largest size? */
+    int x_scale  = ft_face->available_sizes[ft_face->num_fixed_sizes - 1].x_ppem;
+    int y_scale = ft_face->available_sizes[ft_face->num_fixed_sizes - 1].y_ppem;
     FT_Set_Char_Size (ft_face,
 		      x_scale, y_scale,
 		      0, 0);
@@ -446,6 +446,7 @@ hb_ft_get_glyph_h_advances (hb_font_t* font, void* font_data,
     FT_Matrix matrix;
     FT_Get_Transform (ft_face, &matrix, nullptr);
     x_mult = sqrtf ((float)matrix.xx * matrix.xx + (float)matrix.xy * matrix.xy) / 65536.f;
+    x_mult *= font->x_scale < 0 ? -1 : +1;
   }
   else
 #endif
@@ -464,6 +465,9 @@ hb_ft_get_glyph_h_advances (hb_font_t* font, void* font_data,
     else
     {
       FT_Get_Advance (ft_face, glyph, load_flags, &v);
+      /* Work around bug that FreeType seems to return negative advance
+       * for variable-set fonts if x_scale is negative! */
+      v = abs (v);
       ft_font->advance_cache.set (glyph, v);
     }
 
@@ -490,6 +494,7 @@ hb_ft_get_glyph_v_advance (hb_font_t *font,
     FT_Matrix matrix;
     FT_Get_Transform (ft_font->ft_face, &matrix, nullptr);
     y_mult = sqrtf ((float)matrix.yx * matrix.yx + (float)matrix.yy * matrix.yy) / 65536.f;
+    y_mult *= font->y_scale < 0 ? -1 : +1;
   }
   else
 #endif
@@ -528,7 +533,9 @@ hb_ft_get_glyph_v_origin (hb_font_t *font,
     FT_Matrix matrix;
     FT_Get_Transform (ft_face, &matrix, nullptr);
     x_mult = sqrtf ((float)matrix.xx * matrix.xx + (float)matrix.xy * matrix.xy) / 65536.f;
+    x_mult *= font->x_scale < 0 ? -1 : +1;
     y_mult = sqrtf ((float)matrix.yx * matrix.yx + (float)matrix.yy * matrix.yy) / 65536.f;
+    y_mult *= font->y_scale < 0 ? -1 : +1;
   }
   else
 #endif
@@ -589,7 +596,9 @@ hb_ft_get_glyph_extents (hb_font_t *font,
     FT_Matrix matrix;
     FT_Get_Transform (ft_face, &matrix, nullptr);
     x_mult = sqrtf ((float)matrix.xx * matrix.xx + (float)matrix.xy * matrix.xy) / 65536.f;
+    x_mult *= font->x_scale < 0 ? -1 : +1;
     y_mult = sqrtf ((float)matrix.yx * matrix.yx + (float)matrix.yy * matrix.yy) / 65536.f;
+    y_mult *= font->y_scale < 0 ? -1 : +1;
   }
   else
 #endif
@@ -709,6 +718,7 @@ hb_ft_get_font_h_extents (hb_font_t *font HB_UNUSED,
     FT_Matrix matrix;
     FT_Get_Transform (ft_face, &matrix, nullptr);
     y_mult = sqrtf ((float)matrix.yx * matrix.yx + (float)matrix.yy * matrix.yy) / 65536.f;
+    y_mult *= font->y_scale < 0 ? -1 : +1;
   }
   else
 #endif
@@ -833,7 +843,7 @@ hb_ft_paint_glyph (hb_font_t *font,
   hb_lock_t lock (ft_font->lock);
   FT_Face ft_face = ft_font->ft_face;
 
-  /* We release the lock before calling into callbacks, such that
+  /* We release the lock before calling into glyph callbacks, such that
    * eg. draw API can call back into the face.*/
 
   if (unlikely (FT_Load_Glyph (ft_face, gid,
@@ -878,13 +888,16 @@ hb_ft_paint_glyph (hb_font_t *font,
       if (!hb_font_get_glyph_extents (font, gid, &extents))
 	goto out;
 
-      paint_funcs->image (paint_data,
-			  blob,
-			  bitmap.width,
-			  bitmap.rows,
-			  HB_PAINT_IMAGE_FORMAT_BGRA,
-			  font->slant_xy,
-			  &extents);
+      if (!paint_funcs->image (paint_data,
+			       blob,
+			       bitmap.width,
+			       bitmap.rows,
+			       HB_PAINT_IMAGE_FORMAT_BGRA,
+			       font->slant_xy,
+			       &extents))
+      {
+        /* TODO Try a forced outline load and paint? */
+      }
 
     out:
       hb_blob_destroy (blob);
@@ -893,8 +906,6 @@ hb_ft_paint_glyph (hb_font_t *font,
 
     return;
   }
-
-  /* TODO Support image, COLRv0/1. */
 }
 #endif
 

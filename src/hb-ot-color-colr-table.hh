@@ -33,16 +33,13 @@
 #include "hb-ot-layout-common.hh"
 #include "hb-ot-var-common.hh"
 #include "hb-paint.hh"
+#include "hb-paint-extents.hh"
 
 /*
  * COLR -- Color
  * https://docs.microsoft.com/en-us/typography/opentype/spec/colr
  */
 #define HB_OT_TAG_COLR HB_TAG('C','O','L','R')
-
-#ifndef HB_COLRV1_MAX_NESTING_LEVEL
-#define HB_COLRV1_MAX_NESTING_LEVEL	128
-#endif
 
 
 namespace OT {
@@ -73,7 +70,8 @@ public:
   unsigned int palette;
   hb_color_t foreground;
   VarStoreInstancer &instancer;
-  int depth_left = HB_COLRV1_MAX_NESTING_LEVEL;
+  int depth_left = HB_MAX_NESTING_LEVEL;
+  int edge_count = HB_COLRV1_MAX_EDGE_COUNT;
 
   hb_paint_context_t (const void *base_,
 		      hb_paint_funcs_t *funcs_,
@@ -168,7 +166,7 @@ struct hb_colrv1_closure_context_t :
                                hb_set_t *glyphs_,
                                hb_set_t *layer_indices_,
                                hb_set_t *palette_indices_,
-                               unsigned nesting_level_left_ = HB_COLRV1_MAX_NESTING_LEVEL) :
+                               unsigned nesting_level_left_ = HB_MAX_NESTING_LEVEL) :
                           base (base_),
                           glyphs (glyphs_),
                           layer_indices (layer_indices_),
@@ -1518,7 +1516,7 @@ struct Paint
   {
     TRACE_SANITIZE (this);
 
-    if (unlikely (!c->check_start_recursion (HB_COLRV1_MAX_NESTING_LEVEL)))
+    if (unlikely (!c->check_start_recursion (HB_MAX_NESTING_LEVEL)))
       return_trace (c->no_dispatch_return_value ());
 
     return_trace (c->end_recursion (this->dispatch (c, std::forward<Ts> (ds)...)));
@@ -1700,7 +1698,13 @@ struct COLR
   static constexpr hb_tag_t tableTag = HB_OT_TAG_COLR;
 
   bool has_v0_data () const { return numBaseGlyphs; }
-  bool has_v1_data () const { return (this+baseGlyphList).len; }
+  bool has_v1_data () const
+  {
+    if (version == 1)
+      return (this+baseGlyphList).len > 0;
+
+    return false;
+  }
 
   unsigned int get_glyph_layers (hb_codepoint_t       glyph,
 				 unsigned int         start_offset,
@@ -1997,11 +2001,34 @@ struct COLR
       return true;
     }
 
+    auto *extents_funcs = hb_paint_extents_get_funcs ();
+    hb_paint_extents_context_t extents_data;
+    paint_glyph (font, glyph, extents_funcs, &extents_data, 0, HB_COLOR(0,0,0,0));
+
+    hb_extents_t e = extents_data.get_extents ();
+    extents->x_bearing = e.xmin;
+    extents->y_bearing = e.ymax;
+    extents->width = e.xmax - e.xmin;
+    extents->height = e.ymin - e.ymax;
+
+    return true;
+  }
+
+  bool
+  has_paint_for_glyph (hb_codepoint_t glyph) const
+  {
+    if (version == 1)
+    {
+      const Paint *paint = get_base_glyph_paint (glyph);
+
+      return paint != nullptr;
+    }
+
     return false;
   }
 
   bool
-  paint_glyph (hb_font_t *font, hb_codepoint_t glyph, hb_paint_funcs_t *funcs, void *data, unsigned int palette, hb_color_t foreground) const
+  paint_glyph (hb_font_t *font, hb_codepoint_t glyph, hb_paint_funcs_t *funcs, void *data, unsigned int palette, hb_color_t foreground, bool clip = true) const
   {
     VarStoreInstancer instancer (this+varStore,
 	                         this+varIdxMap,
@@ -2014,11 +2041,62 @@ struct COLR
       if (paint)
       {
         // COLRv1 glyph
-        c.funcs->push_root_transform (c.data, font);
 
-        c.recurse (*paint);
+	VarStoreInstancer instancer (this+varStore,
+				     this+varIdxMap,
+				     hb_array (font->coords, font->num_coords));
+
+	bool is_bounded = true;
+	bool pop_clip_first = true;
+	if (clip)
+	{
+	  hb_glyph_extents_t extents;
+	  if ((this+clipList).get_extents (glyph,
+					   &extents,
+					   instancer))
+	  {
+	    c.funcs->push_root_transform (c.data, font);
+
+	    c.funcs->push_clip_rectangle (c.data,
+					  extents.x_bearing,
+					  extents.y_bearing + extents.height,
+					  extents.x_bearing + extents.width,
+					  extents.y_bearing);
+	  }
+	  else
+	  {
+	    auto *extents_funcs = hb_paint_extents_get_funcs ();
+	    hb_paint_extents_context_t extents_data;
+
+	    paint_glyph (font, glyph,
+			 extents_funcs, &extents_data,
+			 palette, foreground,
+			 false);
+
+	    hb_extents_t extents = extents_data.get_extents ();
+	    is_bounded = extents_data.is_bounded ();
+	    c.funcs->push_clip_rectangle (c.data,
+					  extents.xmin,
+					  extents.ymin,
+					  extents.xmax,
+					  extents.ymax);
+
+	    c.funcs->push_root_transform (c.data, font);
+
+	    pop_clip_first = false;
+	  }
+	}
+
+	if (is_bounded)
+	  c.recurse (*paint);
+
+	if (clip && pop_clip_first)
+	  c.funcs->pop_clip (c.data);
 
         c.funcs->pop_root_transform (c.data);
+
+	if (clip && !pop_clip_first)
+	  c.funcs->pop_clip (c.data);
 
         return true;
       }
@@ -2070,7 +2148,8 @@ void
 hb_paint_context_t::recurse (const Paint &paint)
 {
   depth_left--;
-  if (depth_left > 0)
+  edge_count--;
+  if (depth_left > 0 && edge_count > 0)
     paint.dispatch (this);
   depth_left++;
 }
