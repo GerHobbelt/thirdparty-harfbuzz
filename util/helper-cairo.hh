@@ -100,7 +100,10 @@ helper_cairo_create_scaled_font (const font_options_t *font_opts)
 
   cairo_font_face_t *cairo_face;
   if (use_hb_draw)
+  {
     cairo_face = hb_cairo_font_face_create_for_font (font);
+    hb_cairo_font_face_set_scale_factor (cairo_face, 1 << font_opts->subpixel_bits);
+  }
 #ifdef HAVE_CAIRO_FT
   else
     cairo_face = helper_cairo_create_ft_font_face (font_opts);
@@ -605,14 +608,12 @@ helper_cairo_line_from_buffer (helper_cairo_line_t *l,
   l->utf8_len = text ? text_len : 0;
 
   hb_cairo_glyphs_from_buffer (buffer,
-			       text,
-			       text_len,
 			       utf8_clusters,
-			       1 << -scale_bits,
-			       &l->glyphs,
-			       &l->num_glyphs,
-			       &l->clusters,
-			       &l->num_clusters,
+			       1 << -scale_bits, 1 << -scale_bits,
+			       0., 0.,
+			       l->utf8, l->utf8_len,
+			       &l->glyphs, &l->num_glyphs,
+			       &l->clusters, &l->num_clusters,
 			       &l->cluster_flags);
 }
 

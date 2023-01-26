@@ -270,6 +270,19 @@ hb_paint_push_group_func_t
 hb_paint_funcs_set_push_group_func
 hb_paint_pop_group_func_t
 hb_paint_funcs_set_pop_group_func
+
+hb_paint_push_transform
+hb_paint_pop_transform
+hb_paint_push_clip_glyph
+hb_paint_push_clip_rectangle
+hb_paint_pop_clip
+hb_paint_color
+hb_paint_image
+hb_paint_linear_gradient
+hb_paint_radial_gradient
+hb_paint_sweep_gradient
+hb_paint_push_group
+hb_paint_pop_group
 </SECTION>
 
 <SECTION>
@@ -864,10 +877,14 @@ hb_subset_input_override_name_table
 
 <SECTION>
 <FILE>hb-cairo</FILE>
-hb_cairo_font_face_create_for_face
-hb_cairo_font_face_get_face
 hb_cairo_font_face_create_for_font
 hb_cairo_font_face_get_font
+hb_cairo_font_face_create_for_face
+hb_cairo_font_face_get_face
+hb_cairo_font_init_func_t
+hb_cairo_font_face_set_font_init_func
 hb_cairo_scaled_font_get_font
+hb_cairo_font_face_set_scale_factor
+hb_cairo_font_face_get_scale_factor
 hb_cairo_glyphs_from_buffer
 </SECTION>

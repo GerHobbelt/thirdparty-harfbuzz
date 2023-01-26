@@ -36,6 +36,9 @@
 #include "hb-utf.hh"
 
 
+/* TODO Error handling in cairo set_user_data calls? */
+
+
 /**
  * SECTION:hb-cairo
  * @title: hb-cairo
@@ -353,6 +356,9 @@ hb_cairo_render_color_glyph (cairo_scaled_font_t  *scaled_font,
 
 static const cairo_user_data_key_t hb_cairo_face_user_data_key = {0};
 static const cairo_user_data_key_t hb_cairo_font_user_data_key = {0};
+static const cairo_user_data_key_t hb_cairo_font_init_func_user_data_key = {0};
+static const cairo_user_data_key_t hb_cairo_font_init_user_data_user_data_key = {0};
+static const cairo_user_data_key_t hb_cairo_scale_factor_user_data_key = {0};
 
 static void hb_cairo_face_destroy (void *p) { hb_face_destroy ((hb_face_t *) p); }
 static void hb_cairo_font_destroy (void *p) { hb_font_destroy ((hb_font_t *) p); }
@@ -362,12 +368,14 @@ hb_cairo_init_scaled_font (cairo_scaled_font_t  *scaled_font,
 			   cairo_t              *cr HB_UNUSED,
 			   cairo_font_extents_t *extents)
 {
-  hb_font_t *font = (hb_font_t *) cairo_font_face_get_user_data (cairo_scaled_font_get_font_face (scaled_font),
+  cairo_font_face_t *font_face = cairo_scaled_font_get_font_face (scaled_font);
+
+  hb_font_t *font = (hb_font_t *) cairo_font_face_get_user_data (font_face,
 								 &hb_cairo_font_user_data_key);
 
   if (!font)
   {
-    hb_face_t *face = (hb_face_t *) cairo_font_face_get_user_data (cairo_scaled_font_get_font_face (scaled_font),
+    hb_face_t *face = (hb_face_t *) cairo_font_face_get_user_data (font_face,
 								   &hb_cairo_face_user_data_key);
     font = hb_font_create (face);
 
@@ -390,7 +398,26 @@ hb_cairo_init_scaled_font (cairo_scaled_font_t  *scaled_font,
 
     cairo_font_options_destroy (font_options);
 
-    // TODO Set (what?) scale; Note, should NOT set slant.
+    // Set scale; Note: should NOT set slant, or we'll double-slant.
+    unsigned scale_factor = hb_cairo_font_face_get_scale_factor (font_face);
+    if (scale_factor)
+    {
+      cairo_matrix_t font_matrix;
+      cairo_scaled_font_get_scale_matrix (scaled_font, &font_matrix);
+      hb_font_set_scale (font,
+			 round (font_matrix.xx * scale_factor),
+			 round (font_matrix.yy * scale_factor));
+    }
+
+    auto *init_func = (hb_cairo_font_init_func_t)
+		      cairo_font_face_get_user_data (font_face,
+						     &hb_cairo_font_init_func_user_data_key);
+    if (init_func)
+    {
+      void *user_data = cairo_font_face_get_user_data (font_face,
+						       &hb_cairo_font_init_user_data_user_data_key);
+      font = init_func (font, scaled_font, user_data);
+    }
 
     hb_font_make_immutable (font);
   }
@@ -409,6 +436,38 @@ hb_cairo_init_scaled_font (cairo_scaled_font_t  *scaled_font,
   extents->ascent  = (double)  hb_extents.ascender  / y_scale;
   extents->descent = (double) -hb_extents.descender / y_scale;
   extents->height  = extents->ascent + extents->descent;
+
+  return CAIRO_STATUS_SUCCESS;
+}
+
+static cairo_status_t
+hb_cairo_text_to_glyphs (cairo_scaled_font_t        *scaled_font,
+			 const char	            *utf8,
+			 int		             utf8_len,
+			 cairo_glyph_t	           **glyphs,
+			 int		            *num_glyphs,
+			 cairo_text_cluster_t      **clusters,
+			 int		            *num_clusters,
+			 cairo_text_cluster_flags_t *cluster_flags)
+{
+  hb_font_t *font = (hb_font_t *) cairo_scaled_font_get_user_data (scaled_font,
+								   &hb_cairo_font_user_data_key);
+
+  hb_buffer_t *buffer = hb_buffer_create ();
+  hb_buffer_add_utf8 (buffer, utf8, utf8_len, 0, utf8_len);
+  hb_buffer_guess_segment_properties (buffer);
+  hb_shape (font, buffer, nullptr, 0);
+
+  hb_cairo_glyphs_from_buffer (buffer,
+			       true,
+			       font->x_scale, font->y_scale,
+			       0., 0.,
+			       utf8, utf8_len,
+			       glyphs, (unsigned *) num_glyphs,
+			       clusters, (unsigned *) num_clusters,
+			       cluster_flags);
+
+  hb_buffer_destroy (buffer);
 
   return CAIRO_STATUS_SUCCESS;
 }
@@ -479,6 +538,7 @@ user_font_face_create (hb_face_t *face)
 
   cairo_face = cairo_user_font_face_create ();
   cairo_user_font_face_set_init_func (cairo_face, hb_cairo_init_scaled_font);
+  cairo_user_font_face_set_text_to_glyphs_func (cairo_face, hb_cairo_text_to_glyphs);
   cairo_user_font_face_set_render_glyph_func (cairo_face, hb_cairo_render_glyph);
 #ifdef HAVE_CAIRO_USER_FONT_FACE_SET_RENDER_COLOR_GLYPH_FUNC
   if (hb_ot_color_has_png (face) || hb_ot_color_has_layers (face) || hb_ot_color_has_paint (face))
@@ -494,51 +554,16 @@ user_font_face_create (hb_face_t *face)
 }
 
 /**
- * hb_cairo_font_face_create_for_face:
- * @face: a `hb_face_t`
- *
- * Creates a `cairo_font_face_t` for rendering text according
- * to @face.
- *
- * Returns: a newly created `cairo_font_face_t`
- *
- * Since: REPLACEME
- */
-cairo_font_face_t *
-hb_cairo_font_face_create_for_face (hb_face_t *face)
-{
-  hb_face_make_immutable (face);
-
-  return user_font_face_create (face);
-}
-
-/**
- * hb_cairo_font_face_get_face:
- * @font_face: a `cairo_font_face_t`
- *
- * Gets the `hb_face_t` associated with @font_face.
- *
- * Returns: (nullable): the `hb_face_t` associated with @font_face
- *
- * Since: REPLACEME
- */
-hb_face_t *
-hb_cairo_font_face_get_face (cairo_font_face_t *font_face)
-{
-  return (hb_face_t *) cairo_font_face_get_user_data (font_face, &hb_cairo_face_user_data_key);
-}
-
-/**
  * hb_cairo_font_face_create_for_font:
- * @font: a `hb_font_t`
+ * @font: a #hb_font_t
  *
- * Creates a `cairo_font_face_t` for rendering text according
+ * Creates a #cairo_font_face_t for rendering text according
  * to @font.
  *
  * Note that the scale of @font does not affect the rendering,
  * but the variations and slant that are set on @font do.
  *
- * Returns: a newly created `cairo_font_face_t`
+ * Returns: a newly created #cairo_font_face_t
  *
  * Since: REPLACEME
  */
@@ -559,27 +584,93 @@ hb_cairo_font_face_create_for_font (hb_font_t *font)
 
 /**
  * hb_cairo_font_face_get_font:
- * @font_face: a `cairo_font_face_t`
+ * @font_face: a #cairo_font_face_t
  *
- * Gets the `hb_font_t` that @font_face was created from.
+ * Gets the #hb_font_t that @font_face was created from.
  *
- * Returns: (nullable): the `hb_font_t` that @font_face was created from
+ * Returns: (nullable): the #hb_font_t that @font_face was created from
  *
  * Since: REPLACEME
  */
 hb_font_t *
 hb_cairo_font_face_get_font (cairo_font_face_t *font_face)
 {
-  return (hb_font_t *) cairo_font_face_get_user_data (font_face, &hb_cairo_font_user_data_key);
+  return (hb_font_t *) cairo_font_face_get_user_data (font_face,
+						      &hb_cairo_font_user_data_key);
+}
+
+/**
+ * hb_cairo_font_face_create_for_face:
+ * @face: a #hb_face_t
+ *
+ * Creates a #cairo_font_face_t for rendering text according
+ * to @face.
+ *
+ * Returns: a newly created #cairo_font_face_t
+ *
+ * Since: REPLACEME
+ */
+cairo_font_face_t *
+hb_cairo_font_face_create_for_face (hb_face_t *face)
+{
+  hb_face_make_immutable (face);
+
+  return user_font_face_create (face);
+}
+
+/**
+ * hb_cairo_font_face_get_face:
+ * @font_face: a #cairo_font_face_t
+ *
+ * Gets the #hb_face_t associated with @font_face.
+ *
+ * Returns: (nullable): the #hb_face_t associated with @font_face
+ *
+ * Since: REPLACEME
+ */
+hb_face_t *
+hb_cairo_font_face_get_face (cairo_font_face_t *font_face)
+{
+  return (hb_face_t *) cairo_font_face_get_user_data (font_face,
+						      &hb_cairo_face_user_data_key);
+}
+
+/**
+ * hb_cairo_font_face_set_font_init_func:
+ * @font_face: a #cairo_font_face_t
+ * @func: The virtual method to use
+ * @user_data: user data accompanying the method
+ * @destroy: function to call when @user_data is not needed anymore
+ *
+ * Set the virtual method to be called when a cairo
+ * face created using hb_cairo_font_face_create_for_face()
+ * creates an #hb_font_t for a #cairo_scaled_font_t.
+ *
+ * Since: REPLACEME
+ */
+void
+hb_cairo_font_face_set_font_init_func (cairo_font_face_t *font_face,
+				       hb_cairo_font_init_func_t func,
+				       void *user_data,
+				       hb_destroy_func_t destroy)
+{
+  cairo_font_face_set_user_data (font_face,
+				 &hb_cairo_font_init_func_user_data_key,
+				 (void *) func,
+				 nullptr);
+  cairo_font_face_set_user_data (font_face,
+				 &hb_cairo_font_init_user_data_user_data_key,
+				 (void *) user_data,
+				 destroy);
 }
 
 /**
  * hb_cairo_scaled_font_get_font:
- * @scaled_font: a `cairo_scaled_font_t`
+ * @scaled_font: a #cairo_scaled_font_t
  *
- * Gets the `hb_font_t` associated with @scaled_font.
+ * Gets the #hb_font_t associated with @scaled_font.
  *
- * Returns: (nullable): the `hb_font_t` associated with @scaled_font
+ * Returns: (nullable): the #hb_font_t associated with @scaled_font
  *
  * Since: REPLACEME
  */
@@ -589,57 +680,139 @@ hb_cairo_scaled_font_get_font (cairo_scaled_font_t *scaled_font)
   return (hb_font_t *) cairo_scaled_font_get_user_data (scaled_font, &hb_cairo_font_user_data_key);
 }
 
+
+/**
+ * hb_cairo_font_face_set_scale_factor:
+ * @scale_factor: The scale factor to use. See below
+ * @font_face: a #cairo_font_face_t
+ *
+ * Sets the scale factor of the @font_face. Default scale
+ * factor is zero.
+ *
+ * When a #cairo_font_face_t is created from a #hb_face_t using
+ * hb_cairo_font_face_create_for_face(), such face will create
+ * #hb_font_t objects during scaled-font creation.  The scale
+ * factor defines how the scale set on such #hb_font_t objects
+ * relates to the font-matrix (as such font size) of the cairo
+ * scaled-font.
+ *
+ * If the scale-factor is zero (default), then the scale of the
+ * #hb_font_t object will be left at default, which is the UPEM
+ * value of the respective #hb_face_t.
+ *
+ * If the scale-factor is set to non-zero, then the X and Y scale
+ * of the #hb_font_t object will be respectively set to the
+ * @scale_factor times the xx and yy elements of the scale-matrix
+ * of the cairo scaled-font being created.
+ *
+ * When using the hb_cairo_glyphs_from_buffer() API to convert
+ * HarfBuzz glyph buffer resulted from shaping with such a hb_font_t,
+ * if the scale-factor was non-zero, you can pass it directly to
+ * that API as both X and Y scale factors.
+ *
+ * If the scale-factor was zero however, or the cairo face was
+ * created using the alternative constructor
+ * hb_cairo_font_face_create_for_font(), you need to calculate the
+ * correct X/Y scale-factors to pass to hb_cairo_glyphs_from_buffer()
+ * by dividing the #hb_font_t X/Y scale-factors by the
+ * cairo scaled-font's scale-matrix XX/YY components respectively
+ * and use those values.  Or if you know that relationship offhand
+ * (because you set the scale of the #hb_font_t yourself), use
+ * the conversation rate involved.
+ *
+ * Since: REPLACEME
+ */
+void
+hb_cairo_font_face_set_scale_factor (cairo_font_face_t *font_face,
+				     unsigned int scale_factor)
+{
+  cairo_font_face_set_user_data (font_face,
+				 &hb_cairo_scale_factor_user_data_key,
+				 (void *) (uintptr_t) scale_factor,
+				 nullptr);
+}
+
+/**
+ * hb_cairo_font_face_get_scale_factor:
+ * @font_face: a #cairo_font_face_t
+ *
+ * Gets the scale factor set on the @font_face. Defaults to zero.
+ * See hb_cairo_font_face_set_scale_factor() for details.
+ *
+ * Returns: the scale factor of @font_face
+ *
+ * Since: REPLACEME
+ */
+unsigned int
+hb_cairo_font_face_get_scale_factor (cairo_font_face_t *font_face)
+{
+  return (unsigned int) (uintptr_t)
+	 cairo_font_face_get_user_data (font_face,
+					&hb_cairo_scale_factor_user_data_key);
+}
+
+
 /**
  * hb_cairo_glyphs_from_buffer:
- * @buffer: a `hb_buffer_t` containing glyphs
- * @text: (nullable): the text that was shaped in @buffer
- * @text_len: the length of @text in bytes
- * @utf8_clusters: `true` to provide cluster positions in bytes, instead of characters
- * @scale_factor: scale factor to scale positions by
- * @glyphs: return location for an array of `cairo_glyph_t`
- * @num_glyphs: return location for the length of @glyphs
- * @clusters: return location for an array of cluster positions
- * @num_clusters: return location for the length of @clusters
- * @cluster_flags: return location for cluster flags
+ * @buffer: a #hb_buffer_t containing glyphs
+ * @utf8_clusters: `true` to if @buffer clusters are in bytes, instead of characters
+ * @x_scale_factor: scale factor to divide hb_positions_t Y values by
+ * @y_scale_factor: scale factor to divide hb_positions_t X values by
+ * @x: X position to place first glyph
+ * @y: Y position to place first glyph
+ * @utf8: (nullable): the text that was shaped in @buffer
+ * @utf8_len: the length of @utf8 in bytes
+ * @glyphs: (out): return location for an array of #cairo_glyph_t
+ * @num_glyphs: (out): return location for the length of @glyphs
+ * @clusters: (out) (nullable): return location for an array of cluster positions
+ * @num_clusters: (out) (nullable): return location for the length of @clusters
+ * @cluster_flags: (out) (nullable): return location for cluster flags
  *
  * Extracts information from @buffer in a form that can be
- * passed to cairo_show_text_glyphs().
+ * passed to cairo_show_text_glyphs() or cairo_show_glyphs().
+ * This API is modeled after cairo_scaled_font_text_to_glyphs().
+ *
+ * If cluster information is requested, @utf8 must be provided.
+ *
+ * See hb_cairo_font_face_set_scale_factor() for the details of
+ * the @scale_factor argument.
+ *
+ * The returned @glyphs vector actually has `@num_glyphs + 1` entries in
+ * it and the x,y values of the extra entry at the end add up the advance
+ * x,y of all the glyphs in the @buffer.
  *
  * Since: REPLACEME
  */
 void
 hb_cairo_glyphs_from_buffer (hb_buffer_t *buffer,
-			     const char *text,
-			     int text_len,
 			     hb_bool_t utf8_clusters,
-			     int scale_factor,
+			     double x_scale_factor,
+			     double y_scale_factor,
+			     double x,
+			     double y,
+			     const char *utf8,
+			     int utf8_len,
 			     cairo_glyph_t **glyphs,
 			     unsigned int *num_glyphs,
 			     cairo_text_cluster_t **clusters,
 			     unsigned int *num_clusters,
 			     cairo_text_cluster_flags_t *cluster_flags)
 {
-  if (text && text_len < 0)
-    text_len = strlen (text);
+  if (utf8 && utf8_len < 0)
+    utf8_len = strlen (utf8);
 
   *num_glyphs = hb_buffer_get_length (buffer);
   hb_glyph_info_t *hb_glyph = hb_buffer_get_glyph_infos (buffer, nullptr);
   hb_glyph_position_t *hb_position = hb_buffer_get_glyph_positions (buffer, nullptr);
   *glyphs = cairo_glyph_allocate (*num_glyphs + 1);
 
-  if (text)
+  if (clusters)
   {
     *num_clusters = *num_glyphs ? 1 : 0;
     for (unsigned int i = 1; i < *num_glyphs; i++)
       if (hb_glyph[i].cluster != hb_glyph[i-1].cluster)
 	(*num_clusters)++;
     *clusters = cairo_text_cluster_allocate (*num_clusters);
-  }
-  else if (clusters)
-  {
-    *clusters = nullptr;
-    *num_clusters = 0;
-    *cluster_flags = (cairo_text_cluster_flags_t) 0;
   }
 
   if ((*num_glyphs && !*glyphs) ||
@@ -661,30 +834,31 @@ hb_cairo_glyphs_from_buffer (hb_buffer_t *buffer,
     return;
   }
 
-  double iscale = scale_factor ? 1. / scale_factor : 0.;
-  hb_position_t x = 0, y = 0;
+  double x_scale = x_scale_factor ? 1. / x_scale_factor : 0.;
+  double y_scale = y_scale_factor ? 1. / y_scale_factor : 0.;
+  hb_position_t hx = 0, hy = 0;
   int i;
   for (i = 0; i < (int) *num_glyphs; i++)
   {
     (*glyphs)[i].index = hb_glyph[i].codepoint;
-    (*glyphs)[i].x = (+hb_position->x_offset + x) * iscale;
-    (*glyphs)[i].y = (-hb_position->y_offset + y) * iscale;
-    x +=  hb_position->x_advance;
-    y += -hb_position->y_advance;
+    (*glyphs)[i].x = x + (+hb_position->x_offset + hx) * x_scale;
+    (*glyphs)[i].y = y + (-hb_position->y_offset + hy) * y_scale;
+    hx +=  hb_position->x_advance;
+    hy += -hb_position->y_advance;
 
     hb_position++;
   }
   (*glyphs)[i].index = -1;
-  (*glyphs)[i].x = x * iscale;
-  (*glyphs)[i].y = y * iscale;
+  (*glyphs)[i].x = round (hx * x_scale);
+  (*glyphs)[i].y = round (hy * y_scale);
 
-  if (*num_clusters)
+  if (clusters && *num_clusters)
   {
     memset ((void *) *clusters, 0, *num_clusters * sizeof ((*clusters)[0]));
     hb_bool_t backward = HB_DIRECTION_IS_BACKWARD (hb_buffer_get_direction (buffer));
     *cluster_flags = backward ? CAIRO_TEXT_CLUSTER_FLAG_BACKWARD : (cairo_text_cluster_flags_t) 0;
     unsigned int cluster = 0;
-    const char *start = text, *end;
+    const char *start = utf8, *end;
     (*clusters)[cluster].num_glyphs++;
     if (backward)
     {
@@ -704,7 +878,7 @@ hb_cairo_glyphs_from_buffer (hb_buffer_t *buffer,
 	}
 	(*clusters)[cluster].num_glyphs++;
       }
-      (*clusters)[cluster].num_bytes = text + text_len - start;
+      (*clusters)[cluster].num_bytes = utf8 + utf8_len - start;
     }
     else
     {
@@ -724,7 +898,7 @@ hb_cairo_glyphs_from_buffer (hb_buffer_t *buffer,
 	}
 	(*clusters)[cluster].num_glyphs++;
       }
-      (*clusters)[cluster].num_bytes = text + text_len - start;
+      (*clusters)[cluster].num_bytes = utf8 + utf8_len - start;
     }
   }
 }

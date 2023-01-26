@@ -310,6 +310,14 @@ typedef struct {
 
 /**
  * hb_paint_extend_t:
+ * @HB_PAINT_EXTEND_PAD: Outside the defined interval,
+ *   the color of the closest color stop is used.
+ * @HB_PAINT_EXTEND_REPEAT: The color line is repeated over
+ *   repeated multiples of the defined interval
+ * @HB_PAINT_EXTEND_REFLECT: The color line is repeated over
+ *      repeated intervals, as for the repeat mode.
+ *      However, in each repeated interval, the ordering of
+ *      color stops is the reverse of the adjacent interval.
  *
  * The values of this enumeration determine how color values
  * outside the minimum and maximum defined offset on a #hb_color_line_t
@@ -317,6 +325,8 @@ typedef struct {
  *
  * See the OpenType spec [COLR](https://learn.microsoft.com/en-us/typography/opentype/spec/colr)
  * section for details.
+ *
+ * Since: REPLACEME
  */
 typedef enum {
   HB_PAINT_EXTEND_PAD,
@@ -507,6 +517,62 @@ typedef void (*hb_paint_sweep_gradient_func_t)  (hb_paint_funcs_t *funcs,
 
 /**
  * hb_paint_composite_mode_t:
+ * @HB_PAINT_COMPOSITE_MODE_CLEAR: clear destination layer (bounded)
+ * @HB_PAINT_COMPOSITE_MODE_SRC: replace destination layer (bounded)
+ * @HB_PAINT_COMPOSITE_MODE_SRC_OVER: draw source layer on top of destination layer
+ * (bounded)
+ * @HB_PAINT_COMPOSITE_MODE_SRC_IN: draw source where there was destination content
+ * (unbounded)
+ * @HB_PAINT_COMPOSITE_MODE_SRC_OUT: draw source where there was no destination
+ * content (unbounded)
+ * @HB_PAINT_COMPOSITE_MODE_SRC_ATOP: draw source on top of destination content and
+ * only there
+ * @HB_PAINT_COMPOSITE_MODE_DEST: ignore the source
+ * @HB_PAINT_COMPOSITE_MODE_DEST_OVER: draw destination on top of source
+ * @HB_PAINT_COMPOSITE_MODE_DEST_IN: leave destination only where there was
+ * source content (unbounded)
+ * @HB_PAINT_COMPOSITE_MODE_DEST_OUT: leave destination only where there was no
+ * source content
+ * @HB_PAINT_COMPOSITE_MODE_DEST_ATOP: leave destination on top of source content
+ * and only there (unbounded)
+ * @HB_PAINT_COMPOSITE_MODE_XOR: source and destination are shown where there is only
+ * one of them
+ * @HB_PAINT_COMPOSITE_MODE_PLUS: source and destination layers are accumulated
+ * @HB_PAINT_COMPOSITE_MODE_MULTIPLY: source and destination layers are multiplied.
+ * This causes the result to be at least as dark as the darker inputs.
+ * @HB_PAINT_COMPOSITE_MODE_SCREEN: source and destination are complemented and
+ * multiplied. This causes the result to be at least as light as the lighter
+ * inputs.
+ * @HB_PAINT_COMPOSITE_MODE_OVERLAY: multiplies or screens, depending on the
+ * lightness of the destination color.
+ * @HB_PAINT_COMPOSITE_MODE_DARKEN: replaces the destination with the source if it
+ * is darker, otherwise keeps the source.
+ * @HB_PAINT_COMPOSITE_MODE_LIGHTEN: replaces the destination with the source if it
+ * is lighter, otherwise keeps the source.
+ * @HB_PAINT_COMPOSITE_MODE_COLOR_DODGE: brightens the destination color to reflect
+ * the source color.
+ * @HB_PAINT_COMPOSITE_MODE_COLOR_BURN: darkens the destination color to reflect
+ * the source color.
+ * @HB_PAINT_COMPOSITE_MODE_HARD_LIGHT: Multiplies or screens, dependent on source
+ * color.
+ * @HB_PAINT_COMPOSITE_MODE_SOFT_LIGHT: Darkens or lightens, dependent on source
+ * color.
+ * @HB_PAINT_COMPOSITE_MODE_DIFFERENCE: Takes the difference of the source and
+ * destination color.
+ * @HB_PAINT_COMPOSITE_MODE_EXCLUSION: Produces an effect similar to difference, but
+ * with lower contrast.
+ * @HB_PAINT_COMPOSITE_MODE_HSL_HUE: Creates a color with the hue of the source
+ * and the saturation and luminosity of the target.
+ * @HB_PAINT_COMPOSITE_MODE_HSL_SATURATION: Creates a color with the saturation
+ * of the source and the hue and luminosity of the target. Painting with
+ * this mode onto a gray area produces no change.
+ * @HB_PAINT_COMPOSITE_MODE_HSL_COLOR: Creates a color with the hue and saturation
+ * of the source and the luminosity of the target. This preserves the gray
+ * levels of the target and is useful for coloring monochrome images or
+ * tinting color images.
+ * @HB_PAINT_COMPOSITE_MODE_HSL_LUMINOSITY: Creates a color with the luminosity of
+ * the source and the hue and saturation of the target. This produces an
+ * inverse effect to @HB_PAINT_COMPOSITE_MODE_HSL_COLOR.
  *
  * The values of this enumeration describe the compositing modes
  * that can be used when combining temporary redirected drawing
@@ -514,6 +580,8 @@ typedef void (*hb_paint_sweep_gradient_func_t)  (hb_paint_funcs_t *funcs,
  *
  * See the OpenType spec [COLR](https://learn.microsoft.com/en-us/typography/opentype/spec/colr)
  * section for details.
+ *
+ * Since: REPLACEME
  */
 typedef enum {
   HB_PAINT_COMPOSITE_MODE_CLEAR,
@@ -791,6 +859,73 @@ hb_paint_funcs_set_pop_group_func (hb_paint_funcs_t          *funcs,
                                    void                       *user_data,
                                    hb_destroy_func_t           destroy);
 
+/*
+ * Manual API
+ */
+
+HB_EXTERN void
+hb_paint_push_transform (hb_paint_funcs_t *funcs, void *paint_data,
+                         float xx, float yx,
+                         float xy, float yy,
+                         float dx, float dy);
+
+HB_EXTERN void
+hb_paint_pop_transform (hb_paint_funcs_t *funcs, void *paint_data);
+
+HB_EXTERN void
+hb_paint_push_clip_glyph (hb_paint_funcs_t *funcs, void *paint_data,
+                          hb_codepoint_t glyph,
+                          hb_font_t *font);
+
+HB_EXTERN void
+hb_paint_push_clip_rectangle (hb_paint_funcs_t *funcs, void *paint_data,
+                              float xmin, float ymin,
+                              float xmax, float ymax);
+
+HB_EXTERN void
+hb_paint_pop_clip (hb_paint_funcs_t *funcs, void *paint_data);
+
+HB_EXTERN void
+hb_paint_color (hb_paint_funcs_t *funcs, void *paint_data,
+                hb_bool_t is_foreground,
+                hb_color_t color);
+
+HB_EXTERN void
+hb_paint_image (hb_paint_funcs_t *funcs, void *paint_data,
+                hb_blob_t *image,
+                unsigned int width,
+                unsigned int height,
+                hb_tag_t format,
+                float slant,
+                hb_glyph_extents_t *extents);
+
+HB_EXTERN void
+hb_paint_linear_gradient (hb_paint_funcs_t *funcs, void *paint_data,
+                          hb_color_line_t *color_line,
+                          float x0, float y0,
+                          float x1, float y1,
+                          float x2, float y2);
+
+HB_EXTERN void
+hb_paint_radial_gradient (hb_paint_funcs_t *funcs, void *paint_data,
+                          hb_color_line_t *color_line,
+                          float x0, float y0,
+                          float r0,
+                          float x1, float y1,
+                          float r1);
+
+HB_EXTERN void
+hb_paint_sweep_gradient (hb_paint_funcs_t *funcs, void *paint_data,
+                         hb_color_line_t *color_line,
+                         float x0, float y0,
+                         float start_angle, float end_angle);
+
+HB_EXTERN void
+hb_paint_push_group (hb_paint_funcs_t *funcs, void *paint_data);
+
+HB_EXTERN void
+hb_paint_pop_group (hb_paint_funcs_t *funcs, void *paint_data,
+                    hb_paint_composite_mode_t mode);
 
 HB_END_DECLS
 
