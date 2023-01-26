@@ -31,6 +31,27 @@
 const unsigned DEFAULT_FONT_SIZE = FONT_SIZE_UPEM;
 const unsigned SUBPIXEL_BITS = 0;
 
+static void
+_hb_ot_name_get_utf8 (hb_face_t       *face,
+		      hb_ot_name_id_t  name_id,
+		      hb_language_t    language,
+		      unsigned int    *text_size /* IN/OUT */,
+		      char            *text      /* OUT */)
+{
+  static hb_language_t en = hb_language_from_string ("en", -1);
+
+  unsigned len = *text_size;
+  if (!hb_ot_name_get_utf8 (face, name_id,
+			    language,
+			    &len, text))
+  {
+    len = *text_size;
+    hb_ot_name_get_utf8 (face, name_id,
+			 en,
+			 &len, text);
+  }
+  *text_size = len;
+}
 
 struct info_t
 {
@@ -71,8 +92,10 @@ struct info_t
       {"show-upem",	0, 0, G_OPTION_ARG_NONE,	&this->show_upem,		"Show Units-Per-EM",		nullptr},
       {"show-extents",	0, 0, G_OPTION_ARG_NONE,	&this->show_extents,		"Show extents",			nullptr},
 
+      {"get-name",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_name,		"Get name",			"name id; eg. '13'"},
       {"get-metric",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_metric,		"Get metric",			"metric tag; eg. 'hasc'"},
       {"get-baseline",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_baseline,		"Get baseline",			"baseline tag; eg. 'hang'"},
+      {"get-table",	0, 0, G_OPTION_ARG_STRING,	&this->get_table,		"Get font table",		"table tag; eg. 'cmap'"},
 
       {"list-all",	0, 0, G_OPTION_ARG_NONE,	&this->list_all,		"List all long information",	nullptr},
       {"list-names",	0, 0, G_OPTION_ARG_NONE,	&this->list_names,		"List names",			nullptr},
@@ -86,8 +109,6 @@ struct info_t
 #endif
       {"list-palettes",	0, 0, G_OPTION_ARG_NONE,	&this->list_palettes,		"List color palettes",		nullptr},
 
-      {"dump-table",	0, 0, G_OPTION_ARG_STRING,	&this->dump_table,		"Dump font table",		"table tag; eg. 'cmap'"},
-
       {nullptr}
     };
     parser->add_group (query_entries,
@@ -95,7 +116,7 @@ struct info_t
 		       "Query options:",
 		       "Options to query the font instance",
 		       this,
-		       false);
+		       true);
   }
 
   protected:
@@ -131,8 +152,10 @@ struct info_t
   hb_bool_t show_upem = false;
   hb_bool_t show_extents = false;
 
+  char **get_name = nullptr;
   char **get_metric = nullptr;
   char **get_baseline = nullptr;
+  char *get_table = nullptr;
 
   hb_bool_t list_all = false;
   hb_bool_t list_names = false;
@@ -146,9 +169,19 @@ struct info_t
 #endif
   hb_bool_t list_palettes = false;
 
-  char *dump_table = nullptr;
-
   public:
+
+  void
+  post_parse (GError **error)
+  {
+    if (direction_str)
+      direction = hb_direction_from_string (direction_str, -1);
+    if (script_str)
+      script = hb_script_from_string (script_str, -1);
+    language = hb_language_get_default ();
+    if (language_str)
+      language = hb_language_from_string (language_str, -1);
+  }
 
   template <typename app_t>
   void operator () (app_t *app)
@@ -157,13 +190,6 @@ struct info_t
     face = hb_face_reference (((font_options_t *) app)->face);
     font = hb_font_reference (((font_options_t *) app)->font);
     verbose = !app->quiet;
-    if (direction_str)
-      direction = hb_direction_from_string (direction_str, -1);
-    if (script_str)
-      script = hb_script_from_string (script_str, -1);
-    language = hb_language_get_default ();
-    if (language_str)
-      language = hb_language_from_string (language_str, -1);
 
     if (all)
     {
@@ -218,8 +244,10 @@ struct info_t
     if (show_upem)	  _show_upem ();
     if (show_extents)	  _show_extents ();
 
+    if (get_name)	  _get_name ();
     if (get_metric)	  _get_metric ();
     if (get_baseline)	  _get_baseline ();
+    if (get_table)	  _get_table ();
 
     if (list_names)	  _list_names ();
     if (list_tables)	  _list_tables ();
@@ -231,8 +259,6 @@ struct info_t
     if (list_variations)  _list_variations ();
 #endif
     if (list_palettes)	  _list_palettes ();
-
-    if (dump_table)	  _dump_table ();
 
     hb_font_destroy (font);
     hb_face_destroy (face);
@@ -267,9 +293,9 @@ struct info_t
 
     char name[16384];
     unsigned name_len = sizeof name;
-    hb_ot_name_get_utf8 (face, name_id,
-			 language,
-			 &name_len, name);
+    _hb_ot_name_get_utf8 (face, name_id,
+			  language,
+			  &name_len, name);
 
     printf ("%s\n", name);
   }
@@ -389,6 +415,15 @@ struct info_t
     printf ("%d\n", extents.line_gap);
   }
 
+  void _get_name ()
+  {
+    for (char **p = get_name; *p; p++)
+    {
+      hb_ot_name_id_t name_id = (hb_ot_name_id_t) atoi (*p);
+      _show_name (*p, name_id);
+    }
+  }
+
   void _get_metric ()
   {
     bool fallback = false;
@@ -461,6 +496,16 @@ struct info_t
     }
   }
 
+  void
+  _get_table ()
+  {
+    hb_blob_t *blob = hb_face_reference_table (face, hb_tag_from_string (get_table, -1));
+    unsigned count = 0;
+    const char *data = hb_blob_get_data (blob, &count);
+    fwrite (data, 1, count, stdout);
+    hb_blob_destroy (blob);
+  }
+
   void _list_names ()
   {
     if (verbose)
@@ -476,9 +521,9 @@ struct info_t
     {
       char name[16384];
       unsigned name_len = sizeof name;
-      hb_ot_name_get_utf8 (face, entries[i].name_id,
-			   language,
-			   &name_len, name);
+      _hb_ot_name_get_utf8 (face, entries[i].name_id,
+			    language,
+			    &name_len, name);
 
       printf ("%u	%s\n", entries[i].name_id, name);
     }
@@ -713,9 +758,9 @@ struct info_t
 	  char name[64];
 	  unsigned name_len = sizeof name;
 
-	  hb_ot_name_get_utf8 (face, label_id,
-			       language,
-			       &name_len, name);
+	  _hb_ot_name_get_utf8 (face, label_id,
+				language,
+				&name_len, name);
 
 	  printf ("	");
 	  if (verbose) printf ("Feature: ");
@@ -831,9 +876,9 @@ struct info_t
 	  char name[64];
 	  unsigned name_len = sizeof name;
 
-	  hb_ot_name_get_utf8 (face, label_id,
-			       language,
-			       &name_len, name);
+	  _hb_ot_name_get_utf8 (face, label_id,
+				language,
+				&name_len, name);
 
 	  printf ("	");
 	  if (verbose) printf ("Feature: ");
@@ -888,9 +933,9 @@ struct info_t
       char name[64];
       unsigned name_len = sizeof name;
 
-      hb_ot_name_get_utf8 (face, axis.name_id,
-			   language,
-			   &name_len, name);
+      _hb_ot_name_get_utf8 (face, axis.name_id,
+			    language,
+			    &name_len, name);
 
       printf ("%c%c%c%c%s	%g	%g	%g	%s\n",
 	      HB_UNTAG (axis.tag),
@@ -921,9 +966,9 @@ struct info_t
 	unsigned name_len = sizeof name;
 
 	hb_ot_name_id_t name_id = hb_ot_var_named_instance_get_subfamily_name_id (face, i);
-	hb_ot_name_get_utf8 (face, name_id,
-			     language,
-			     &name_len, name);
+	_hb_ot_name_get_utf8 (face, name_id,
+			      language,
+			      &name_len, name);
 
 	unsigned coords_count = hb_ot_var_named_instance_get_design_coords (face, i, nullptr, nullptr);
 	float* coords;
@@ -965,9 +1010,9 @@ struct info_t
 	char name[64];
 	unsigned name_len = sizeof name;
 
-	hb_ot_name_get_utf8 (face, name_id,
-			     language,
-			     &name_len, name);
+	_hb_ot_name_get_utf8 (face, name_id,
+			      language,
+			      &name_len, name);
         const char *type = "";
 	if (flags)
 	{
@@ -983,7 +1028,7 @@ struct info_t
           }
 	}
 
-	printf ("%u	%-*s   %s\n", i, (int)strlen ("Light"), type, name);
+	printf ("%u	%s	%s\n", i, type, name);
       }
     }
 
@@ -1000,24 +1045,13 @@ struct info_t
 
 	char name[64];
 	unsigned name_len = sizeof name;
-	hb_ot_name_get_utf8 (face, name_id,
-			     language,
-			     &name_len, name);
+	_hb_ot_name_get_utf8 (face, name_id,
+			      language,
+			      &name_len, name);
 
 	printf ("%u	%s\n", i, name);
       }
     }
-  }
-
-
-  void
-  _dump_table ()
-  {
-    hb_blob_t *blob = hb_face_reference_table (face, hb_tag_from_string (dump_table, -1));
-    unsigned count = 0;
-    const char *data = hb_blob_get_data (blob, &count);
-    fwrite (data, 1, count, stdout);
-    hb_blob_destroy (blob);
   }
 };
 
