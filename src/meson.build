@@ -76,12 +76,6 @@ hb_base_sources = files(
   'hb-ot-cff2-table.cc',
   'hb-ot-cff2-table.hh',
   'hb-ot-cmap-table.hh',
-  'hb-ot-color-cbdt-table.hh',
-  'hb-ot-color-colr-table.hh',
-  'hb-ot-color-colr-table.cc',
-  'hb-ot-color-cpal-table.hh',
-  'hb-ot-color-sbix-table.hh',
-  'hb-ot-color-svg-table.hh',
   'hb-ot-color.cc',
   'hb-ot-face-table-list.hh',
   'hb-ot-face.cc',
@@ -99,6 +93,11 @@ hb_base_sources = files(
   'hb-ot-layout-gdef-table.hh',
   'hb-ot-layout-gpos-table.hh',
   'hb-ot-layout-gsub-table.hh',
+  'OT/Color/CBDT/CBDT.hh',
+  'OT/Color/COLR/COLR.hh',
+  'OT/Color/CPAL/CPAL.hh',
+  'OT/Color/sbix/sbix.hh',
+  'OT/Color/svg/svg.hh',
   'OT/glyf/glyf.hh',
   'OT/glyf/glyf-helpers.hh',
   'OT/glyf/loca.hh',
@@ -433,6 +432,18 @@ if conf.get('HAVE_FREETYPE', 0) == 1
   hb_features.set('HB_HAS_FREETYPE', 1)
 endif
 
+if conf.get('HAVE_GLIB', 0) == 1
+  hb_sources += hb_glib_sources
+  hb_headers += hb_glib_headers
+  harfbuzz_deps += [glib_dep]
+  hb_features.set('HB_HAS_GLIB', 1)
+endif
+
+# We set those here to not include the sources below that are of no use to
+# GObject Introspection
+gir_sources = hb_sources + hb_gobject_sources
+gir_headers = hb_headers + hb_gobject_headers
+
 if conf.get('HAVE_GDI', 0) == 1
   hb_sources += hb_gdi_sources
   hb_headers += hb_gdi_headers
@@ -445,13 +456,6 @@ if conf.get('HAVE_GRAPHITE2', 0) == 1
   hb_headers += hb_graphite2_headers
   harfbuzz_deps += [graphite2_dep, graphite_dep]
   hb_features.set('HB_HAS_GRAPHITE', 1)
-endif
-
-if conf.get('HAVE_GLIB', 0) == 1
-  hb_sources += hb_glib_sources
-  hb_headers += hb_glib_headers
-  harfbuzz_deps += [glib_dep]
-  hb_features.set('HB_HAS_GLIB', 1)
 endif
 
 if conf.get('HAVE_UNISCRIBE', 0) == 1
@@ -818,7 +822,7 @@ if have_gobject
   if build_gir
     conf.set('HAVE_INTROSPECTION', 1)
     hb_gen_files_gir = gnome.generate_gir(libharfbuzz_gobject,
-      sources: [hb_headers, hb_sources, hb_gobject_headers, hb_gobject_sources, enum_h],
+      sources: [gir_headers, gir_sources, enum_h],
       dependencies: libharfbuzz_dep,
       namespace: 'HarfBuzz',
       nsversion: '0.0',

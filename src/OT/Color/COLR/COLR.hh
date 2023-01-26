@@ -25,15 +25,15 @@
  * Google Author(s): Calder Kitagawa
  */
 
-#ifndef HB_OT_COLOR_COLR_TABLE_HH
-#define HB_OT_COLOR_COLR_TABLE_HH
+#ifndef OT_COLOR_COLR_COLR_HH
+#define OT_COLOR_COLR_COLR_HH
 
-#include "hb.hh"
-#include "hb-open-type.hh"
-#include "hb-ot-layout-common.hh"
-#include "hb-ot-var-common.hh"
-#include "hb-paint.hh"
-#include "hb-paint-extents.hh"
+#include "../../../hb.hh"
+#include "../../../hb-open-type.hh"
+#include "../../../hb-ot-layout-common.hh"
+#include "../../../hb-ot-var-common.hh"
+#include "../../../hb-paint.hh"
+#include "../../../hb-paint-extents.hh"
 
 /*
  * COLR -- Color
@@ -562,7 +562,7 @@ struct PaintColrLayers
     return_trace (c->check_struct (this));
   }
 
-  HB_INTERNAL void paint_glyph (hb_paint_context_t *c) const;
+  inline void paint_glyph (hb_paint_context_t *c) const;
 
   HBUINT8	format; /* format = 1 */
   HBUINT8	numLayers;
@@ -820,7 +820,7 @@ struct PaintColrGlyph
     return_trace (c->check_struct (this));
   }
 
-  HB_INTERNAL void paint_glyph (hb_paint_context_t *c) const;
+  inline void paint_glyph (hb_paint_context_t *c) const;
 
   HBUINT8	format; /* format = 11 */
   HBUINT16	gid;
@@ -2154,6 +2154,28 @@ hb_paint_context_t::recurse (const Paint &paint)
   depth_left++;
 }
 
+void PaintColrLayers::paint_glyph (hb_paint_context_t *c) const
+{
+  const LayerList &paint_offset_lists = c->get_colr_table ()->get_layerList ();
+  for (unsigned i = firstLayerIndex; i < firstLayerIndex + numLayers; i++)
+  {
+    const Paint &paint = paint_offset_lists.get_paint (i);
+    c->funcs->push_group (c->data);
+    c->recurse (paint);
+    c->funcs->pop_group (c->data, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
+  }
+}
+
+void PaintColrGlyph::paint_glyph (hb_paint_context_t *c) const
+{
+  const COLR *colr_table = c->get_colr_table ();
+  const Paint *paint = colr_table->get_base_glyph_paint (gid);
+
+  // TODO apply clipbox
+  if (paint)
+    c->recurse (*paint);
+}
+
 } /* namespace OT */
 
-#endif /* HB_OT_COLOR_COLR_TABLE_HH */
+#endif /* OT_COLOR_COLR_COLR_HH */

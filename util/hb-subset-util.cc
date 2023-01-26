@@ -176,7 +176,7 @@ struct subset_main_t : option_parser_t, face_options_t, output_options_t<false>
   public:
 
   unsigned num_iterations = 1;
-  gboolean preprocess;
+  gboolean preprocess = false;
   hb_subset_input_t *input = nullptr;
 };
 
@@ -529,6 +529,19 @@ parse_name_languages (const char *name,
 
     s = p;
   }
+
+  return true;
+}
+
+static gboolean
+_keep_everything (const char *name,
+		  const char *arg,
+		  gpointer    data,
+		  GError    **error G_GNUC_UNUSED)
+{
+  subset_main_t *subset_main = (subset_main_t *) data;
+
+  hb_subset_input_keep_everything (subset_main->input);
 
   return true;
 }
@@ -923,6 +936,8 @@ subset_main_t::add_options ()
 
   GOptionEntry flag_entries[] =
   {
+    {"keep-everything",		0, G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK, (gpointer) &_keep_everything,
+     "Keep everything by default. Options after this can override the operation.", nullptr},
     {"no-hinting",		0, G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK, (gpointer) &set_flag<HB_SUBSET_FLAGS_NO_HINTING>,		"Whether to drop hints", nullptr},
     {"retain-gids",		0, G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK, (gpointer) &set_flag<HB_SUBSET_FLAGS_RETAIN_GIDS>,		"If set don't renumber glyph ids in the subset.", nullptr},
     {"desubroutinize",		0, G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK, (gpointer) &set_flag<HB_SUBSET_FLAGS_DESUBROUTINIZE>,		"Remove CFF/CFF2 use of subroutines", nullptr},
@@ -932,7 +947,9 @@ subset_main_t::add_options ()
     {"no-prune-unicode-ranges",	0, G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK, (gpointer) &set_flag<HB_SUBSET_FLAGS_NO_PRUNE_UNICODE_RANGES>,	"Don't change the 'OS/2 ulUnicodeRange*' bits.", nullptr},
     {"glyph-names",		0, G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK, (gpointer) &set_flag<HB_SUBSET_FLAGS_GLYPH_NAMES>,		"Keep PS glyph names in TT-flavored fonts. ", nullptr},
     {"passthrough-tables",	0, G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK, (gpointer) &set_flag<HB_SUBSET_FLAGS_PASSTHROUGH_UNRECOGNIZED>,	"Do not drop tables that the tool does not know how to subset.", nullptr},
-    {"preprocess-face",		0, 0, G_OPTION_ARG_NONE, &this->preprocess,
+    {"preprocess-face",		0, G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_NONE, &this->preprocess,
+     "Alternative name for --preprocess.", nullptr},
+    {"preprocess",		0, 0, G_OPTION_ARG_NONE, &this->preprocess,
      "If set preprocesses the face with the add accelerator option before actually subsetting.", nullptr},
     {nullptr}
   };

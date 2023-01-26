@@ -45,7 +45,9 @@
 #include FT_MULTIPLE_MASTERS_H
 #include FT_OUTLINE_H
 #include FT_TRUETYPE_TABLES_H
+#if (FREETYPE_MAJOR*10000 + FREETYPE_MINOR*100 + FREETYPE_PATCH) >= 21101
 #include FT_COLOR_H
+#endif
 
 
 /**
@@ -841,6 +843,7 @@ hb_ft_draw_glyph (hb_font_t *font HB_UNUSED,
 #endif
 
 #ifndef HB_NO_PAINT
+#if (FREETYPE_MAJOR*10000 + FREETYPE_MINOR*100 + FREETYPE_PATCH) >= 21101
 
 #include "hb-ft-colr.hh"
 
@@ -922,6 +925,7 @@ hb_ft_paint_glyph (hb_font_t *font,
   }
 }
 #endif
+#endif
 
 
 static inline void free_static_ft_funcs ();
@@ -960,7 +964,9 @@ static struct hb_ft_font_funcs_lazy_loader_t : hb_font_funcs_lazy_loader_t<hb_ft
 #endif
 
 #ifndef HB_NO_PAINT
+#if (FREETYPE_MAJOR*10000 + FREETYPE_MINOR*100 + FREETYPE_PATCH) >= 21101
     hb_font_funcs_set_paint_glyph_func (funcs, hb_ft_paint_glyph, nullptr, nullptr);
+#endif
 #endif
 
     hb_font_funcs_make_immutable (funcs);
