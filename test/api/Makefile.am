@@ -42,8 +42,10 @@ TEST_PROGS = \
 	test-cplusplus \
 	test-common \
 	test-draw \
+	test-extents \
 	test-font \
 	test-font-scale \
+	test-glyph-names \
 	test-instance-cff2 \
 	test-map \
 	test-object \
