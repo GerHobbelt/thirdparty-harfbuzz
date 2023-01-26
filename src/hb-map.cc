@@ -335,9 +335,84 @@ hb_map_is_equal (const hb_map_t *map,
  *
  * Since: 4.4.0
  **/
-HB_EXTERN unsigned int
+unsigned int
 hb_map_hash (const hb_map_t *map)
 {
   return map->hash ();
 }
 
+/**
+ * hb_map_update:
+ * @map: A map
+ * @other: Another map
+ *
+ * Add the contents of @other to @map.
+ *
+ * Since: REPLACEME
+ **/
+HB_EXTERN void
+hb_map_update (hb_map_t *map,
+	       const hb_map_t *other)
+{
+  map->update (*other);
+}
+
+/**
+ * hb_map_next:
+ * @map: A map
+ * @idx: (inout): Iterator internal state
+ * @key: (out): Key retrieved
+ * @value: (out): Value retrieved
+ *
+ * Fetches the next key/value paire in @map.
+ *
+ * Set @idx to -1 to get started.
+ *
+ * If the map is modified during iteration, the behavior is undefined.
+ *
+ * The order in which the key/values are returned is undefined.
+ *
+ * Return value: `true` if there was a next value, `false` otherwise
+ *
+ * Since: REPLACEME
+ **/
+hb_bool_t
+hb_map_next (const hb_map_t *map,
+	     int *idx,
+	     hb_codepoint_t *key,
+	     hb_codepoint_t *value)
+{
+  return map->next (idx, key, value);
+}
+
+/**
+ * hb_map_keys:
+ * @map: A map
+ * @keys: A set
+ *
+ * Add the keys of @map to @keys.
+ *
+ * Since: REPLACEME
+ **/
+void
+hb_map_keys (const hb_map_t *map,
+	     hb_set_t *keys)
+{
+  map->keys (*keys);
+}
+
+/**
+ * hb_map_values:
+ * @map: A map
+ * @values: A set
+ *
+ * Add the values of @map to @values.
+ *
+ * Since: REPLACEME
+ **/
+void
+hb_map_values (const hb_map_t *map,
+	       hb_set_t *values)
+{
+  map->values (*values);
+}

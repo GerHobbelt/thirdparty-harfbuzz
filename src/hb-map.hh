@@ -29,6 +29,8 @@
 
 #include "hb.hh"
 
+#include "hb-set.hh"
+
 
 /*
  * hb_hashmap_t
@@ -308,6 +310,23 @@ struct hb_hashmap_t
 
   unsigned int get_population () const { return population; }
 
+  void update (const hb_hashmap_t &other)
+  {
+    if (unlikely (!successful)) return;
+
+    hb_copy (other, *this);
+  }
+
+  void keys (hb_set_t &keys_) const
+  {
+    hb_copy (keys() , keys_);
+  }
+
+  void values (hb_set_t &values_) const
+  {
+    hb_copy (values() , values_);
+  }
+
   /*
    * Iterator
    */
@@ -347,6 +366,30 @@ struct hb_hashmap_t
     + values_ref ()
     | hb_map (hb_ridentity)
   )
+
+  /* C iterator. */
+  bool next (int *idx,
+	     K *key,
+	     V *value) const
+  {
+    unsigned i = (unsigned) (*idx + 1);
+
+    unsigned count = size ();
+    while (i < count && !items[i].is_real ())
+      i++;
+
+    if (i >= count)
+    {
+      *idx = -1;
+      return false;
+    }
+
+    *key = items[i].key;
+    *value = items[i].value;
+
+    *idx = (signed) i;
+    return true;
+  }
 
   /* Sink interface. */
   hb_hashmap_t& operator << (const hb_pair_t<K, V>& v)

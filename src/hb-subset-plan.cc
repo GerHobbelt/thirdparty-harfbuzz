@@ -769,6 +769,7 @@ _normalize_axes_location (hb_face_t *face, hb_subset_plan_t *plan)
     return;
 
   hb_array_t<const OT::AxisRecord> axes = face->table.fvar->get_axes ();
+  plan->normalized_coords.resize (axes.length);
 
   bool has_avar = face->table.avar->has_data ();
   const OT::SegmentMaps *seg_maps = nullptr;
@@ -777,6 +778,7 @@ _normalize_axes_location (hb_face_t *face, hb_subset_plan_t *plan)
 
   bool axis_not_pinned = false;
   unsigned old_axis_idx = 0, new_axis_idx = 0;
+  unsigned int i = 0;
   for (const auto& axis : axes)
   {
     hb_tag_t axis_tag = axis.get_axis_tag ();
@@ -798,11 +800,15 @@ _normalize_axes_location (hb_face_t *face, hb_subset_plan_t *plan)
       plan->axes_location->set (axis_tag, normalized_v);
       if (normalized_v != 0)
         plan->pinned_at_default = false;
+
+      plan->normalized_coords[i] = normalized_v;
     }
     if (has_avar)
       seg_maps = &StructAfter<OT::SegmentMaps> (*seg_maps);
 
     old_axis_idx++;
+
+    i++;
   }
   plan->all_axes_pinned = !axis_not_pinned;
 }
@@ -1005,7 +1011,7 @@ hb_subset_plan_destroy (hb_subset_plan_t *plan)
  *
  * Since: 4.0.0
  **/
-const hb_map_t*
+hb_map_t *
 hb_subset_plan_old_to_new_glyph_mapping (const hb_subset_plan_t *plan)
 {
   return plan->glyph_map;
@@ -1023,7 +1029,7 @@ hb_subset_plan_old_to_new_glyph_mapping (const hb_subset_plan_t *plan)
  *
  * Since: 4.0.0
  **/
-const hb_map_t*
+hb_map_t *
 hb_subset_plan_new_to_old_glyph_mapping (const hb_subset_plan_t *plan)
 {
   return plan->reverse_glyph_map;
@@ -1041,7 +1047,7 @@ hb_subset_plan_new_to_old_glyph_mapping (const hb_subset_plan_t *plan)
  *
  * Since: 4.0.0
  **/
-const hb_map_t*
+hb_map_t *
 hb_subset_plan_unicode_to_old_glyph_mapping (const hb_subset_plan_t *plan)
 {
   return plan->codepoint_to_glyph;
