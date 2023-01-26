@@ -485,6 +485,10 @@ if have_icu and have_icu_builtin
   hb_features.set('HB_HAS_ICU', 1)
 endif
 
+if conf.get('HAVE_CAIRO', 0) == 1
+  hb_features.set('HB_HAS_CAIRO', 1)
+endif
+
 hb_features_h = configure_file(input: 'hb-features.h.in',
                                output: 'hb-features.h',
                                configuration: hb_features,
@@ -578,6 +582,48 @@ libharfbuzz_subset_dep = declare_dependency(
   include_directories: incsrc,
   dependencies: [m_dep])
 meson.override_dependency('harfbuzz-subset', libharfbuzz_subset_dep)
+
+libharfbuzz_cairo_dep = null_dep
+if conf.get('HAVE_CAIRO', 0) == 1
+  hb_cairo_sources = [
+    'hb-cairo.cc',
+    'hb-cairo-utils.cc',
+    'hb-static.cc'
+  ]
+
+  hb_cairo_headers = [
+    'hb-cairo.h',
+  ]
+
+  cairo_dep = dependency('cairo')
+
+  libharfbuzz_cairo = library('harfbuzz-cairo', hb_cairo_sources,
+    include_directories: incconfig,
+    dependencies: [m_dep, cairo_dep],
+    link_with: [libharfbuzz],
+     cpp_args: cpp_args + extra_hb_cpp_args,
+    soversion: hb_so_version,
+    version: version,
+    install: true,
+    darwin_versions: darwin_versions,
+    link_language: 'c',
+  )
+
+  install_headers(hb_cairo_headers, subdir: meson.project_name())
+
+  libharfbuzz_cairo_dep = declare_dependency(
+    link_with: libharfbuzz_cairo,
+    include_directories: incsrc,
+    dependencies: [m_dep, cairo_dep])
+  meson.override_dependency('harfbuzz-cairo', libharfbuzz_cairo_dep)
+
+  pkgmod.generate(libharfbuzz_cairo,
+    description: 'HarfBuzz cairo support',
+    requires: ['harfbuzz = @0@'.format(meson.project_version())],
+    subdirs: [meson.project_name()],
+    version: meson.project_version(),
+  )
+endif
 
 if get_option('tests').enabled()
   # TODO: MSVC gives the following,
