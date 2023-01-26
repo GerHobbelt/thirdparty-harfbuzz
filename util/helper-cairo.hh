@@ -98,7 +98,7 @@ helper_cairo_create_scaled_font (const font_options_t *font_opts)
 #endif
 
 
-  cairo_font_face_t *cairo_face;
+  cairo_font_face_t *cairo_face = nullptr;
   if (use_hb_draw)
   {
     cairo_face = hb_cairo_font_face_create_for_font (font);
@@ -133,13 +133,6 @@ helper_cairo_create_scaled_font (const font_options_t *font_opts)
 
   cairo_font_options_destroy (font_options);
   cairo_font_face_destroy (cairo_face);
-
-  static cairo_user_data_key_t key;
-  if (cairo_scaled_font_set_user_data (scaled_font,
-				       &key,
-				       (void *) hb_font_reference (font),
-				       (cairo_destroy_func_t) hb_font_destroy))
-    hb_font_destroy (font);
 
   return scaled_font;
 }
@@ -573,48 +566,46 @@ helper_cairo_destroy_context (cairo_t *cr)
 
 
 struct helper_cairo_line_t {
-  cairo_glyph_t *glyphs;
-  unsigned int num_glyphs;
-  char *utf8;
-  unsigned int utf8_len;
-  cairo_text_cluster_t *clusters;
-  unsigned int num_clusters;
-  cairo_text_cluster_flags_t cluster_flags;
+  cairo_glyph_t *glyphs = nullptr;
+  unsigned int num_glyphs = 0;
+  char *utf8 = nullptr;
+  unsigned int utf8_len = 0;
+  cairo_text_cluster_t *clusters = nullptr;
+  unsigned int num_clusters = 0;
+  cairo_text_cluster_flags_t cluster_flags = (cairo_text_cluster_flags_t) 0;
 
-  void finish () {
+  helper_cairo_line_t (const char          *utf8_,
+		       unsigned             utf8_len_,
+		       hb_buffer_t         *buffer,
+		       hb_bool_t            utf8_clusters,
+		       unsigned             subpixel_bits) :
+    utf8 (utf8_ ? g_strndup (utf8_, utf8_len_) : nullptr),
+    utf8_len (utf8_len_)
+  {
+    hb_cairo_glyphs_from_buffer (buffer,
+				 utf8_clusters,
+				 1 << subpixel_bits, 1 << subpixel_bits,
+				 0., 0.,
+				 utf8, utf8_len,
+				 &glyphs, &num_glyphs,
+				 &clusters, &num_clusters,
+				 &cluster_flags);
+  }
+
+  void finish ()
+  {
     if (glyphs)
       cairo_glyph_free (glyphs);
     if (clusters)
       cairo_text_cluster_free (clusters);
-    if (utf8)
-      g_free (utf8);
+    g_free (utf8);
   }
 
-  void get_advance (double *x_advance, double *y_advance) {
+  void get_advance (double *x_advance, double *y_advance)
+  {
     *x_advance = glyphs[num_glyphs].x;
     *y_advance = glyphs[num_glyphs].y;
   }
 };
-
-static inline void
-helper_cairo_line_from_buffer (helper_cairo_line_t *l,
-			       hb_buffer_t         *buffer,
-			       const char          *text,
-			       unsigned int         text_len,
-			       int                  scale_bits,
-			       hb_bool_t            utf8_clusters)
-{
-  l->utf8 = text ? g_strndup (text, text_len) : nullptr;
-  l->utf8_len = text ? text_len : 0;
-
-  hb_cairo_glyphs_from_buffer (buffer,
-			       utf8_clusters,
-			       1 << -scale_bits, 1 << -scale_bits,
-			       0., 0.,
-			       l->utf8, l->utf8_len,
-			       &l->glyphs, &l->num_glyphs,
-			       &l->clusters, &l->num_clusters,
-			       &l->cluster_flags);
-}
 
 #endif

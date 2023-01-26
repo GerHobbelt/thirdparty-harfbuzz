@@ -563,7 +563,7 @@ user_font_face_create (hb_face_t *face)
  * Note that the scale of @font does not affect the rendering,
  * but the variations and slant that are set on @font do.
  *
- * Returns: a newly created #cairo_font_face_t
+ * Returns: (transfer full): a newly created #cairo_font_face_t
  *
  * Since: REPLACEME
  */
@@ -588,7 +588,7 @@ hb_cairo_font_face_create_for_font (hb_font_t *font)
  *
  * Gets the #hb_font_t that @font_face was created from.
  *
- * Returns: (nullable): the #hb_font_t that @font_face was created from
+ * Returns: (nullable) (transfer none): the #hb_font_t that @font_face was created from
  *
  * Since: REPLACEME
  */
@@ -606,7 +606,7 @@ hb_cairo_font_face_get_font (cairo_font_face_t *font_face)
  * Creates a #cairo_font_face_t for rendering text according
  * to @face.
  *
- * Returns: a newly created #cairo_font_face_t
+ * Returns: (transfer full): a newly created #cairo_font_face_t
  *
  * Since: REPLACEME
  */
@@ -624,7 +624,7 @@ hb_cairo_font_face_create_for_face (hb_face_t *face)
  *
  * Gets the #hb_face_t associated with @font_face.
  *
- * Returns: (nullable): the #hb_face_t associated with @font_face
+ * Returns: (nullable) (transfer none): the #hb_face_t associated with @font_face
  *
  * Since: REPLACEME
  */
@@ -670,7 +670,7 @@ hb_cairo_font_face_set_font_init_func (cairo_font_face_t *font_face,
  *
  * Gets the #hb_font_t associated with @scaled_font.
  *
- * Returns: (nullable): the #hb_font_t associated with @scaled_font
+ * Returns: (nullable) (transfer none): the #hb_font_t associated with @scaled_font
  *
  * Since: REPLACEME
  */
@@ -705,8 +705,8 @@ hb_cairo_scaled_font_get_font (cairo_scaled_font_t *scaled_font)
  * @scale_factor times the xx and yy elements of the scale-matrix
  * of the cairo scaled-font being created.
  *
- * When using the hb_cairo_glyphs_from_buffer() API to convert
- * HarfBuzz glyph buffer resulted from shaping with such a hb_font_t,
+ * When using the hb_cairo_glyphs_from_buffer() API to convert the
+ * HarfBuzz glyph buffer that resulted from shaping with such a #hb_font_t,
  * if the scale-factor was non-zero, you can pass it directly to
  * that API as both X and Y scale factors.
  *
@@ -718,7 +718,7 @@ hb_cairo_scaled_font_get_font (cairo_scaled_font_t *scaled_font)
  * cairo scaled-font's scale-matrix XX/YY components respectively
  * and use those values.  Or if you know that relationship offhand
  * (because you set the scale of the #hb_font_t yourself), use
- * the conversation rate involved.
+ * the conversion rate involved.
  *
  * Since: REPLACEME
  */
@@ -755,24 +755,47 @@ hb_cairo_font_face_get_scale_factor (cairo_font_face_t *font_face)
 /**
  * hb_cairo_glyphs_from_buffer:
  * @buffer: a #hb_buffer_t containing glyphs
- * @utf8_clusters: `true` to if @buffer clusters are in bytes, instead of characters
- * @x_scale_factor: scale factor to divide hb_positions_t Y values by
- * @y_scale_factor: scale factor to divide hb_positions_t X values by
+ * @utf8_clusters: `true` if @buffer clusters are in bytes, instead of characters
+ * @x_scale_factor: scale factor to divide #hb_position_t Y values by
+ * @y_scale_factor: scale factor to divide #hb_position_t X values by
  * @x: X position to place first glyph
  * @y: Y position to place first glyph
  * @utf8: (nullable): the text that was shaped in @buffer
  * @utf8_len: the length of @utf8 in bytes
  * @glyphs: (out): return location for an array of #cairo_glyph_t
- * @num_glyphs: (out): return location for the length of @glyphs
+ * @num_glyphs: (inout): return location for the length of @glyphs
  * @clusters: (out) (nullable): return location for an array of cluster positions
- * @num_clusters: (out) (nullable): return location for the length of @clusters
+ * @num_clusters: (inout) (nullable): return location for the length of @clusters
  * @cluster_flags: (out) (nullable): return location for cluster flags
  *
  * Extracts information from @buffer in a form that can be
  * passed to cairo_show_text_glyphs() or cairo_show_glyphs().
- * This API is modeled after cairo_scaled_font_text_to_glyphs().
+ * This API is modeled after cairo_scaled_font_text_to_glyphs() and
+ * cairo_user_scaled_font_text_to_glyphs_func_t.
  *
- * If cluster information is requested, @utf8 must be provided.
+ * The @num_glyphs argument should be preset to the number of glyph entries available
+ * in the @glyphs buffer. If the @glyphs buffer is %NULL, the value of
+ * @num_glyphs must be zero.  If the provided glyph array is too short for
+ * the conversion (or for convenience), a new glyph array may be allocated
+ * using cairo_glyph_allocate() and placed in @glyphs.  Upon return,
+ * @num_glyphs should contain the number of generated glyphs.  If the value
+ * @glyphs points at has changed after the call, the caller will free the
+ * allocated glyph array using cairo_glyph_free().  The caller will also free
+ * the original value of @glyphs, so this function shouldn't do so.
+ *
+ * If @clusters is not %NULL, then @num_clusters and @cluster_flags
+ * should not be either, and @utf8 must be provided, and cluster
+ * mapping will be computed. The semantics of how
+ * cluster array allocation works is similar to the glyph array.  That is,
+ * if @clusters initially points to a non-%NULL value, that array may be used
+ * as a cluster buffer, and @num_clusters points to the number of cluster
+ * entries available there.  If the provided cluster array is too short for
+ * the conversion (or for convenience), a new cluster array may be allocated
+ * using cairo_text_cluster_allocate() and placed in @clusters.  In this case,
+ * the original value of @clusters will still be freed by the caller.  Upon
+ * return, @num_clusters will contain the number of generated clusters.
+ * If the value @clusters points at has changed after the call, the caller
+ * will free the allocated cluster array using cairo_text_cluster_free().
  *
  * See hb_cairo_font_face_set_scale_factor() for the details of
  * the @scale_factor argument.
@@ -801,37 +824,22 @@ hb_cairo_glyphs_from_buffer (hb_buffer_t *buffer,
   if (utf8 && utf8_len < 0)
     utf8_len = strlen (utf8);
 
+  unsigned orig_num_glyphs = *num_glyphs;
   *num_glyphs = hb_buffer_get_length (buffer);
   hb_glyph_info_t *hb_glyph = hb_buffer_get_glyph_infos (buffer, nullptr);
   hb_glyph_position_t *hb_position = hb_buffer_get_glyph_positions (buffer, nullptr);
-  *glyphs = cairo_glyph_allocate (*num_glyphs + 1);
+  if (orig_num_glyphs < *num_glyphs + 1)
+    *glyphs = cairo_glyph_allocate (*num_glyphs + 1);
 
   if (clusters)
   {
+    unsigned orig_num_clusters = *num_clusters;
     *num_clusters = *num_glyphs ? 1 : 0;
     for (unsigned int i = 1; i < *num_glyphs; i++)
       if (hb_glyph[i].cluster != hb_glyph[i-1].cluster)
 	(*num_clusters)++;
-    *clusters = cairo_text_cluster_allocate (*num_clusters);
-  }
-
-  if ((*num_glyphs && !*glyphs) ||
-      (clusters && *num_clusters && !*clusters))
-  {
-    if (*glyphs)
-    {
-      cairo_glyph_free (*glyphs);
-      *glyphs = nullptr;
-      *num_glyphs = 0;
-    }
-    if (clusters && *clusters)
-    {
-      cairo_text_cluster_free (*clusters);
-      *clusters = nullptr;
-      *num_clusters = 0;
-      *cluster_flags = (cairo_text_cluster_flags_t) 0;
-    }
-    return;
+    if (orig_num_clusters < *num_clusters)
+      *clusters = cairo_text_cluster_allocate (*num_clusters);
   }
 
   double x_scale = x_scale_factor ? 1. / x_scale_factor : 0.;

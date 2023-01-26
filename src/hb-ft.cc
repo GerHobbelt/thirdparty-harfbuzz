@@ -229,6 +229,9 @@ _hb_ft_hb_font_check_changed (hb_font_t *font,
  * For more information, see 
  * https://www.freetype.org/freetype2/docs/reference/ft2-base_interface.html#ft_load_xxx
  *
+ * This function works with #hb_font_t objects created by
+ * hb_ft_font_create() or hb_ft_font_create_referenced().
+ *
  * Since: 1.0.5
  **/
 void
@@ -254,7 +257,10 @@ hb_ft_font_set_load_flags (hb_font_t *font, int load_flags)
  * For more information, see 
  * https://www.freetype.org/freetype2/docs/reference/ft2-base_interface.html#ft_load_xxx
  *
- * Return value: FT_Load_Glyph flags found
+ * This function works with #hb_font_t objects created by
+ * hb_ft_font_create() or hb_ft_font_create_referenced().
+ *
+ * Return value: FT_Load_Glyph flags found, or 0
  *
  * Since: 1.0.5
  **/
@@ -276,6 +282,9 @@ hb_ft_font_get_load_flags (hb_font_t *font)
  * Fetches the FT_Face associated with the specified #hb_font_t
  * font object.
  *
+ * This function works with #hb_font_t objects created by
+ * hb_ft_font_create() or hb_ft_font_create_referenced().
+ *
  * Return value: (nullable): the FT_Face found or `NULL`
  *
  * Since: 0.9.2
@@ -295,8 +304,13 @@ hb_ft_font_get_face (hb_font_t *font)
  * hb_ft_font_lock_face: (skip)
  * @font: #hb_font_t to work upon
  *
- * Gets the FT_Face associated with @font, This face will be kept around until
- * you call hb_ft_font_unlock_face().
+ * Gets the FT_Face associated with @font.
+ *
+ * This face will be kept around and access to the FT_Face object
+ * from other HarfBuzz API wil be blocked until you call hb_ft_font_unlock_face().
+ *
+ * This function works with #hb_font_t objects created by
+ * hb_ft_font_create() or hb_ft_font_create_referenced().
  *
  * Return value: (nullable) (transfer none): the FT_Face associated with @font or `NULL`
  * Since: 2.6.5
@@ -1021,6 +1035,10 @@ _hb_ft_reference_table (hb_face_t *face HB_UNUSED, hb_tag_t tag, void *user_data
  *
  * Creates an #hb_face_t face object from the specified FT_Face.
  *
+ * Note that this is using the FT_Face object just to get at the underlying
+ * font data, and fonts created from the returned #hb_face_t will use the native
+ * HarfBuzz font implementation, unless you call hb_ft_font_set_funcs() on them.
+ *
  * This variant of the function does not provide any life-cycle management.
  *
  * Most client programs should use hb_ft_face_create_referenced()
@@ -1065,6 +1083,10 @@ hb_ft_face_create (FT_Face           ft_face,
  *
  * Creates an #hb_face_t face object from the specified FT_Face.
  *
+ * Note that this is using the FT_Face object just to get at the underlying
+ * font data, and fonts created from the returned #hb_face_t will use the native
+ * HarfBuzz font implementation, unless you call hb_ft_font_set_funcs() on them.
+ *
  * This is the preferred variant of the hb_ft_face_create*
  * function family, because it calls FT_Reference_Face() on @ft_face,
  * ensuring that @ft_face remains alive as long as the resulting
@@ -1096,6 +1118,10 @@ hb_ft_face_finalize (void *arg)
  * @ft_face: FT_Face to work upon
  *
  * Creates an #hb_face_t face object from the specified FT_Face.
+ *
+ * Note that this is using the FT_Face object just to get at the underlying
+ * font data, and fonts created from the returned #hb_face_t will use the native
+ * HarfBuzz font implementation, unless you call hb_ft_font_set_funcs() on them.
  *
  * This variant of the function caches the newly created #hb_face_t
  * face object, using the @generic pointer of @ft_face. Subsequent function
@@ -1350,7 +1376,7 @@ _release_blob (void *arg)
  * created with hb_face_create(), and therefore was not
  * initially configured to use FreeType font functions.
  *
- * An #hb_face_t face object created with hb_ft_face_create()
+ * An #hb_font_t object created with hb_ft_font_create()
  * is preconfigured for FreeType font functions and does not
  * require this function to be used.
  *
