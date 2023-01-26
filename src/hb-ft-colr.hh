@@ -141,7 +141,12 @@ _hb_ft_color_line_get_color_stops (hb_color_line_t *color_line,
 				  &stop,
 				  &cl->color_stop_iterator))
     {
-      color_stops->offset = stop.stop_offset / 16384.f;
+      // https://github.com/harfbuzz/harfbuzz/issues/4013
+      if (sizeof stop.stop_offset == 2)
+	color_stops->offset = stop.stop_offset / 16384.f;
+      else
+	color_stops->offset = stop.stop_offset / 65536.f;
+
       color_stops->is_foreground = stop.color.palette_index == 0xFFFF;
       if (color_stops->is_foreground)
 	color_stops->color = HB_COLOR (hb_color_get_blue (c->foreground),
@@ -387,12 +392,10 @@ _hb_ft_paint (hb_ft_paint_context_t *c,
     break;
     case FT_COLR_PAINTFORMAT_COMPOSITE:
     {
-      c->funcs->push_group (c->data);
       c->recurse (paint.u.composite.backdrop_paint);
       c->funcs->push_group (c->data);
       c->recurse (paint.u.composite.source_paint);
       c->funcs->pop_group (c->data, _hb_ft_paint_composite_mode (paint.u.composite.composite_mode));
-      c->funcs->pop_group (c->data, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
     }
     break;
 
@@ -451,12 +454,15 @@ hb_ft_paint_glyph_colr (hb_font_t *font,
     }
     else
     {
+
       auto *extents_funcs = hb_paint_extents_get_funcs ();
       hb_paint_extents_context_t extents_data;
       hb_ft_paint_context_t ce (ft_font, font,
 			        extents_funcs, &extents_data,
 			        palette, foreground);
+      ce.funcs->push_root_transform (ce.data, font);
       ce.recurse (paint);
+      ce.funcs->pop_transform (ce.data);
       hb_extents_t extents = extents_data.get_extents ();
       is_bounded = extents_data.is_bounded ();
 

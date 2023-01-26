@@ -106,7 +106,7 @@ push_clip_rectangle (hb_paint_funcs_t *funcs,
 {
   paint_data_t *data = user_data;
 
-  print (data, "start clip rectangle %f %f %f %f", xmin, ymin, xmax, ymax);
+  print (data, "start clip rectangle %.3f %.3f %.3f %.3f", xmin, ymin, xmax, ymax);
   data->level++;
 }
 
@@ -302,10 +302,6 @@ static paint_test_t paint_tests[] = {
   { ROCHER_ABC, 120, 0,    3, 200, "rocher-120-0-3" },
 };
 
-#ifdef HB_HAS_FREETYPE
-static FT_Library library;
-#endif
-
 static void
 test_hb_paint (gconstpointer d,
                hb_bool_t     use_ft)
@@ -320,31 +316,14 @@ test_hb_paint (gconstpointer d,
   gsize len;
   GError *error = NULL;
 
+  face = hb_test_open_font_file (test->font_file);
+  font = hb_font_create (face);
+
 #ifdef HB_HAS_FREETYPE
   if (use_ft)
-  {
-    FT_Face ft_face;
-    char *path;
-
-    path = g_test_build_filename (G_TEST_DIST, test->font_file, NULL);
-    if (FT_New_Face (library, path, 0, &ft_face) != 0)
-    {
-      g_test_message ("Failed to create FT_Face for %s", path);
-      g_test_fail ();
-      g_free (path);
-      return;
-    }
-    face = hb_ft_face_create_referenced (ft_face);
-    FT_Done_Face (ft_face);
-    g_free (path);
-  }
-  else
+    hb_ft_font_set_funcs (font);
 #endif
-  {
-    face = hb_test_open_font_file (test->font_file);
-  }
 
-  font = hb_font_create (face);
   hb_font_set_scale (font, test->scale, test->scale);
   hb_font_set_synthetic_slant (font, test->slant);
 
@@ -394,6 +373,22 @@ test_hb_paint (gconstpointer d,
   else
     expected = g_strsplit (buffer, "\n", 0);
 
+  /* Strip initial comments */
+  int i;
+  for (i = 0; expected[i]; i++)
+    {
+      if (expected[i][0] != '#')
+        {
+          if (i > 0)
+            {
+              char **tmp = g_strdupv (expected + i);
+              g_strfreev (expected);
+              expected = tmp;
+            }
+          break;
+        }
+    }
+
   if (g_strv_length (lines) != g_strv_length (expected))
   {
     g_test_message ("Unexpected number of lines in output (%d instead of %d)", g_strv_length (lines), g_strv_length (expected));
@@ -411,7 +406,7 @@ test_hb_paint (gconstpointer d,
           if (lines[i][pos] != expected[i][pos])
             break;
 
-        g_test_message ("Unxpected output at %d:%d (%#x instead of %#x):\n%s", i, pos, (unsigned int)lines[i][pos], (unsigned int)expected[i][pos], data.string->str);
+        g_test_message ("Unexpected output at %d:%d (%c instead of %c):\n%s", i, pos, lines[i][pos], expected[i][pos], data.string->str);
         g_test_fail ();
       }
     }
@@ -505,29 +500,13 @@ test_color_stops (hb_bool_t use_ft)
   hb_paint_funcs_t *funcs;
   hb_bool_t result = FALSE;
 
+  face = hb_test_open_font_file (NOTO_HAND);
+  font = hb_font_create (face);
+
 #ifdef HB_HAS_FREETYPE
   if (use_ft)
-  {
-    FT_Face ft_face;
-    char *path;
-
-    path = g_test_build_filename (G_TEST_DIST, NOTO_HAND, NULL);
-    if (FT_New_Face (library, path, 0, &ft_face) != 0)
-    {
-      g_test_message ("Failed to create FT_Face for %s", path);
-      g_test_fail ();
-      g_free (path);
-      return;
-    }
-    face = hb_ft_face_create_referenced (ft_face);
-    FT_Done_Face (ft_face);
-    g_free (path);
-  }
-  else
+    hb_ft_font_set_funcs (font);
 #endif
-    face = hb_test_open_font_file (NOTO_HAND);
-
-  font = hb_font_create (face);
 
   funcs = hb_paint_funcs_create ();
   hb_paint_funcs_set_linear_gradient_func (funcs, scrutinize_linear_gradient, NULL, NULL);
@@ -557,10 +536,6 @@ int
 main (int argc, char **argv)
 {
   int status = 0;
-
-#ifdef HB_HAS_FREETYPE
-  FT_Init_FreeType (&library);
-#endif
 
   hb_test_init (&argc, &argv);
   for (unsigned int i = 0; i < G_N_ELEMENTS (paint_tests); i++)

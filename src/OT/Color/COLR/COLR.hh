@@ -1004,7 +1004,7 @@ struct PaintScaleUniform
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    float s = scale + c->instancer (varIdxBase, 0);
+    float s = scale.to_float (c->instancer (varIdxBase, 0));
 
     bool p1 = c->funcs->push_scale (c->data, s, s);
     c->recurse (this+src);
@@ -1039,7 +1039,7 @@ struct PaintScaleUniformAroundCenter
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    float s = scale + c->instancer (varIdxBase, 0);
+    float s = scale.to_float (c->instancer (varIdxBase, 0));
     float tCenterX = centerX + c->instancer (varIdxBase, 1);
     float tCenterY = centerY + c->instancer (varIdxBase, 2);
 
@@ -1245,12 +1245,10 @@ struct PaintComposite
 
   void paint_glyph (hb_paint_context_t *c) const
   {
-    c->funcs->push_group (c->data);
     c->recurse (this+backdrop);
     c->funcs->push_group (c->data);
     c->recurse (this+src);
     c->funcs->pop_group (c->data, (hb_paint_composite_mode_t) (int) mode);
-    c->funcs->pop_group (c->data, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
   }
 
   HBUINT8		format; /* format = 32 */
@@ -2047,7 +2045,6 @@ struct COLR
 				     hb_array (font->coords, font->num_coords));
 
 	bool is_bounded = true;
-	bool pop_clip_first = true;
 	if (clip)
 	{
 	  hb_glyph_extents_t extents;
@@ -2055,8 +2052,7 @@ struct COLR
 					   &extents,
 					   instancer))
 	  {
-	    c.funcs->push_root_transform (c.data, font);
-
+	    font->scale_glyph_extents (&extents);
 	    c.funcs->push_clip_rectangle (c.data,
 					  extents.x_bearing,
 					  extents.y_bearing + extents.height,
@@ -2075,28 +2071,31 @@ struct COLR
 
 	    hb_extents_t extents = extents_data.get_extents ();
 	    is_bounded = extents_data.is_bounded ();
+
+	    /* Transform extents... */
+	    /* Copied from paint.hh push_root_transform(). */
+	    float upem = font->face->get_upem ();
+	    int xscale = font->x_scale, yscale = font->y_scale;
+	    float slant = font->slant_xy;
+	    hb_transform_t t (xscale/upem, 0, slant * yscale/upem, yscale/upem, 0, 0);
+
+	    t.transform_extents (extents);
+
 	    c.funcs->push_clip_rectangle (c.data,
 					  extents.xmin,
 					  extents.ymin,
 					  extents.xmax,
 					  extents.ymax);
-
-	    c.funcs->push_root_transform (c.data, font);
-
-	    pop_clip_first = false;
 	  }
 	}
+
+	c.funcs->push_root_transform (c.data, font);
 
 	if (is_bounded)
 	  c.recurse (*paint);
 
-	if (clip && pop_clip_first)
-	  c.funcs->pop_clip (c.data);
-
-        c.funcs->pop_transform (c.data);
-
-	if (clip && !pop_clip_first)
-	  c.funcs->pop_clip (c.data);
+	c.funcs->pop_transform (c.data);
+	c.funcs->pop_clip (c.data);
 
         return true;
       }
