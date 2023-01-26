@@ -157,18 +157,18 @@ struct hb_subset_layout_context_t :
     if (tag_ == HB_OT_TAG_GSUB)
     {
       lookup_index_map = &c_->plan->gsub_lookups;
-      script_langsys_map = c_->plan->gsub_langsys;
+      script_langsys_map = &c_->plan->gsub_langsys;
       feature_index_map = &c_->plan->gsub_features;
-      feature_substitutes_map = c_->plan->gsub_feature_substitutes_map;
-      feature_record_cond_idx_map = c_->plan->user_axes_location->is_empty () ? nullptr : c_->plan->gsub_feature_record_cond_idx_map;
+      feature_substitutes_map = &c_->plan->gsub_feature_substitutes_map;
+      feature_record_cond_idx_map = c_->plan->user_axes_location.is_empty () ? nullptr : &c_->plan->gsub_feature_record_cond_idx_map;
     }
     else
     {
       lookup_index_map = &c_->plan->gpos_lookups;
-      script_langsys_map = c_->plan->gpos_langsys;
+      script_langsys_map = &c_->plan->gpos_langsys;
       feature_index_map = &c_->plan->gpos_features;
-      feature_substitutes_map = c_->plan->gpos_feature_substitutes_map;
-      feature_record_cond_idx_map = c_->plan->user_axes_location->is_empty () ? nullptr : c_->plan->gpos_feature_record_cond_idx_map;
+      feature_substitutes_map = &c_->plan->gpos_feature_substitutes_map;
+      feature_record_cond_idx_map = c_->plan->user_axes_location.is_empty () ? nullptr : &c_->plan->gpos_feature_record_cond_idx_map;
     }
   }
 
@@ -1532,7 +1532,7 @@ struct ClassDefFormat1_3
                const Coverage* glyph_filter = nullptr) const
   {
     TRACE_SUBSET (this);
-    const hb_map_t &glyph_map = *c->plan->glyph_map_gsub;
+    const hb_map_t &glyph_map = c->plan->glyph_map_gsub;
 
     hb_sorted_vector_t<hb_pair_t<hb_codepoint_t, hb_codepoint_t>> glyph_and_klass;
     hb_set_t orig_klasses;
@@ -1777,7 +1777,7 @@ struct ClassDefFormat2_4
                const Coverage* glyph_filter = nullptr) const
   {
     TRACE_SUBSET (this);
-    const hb_map_t &glyph_map = *c->plan->glyph_map_gsub;
+    const hb_map_t &glyph_map = c->plan->glyph_map_gsub;
     const hb_set_t &glyph_set = *c->plan->glyphset_gsub ();
 
     hb_sorted_vector_t<hb_pair_t<hb_codepoint_t, hb_codepoint_t>> glyph_and_klass;
@@ -2833,7 +2833,7 @@ struct ConditionFormat1
     auto *out = c->serializer->embed (this);
     if (unlikely (!out)) return_trace (false);
 
-    const hb_map_t *index_map = c->plan->axes_index_map;
+    const hb_map_t *index_map = &c->plan->axes_index_map;
     if (index_map->is_empty ()) return_trace (true);
 
     if (!index_map->has (axisIndex))

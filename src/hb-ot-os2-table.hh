@@ -213,20 +213,20 @@ struct OS2
     OS2 *os2_prime = c->serializer->embed (this);
     if (unlikely (!os2_prime)) return_trace (false);
 
-    if (c->plan->user_axes_location->has (HB_TAG ('w','g','h','t')) &&
+    if (c->plan->user_axes_location.has (HB_TAG ('w','g','h','t')) &&
         !c->plan->pinned_at_default)
     {
-      float weight_class = c->plan->user_axes_location->get (HB_TAG ('w','g','h','t'));
+      float weight_class = c->plan->user_axes_location.get (HB_TAG ('w','g','h','t'));
       if (!c->serializer->check_assign (os2_prime->usWeightClass,
                                         roundf (hb_clamp (weight_class, 1.0f, 1000.0f)),
                                         HB_SERIALIZE_ERROR_INT_OVERFLOW))
         return_trace (false);
     }
 
-    if (c->plan->user_axes_location->has (HB_TAG ('w','d','t','h')) &&
+    if (c->plan->user_axes_location.has (HB_TAG ('w','d','t','h')) &&
         !c->plan->pinned_at_default)
     {
-      float width = c->plan->user_axes_location->get (HB_TAG ('w','d','t','h'));
+      float width = c->plan->user_axes_location.get (HB_TAG ('w','d','t','h'));
       if (!c->serializer->check_assign (os2_prime->usWidthClass,
                                         roundf (map_wdth_to_widthclass (width)),
                                         HB_SERIALIZE_ERROR_INT_OVERFLOW))
@@ -239,11 +239,11 @@ struct OS2
     /* when --gids option is not used, no need to do collect_mapping that is
      * iterating all codepoints in each subtable, which is not efficient */
     uint16_t min_cp, max_cp;
-    find_min_and_max_codepoint (c->plan->unicodes, &min_cp, &max_cp);
+    find_min_and_max_codepoint (&c->plan->unicodes, &min_cp, &max_cp);
     os2_prime->usFirstCharIndex = min_cp;
     os2_prime->usLastCharIndex = max_cp;
 
-    _update_unicode_ranges (c->plan->unicodes, os2_prime->ulUnicodeRange);
+    _update_unicode_ranges (&c->plan->unicodes, os2_prime->ulUnicodeRange);
 
     return_trace (true);
   }

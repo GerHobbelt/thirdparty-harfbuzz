@@ -103,8 +103,24 @@ hb_gobject_segment_properties_get_type (void);
 #define HB_GOBJECT_TYPE_SEGMENT_PROPERTIES (hb_gobject_segment_properties_get_type ())
 
 HB_EXTERN GType
+hb_gobject_draw_state_get_type (void);
+#define HB_GOBJECT_TYPE_DRAW_STATE (hb_gobject_draw_state_get_type ())
+
+HB_EXTERN GType
+hb_gobject_color_stop_get_type (void);
+#define HB_GOBJECT_TYPE_COLOR_STOP (hb_gobject_color_stop_get_type ())
+
+HB_EXTERN GType
+hb_gobject_color_line_get_type (void);
+#define HB_GOBJECT_TYPE_COLOR_LINE (hb_gobject_color_line_get_type ())
+
+HB_EXTERN GType
 hb_gobject_user_data_key_get_type (void);
 #define HB_GOBJECT_TYPE_USER_DATA_KEY (hb_gobject_user_data_key_get_type ())
+
+HB_EXTERN GType
+hb_gobject_ot_var_axis_info_get_type (void);
+#define HB_GOBJECT_TYPE_OT_VAR_AXIS_INFO (hb_gobject_ot_var_axis_info_get_type ())
 
 HB_EXTERN GType
 hb_gobject_ot_math_glyph_variant_get_type (void);

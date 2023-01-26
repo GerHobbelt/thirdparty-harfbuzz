@@ -48,16 +48,7 @@ hb_subset_input_create_or_fail (void)
   for (auto& set : input->sets_iter ())
     set = hb_set_create ();
 
-  input->axes_location = hb_hashmap_create<hb_tag_t, float> ();
-#ifdef HB_EXPERIMENTAL_API
-  input->name_table_overrides = hb_hashmap_create<hb_ot_name_record_ids_t, hb_bytes_t> ();
-#endif
-
-  if (!input->axes_location ||
-#ifdef HB_EXPERIMENTAL_API
-      !input->name_table_overrides ||
-#endif
-      input->in_error ())
+  if (input->in_error ())
   {
     hb_subset_input_destroy (input);
     return nullptr;
@@ -253,15 +244,9 @@ hb_subset_input_destroy (hb_subset_input_t *input)
   for (hb_set_t* set : input->sets_iter ())
     hb_set_destroy (set);
 
-  hb_hashmap_destroy (input->axes_location);
-
 #ifdef HB_EXPERIMENTAL_API
-  if (input->name_table_overrides)
-  {
-    for (auto _ : *input->name_table_overrides)
-      _.second.fini ();
-  }
-  hb_hashmap_destroy (input->name_table_overrides);
+  for (auto _ : input->name_table_overrides)
+    _.second.fini ();
 #endif
 
   hb_free (input);
@@ -456,7 +441,7 @@ hb_subset_input_pin_axis_to_default (hb_subset_input_t  *input,
   if (!hb_ot_var_find_axis_info (face, axis_tag, &axis_info))
     return false;
 
-  return input->axes_location->set (axis_tag, axis_info.default_value);
+  return input->axes_location.set (axis_tag, axis_info.default_value);
 }
 
 /**
@@ -486,7 +471,7 @@ hb_subset_input_pin_axis_location (hb_subset_input_t  *input,
     return false;
 
   float val = hb_clamp(axis_value, axis_info.min_value, axis_info.max_value);
-  return input->axes_location->set (axis_tag, val);
+  return input->axes_location.set (axis_tag, val);
 }
 #endif
 
@@ -602,7 +587,7 @@ hb_subset_input_override_name_table (hb_subset_input_t  *input,
     hb_memcpy (override_name, name_str, str_len);
     name_bytes = hb_bytes_t (override_name, str_len);
   }
-  input->name_table_overrides->set (hb_ot_name_record_ids_t (platform_id, encoding_id, language_id, name_id), name_bytes);
+  input->name_table_overrides.set (hb_ot_name_record_ids_t (platform_id, encoding_id, language_id, name_id), name_bytes);
   return true;
 }
 
