@@ -107,6 +107,7 @@ struct info_t :
       {"get-style",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_style,		"Get style",			"style tag; eg. 'wght'"},
       {"get-metric",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_metric,		"Get metric",			"metric tag; eg. 'hasc'"},
       {"get-baseline",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_baseline,		"Get baseline",			"baseline tag; eg. 'hang'"},
+      {"get-meta",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_meta,		"Get meta information",		"tag tag; eg. 'dlng'"},
       {"get-table",	0, 0, G_OPTION_ARG_STRING,	&this->get_table,		"Get font table",		"table tag; eg. 'cmap'"},
 
       {"list-all",	0, 0, G_OPTION_ARG_NONE,	&this->list_all,		"List all long information",	nullptr},
@@ -125,6 +126,7 @@ struct info_t :
       {"list-variations",0, 0, G_OPTION_ARG_NONE,	&this->list_variations,		"List variations",		nullptr},
 #endif
       {"list-palettes",	0, 0, G_OPTION_ARG_NONE,	&this->list_palettes,		"List color palettes",		nullptr},
+      {"list-meta",	0, 0, G_OPTION_ARG_NONE,	&this->list_meta,		"List meta information",	nullptr},
 
       {nullptr}
     };
@@ -201,6 +203,7 @@ struct info_t :
   char **get_style = nullptr;
   char **get_metric = nullptr;
   char **get_baseline = nullptr;
+  char **get_meta = nullptr;
   char *get_table = nullptr;
 
   hb_bool_t list_all = false;
@@ -219,6 +222,7 @@ struct info_t :
   hb_bool_t list_variations = false;
 #endif
   hb_bool_t list_palettes = false;
+  hb_bool_t list_meta = false;
 
   public:
 
@@ -286,6 +290,7 @@ struct info_t :
       list_variations =
 #endif
       list_palettes =
+      list_meta =
       true;
     }
 
@@ -306,6 +311,7 @@ struct info_t :
     if (get_style)	  _get_style ();
     if (get_metric)	  _get_metric ();
     if (get_baseline)	  _get_baseline ();
+    if (get_meta)	  _get_meta ();
     if (get_table)	  _get_table ();
 
     if (list_names)	  _list_names ();
@@ -323,6 +329,7 @@ struct info_t :
     if (list_variations)  _list_variations ();
 #endif
     if (list_palettes)	  _list_palettes ();
+    if (list_meta)	  _list_meta ();
 
     return 0;
   }
@@ -569,6 +576,25 @@ struct info_t :
     if (verbose && fallback)
     {
       printf ("\n[*] Fallback value\n");
+    }
+  }
+
+  void _get_meta ()
+  {
+    for (char **p = get_meta; *p; p++)
+    {
+      hb_ot_meta_tag_t tag = (hb_ot_meta_tag_t) hb_tag_from_string (*p, -1);
+
+      hb_blob_t *blob = hb_ot_meta_reference_entry (face, tag);
+
+      if (verbose)
+	printf ("Meta %c%c%c%c: ", HB_UNTAG (tag));
+
+      printf ("%.*s\n",
+	      (int) hb_blob_get_length (blob),
+	      hb_blob_get_data (blob, nullptr));
+
+      hb_blob_destroy (blob);
     }
   }
 
@@ -1359,6 +1385,39 @@ struct info_t :
       }
     }
   }
+
+  void
+  _list_meta ()
+  {
+    if (verbose)
+    {
+      separator ();
+      printf ("Meta information:\n");
+    }
+
+    {
+      if (verbose)
+      {
+	printf ("Tag	Data\n------------\n");
+      }
+      unsigned count = hb_ot_meta_get_entry_tags (face, 0, nullptr, nullptr);
+      for (unsigned i = 0; i < count; i++)
+      {
+	hb_ot_meta_tag_t tag;
+	unsigned len = 1;
+	hb_ot_meta_get_entry_tags (face, i, &len, &tag);
+
+	hb_blob_t *blob = hb_ot_meta_reference_entry (face, tag);
+
+	printf ("%c%c%c%c	%.*s\n", HB_UNTAG (tag),
+		(int) hb_blob_get_length (blob),
+		hb_blob_get_data (blob, nullptr));
+
+	hb_blob_destroy (blob);
+      }
+    }
+  }
+
 };
 
 
