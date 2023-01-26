@@ -58,6 +58,7 @@ struct font_options_t : face_options_t
   void post_parse (GError **error);
 
   hb_bool_t sub_font = false;
+  hb_bool_t list_features = false;
 #ifndef HB_NO_VAR
   hb_bool_t list_variations = false;
   hb_variation_t *variations = nullptr;
@@ -73,6 +74,7 @@ struct font_options_t : face_options_t
   char *font_funcs = nullptr;
   int ft_load_flags = 2;
   unsigned int palette = 0;
+  unsigned int named_instance = 0;
 
   hb_font_t *font = nullptr;
 };
@@ -92,6 +94,7 @@ static struct supported_font_funcs_t {
 
 #ifdef HAVE_GLIB_H
 
+static G_GNUC_NORETURN void _list_features (hb_face_t *face);
 #ifndef HB_NO_VAR
 static G_GNUC_NORETURN void _list_variations (hb_face_t *face);
 #endif
@@ -117,6 +120,7 @@ font_options_t::post_parse (GError **error)
   hb_font_set_scale (font, scale_x, scale_y);
 
 #ifndef HB_NO_VAR
+  hb_font_set_var_named_instance (font, named_instance);
   hb_font_set_variations (font, variations, num_variations);
 #endif
 
@@ -166,31 +170,69 @@ font_options_t::post_parse (GError **error)
     hb_font_destroy (old_font);
   }
 
+  if (list_features)
+    _list_features (face);
+
 #ifndef HB_NO_VAR
   if (list_variations)
     _list_variations (face);
 #endif
 }
 
+static G_GNUC_NORETURN void
+_list_features (hb_face_t *face)
+{
+  hb_set_t *features = hb_set_create ();
+
+  hb_tag_t table_tags[] = {HB_OT_TAG_GSUB, HB_OT_TAG_GPOS, HB_TAG_NONE};
+  for (unsigned int i = 0; table_tags[i]; i++)
+  {
+    hb_tag_t feature_array[32];
+    unsigned feature_count = sizeof feature_array / sizeof feature_array[0];
+    unsigned start_offset = 0;
+    do
+    {
+      hb_ot_layout_table_get_feature_tags (face, table_tags[i],
+					   start_offset,
+					   &feature_count,
+					   feature_array);
+      start_offset += feature_count;
+
+      for (unsigned j = 0; j < feature_count; j++)
+        hb_set_add (features, feature_array[j]);
+    }
+    while (feature_count == sizeof feature_array / sizeof feature_array[0]);
+  }
+
+  for (hb_codepoint_t tag = HB_SET_VALUE_INVALID;
+       hb_set_next (features, &tag);)
+  {
+    printf ("%c%c%c%c\n", HB_UNTAG (tag));
+  }
+
+  exit (0);
+}
 
 #ifndef HB_NO_VAR
 static G_GNUC_NORETURN void
 _list_variations (hb_face_t *face)
 {
-  hb_vector_t<hb_ot_var_axis_info_t> axes;
+  hb_ot_var_axis_info_t *axes;
 
   unsigned count = hb_ot_var_get_axis_infos (face, 0, nullptr, nullptr);
-  axes.resize (count);
-  hb_ot_var_get_axis_infos (face, 0, &count, axes.arrayZ);
+  axes = (hb_ot_var_axis_info_t *) calloc (count, sizeof (hb_ot_var_axis_info_t));
+  hb_ot_var_get_axis_infos (face, 0, &count, axes);
 
   auto language = hb_language_get_default ();
+  bool has_hidden = false;
 
-  printf ("Non-hidden varitation axes:\n");
-  printf ("tag:	min	default	max	name\n\n");
-  for (const auto &axis : axes)
+  printf ("Varitation axes:\n");
+  printf ("Tag:	Minimum	Default	Maximum	Name\n\n");
+  for (unsigned i = 0; i < count; i++)
   {
+    const auto &axis = axes[i];
     if (axis.flags & HB_OT_VAR_AXIS_FLAG_HIDDEN)
-      continue;
+      has_hidden = true;
 
     char name[64];
     unsigned name_len = sizeof name;
@@ -199,13 +241,19 @@ _list_variations (hb_face_t *face)
 			 language,
 			 &name_len, name);
 
-    printf ("%c%c%c%c:	%g	%g	%g	%s\n",
+    printf ("%c%c%c%c%s:	%g	%g	%g	%s\n",
 	    HB_UNTAG (axis.tag),
+	    axis.flags & HB_OT_VAR_AXIS_FLAG_HIDDEN ? "*" : "",
 	    (double) axis.min_value,
 	    (double) axis.default_value,
 	    (double) axis.max_value,
 	    name);
   }
+  if (has_hidden)
+    printf ("\n[*] Hidden axis\n");
+
+  free (axes);
+  axes = nullptr;
 
   count = hb_ot_var_get_named_instance_count (face);
   if (count)
@@ -223,14 +271,16 @@ _list_variations (hb_face_t *face)
 			   &name_len, name);
 
       unsigned coords_count = hb_ot_var_named_instance_get_design_coords (face, i, nullptr, nullptr);
-      hb_vector_t<float> coords;
-      coords.resize (coords_count);
-      hb_ot_var_named_instance_get_design_coords (face, i, &coords_count, coords.arrayZ);
+      float* coords;
+      coords = (float *) calloc (coords_count, sizeof (float));
+      hb_ot_var_named_instance_get_design_coords (face, i, &coords_count, coords);
 
-      printf ("%s	", name);
-      for (unsigned j = 0; j < coords.length; j++)
+      printf ("%u. %-32s", i, name);
+      for (unsigned j = 0; j < coords_count; j++)
 	printf ("%g, ", (double) coords[j]);
       printf ("\n");
+
+      free (coords);
     }
   }
 
@@ -370,6 +420,7 @@ font_options_t::add_options (option_parser_t *parser)
     {"sub-font",	0, G_OPTION_FLAG_HIDDEN,
 			      G_OPTION_ARG_NONE,	&this->sub_font,		"Create a sub-font (default: false)",		"boolean"},
     {"ft-load-flags",	0, 0, G_OPTION_ARG_INT,		&this->ft_load_flags,		"Set FreeType load-flags (default: 2)",		"integer"},
+    {"list-features",	0, 0, G_OPTION_ARG_NONE,	&this->list_features,		"List available font features and quit",	nullptr},
     {nullptr}
   };
   parser->add_group (entries,
@@ -395,6 +446,7 @@ font_options_t::add_options (option_parser_t *parser)
   GOptionEntry entries2[] =
   {
     {"list-variations",	0, 0, G_OPTION_ARG_NONE,	&this->list_variations,		"List available font variations and quit",	nullptr},
+    {"named-instance",	0, 0, G_OPTION_ARG_INT,         &this->named_instance,		"Set named-instance index (default: none)",	"index"},
     {"variations",	0, 0, G_OPTION_ARG_CALLBACK,	(gpointer) &parse_variations,	variations_help,	"list"},
     {nullptr}
   };
