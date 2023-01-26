@@ -1,6 +1,5 @@
 /*
- * Copyright © 2010  Behdad Esfahbod
- * Copyright © 2011,2012  Google, Inc.
+ * Copyright © 2023  Behdad Esfahbod
  *
  *  This is part of HarfBuzz, a text shaping library.
  *
@@ -1324,7 +1323,9 @@ struct info_t :
 	}
 
 #ifdef HAVE_CHAFA
-	if (verbose && isatty (fileno (stdout)))
+	char *chafa_env = getenv ("HB_CHAFA");
+	bool use_chafa = !chafa_env || atoi (chafa_env);
+	if (verbose && use_chafa && isatty (fileno (stdout)))
 	{
 	  GString *chafa_str = _palette_chafa_str (i);
 	  printf ("%u	%s	%-23s	%*s\n", i, type, name,
