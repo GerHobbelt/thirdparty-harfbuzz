@@ -257,7 +257,8 @@ hb_base_sources += hb_version_h
 
 hb_base_ragel_generated_sources = files(
   'hb-buffer-deserialize-json.hh',
-  'hb-buffer-deserialize-text.hh',
+  'hb-buffer-deserialize-text-glyphs.hh',
+  'hb-buffer-deserialize-text-unicodes.hh',
   'hb-number-parser.hh',
   'hb-ot-shaper-indic-machine.hh',
   'hb-ot-shaper-khmer-machine.hh',
@@ -266,7 +267,8 @@ hb_base_ragel_generated_sources = files(
 )
 hb_base_ragel_sources = [
   'hb-buffer-deserialize-json.rl',
-  'hb-buffer-deserialize-text.rl',
+  'hb-buffer-deserialize-text-glyphs.rl',
+  'hb-buffer-deserialize-text-unicodes.rl',
   'hb-number-parser.rl',
   'hb-ot-shaper-indic-machine.rl',
   'hb-ot-shaper-khmer-machine.rl',

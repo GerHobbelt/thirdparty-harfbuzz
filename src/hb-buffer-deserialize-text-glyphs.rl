@@ -24,14 +24,14 @@
  * Google Author(s): Behdad Esfahbod
  */
 
-#ifndef HB_BUFFER_DESERIALIZE_JSON_HH
-#define HB_BUFFER_DESERIALIZE_JSON_HH
+#ifndef HB_BUFFER_DESERIALIZE_TEXT_GLYPHS_HH
+#define HB_BUFFER_DESERIALIZE_TEXT_GLYPHS_HH
 
 #include "hb.hh"
 
 %%{
 
-machine deserialize_json;
+machine deserialize_text_glyphs;
 alphtype unsigned char;
 write data;
 
@@ -52,18 +52,14 @@ action tok {
 	tok = p;
 }
 
-action ensure_glyphs { if (unlikely (!buffer->ensure_glyphs ())) return false; }
-action ensure_unicode { if (unlikely (!buffer->ensure_unicode ())) return false; }
-
-action parse_glyph_name {
-	/* TODO Unescape \" and \\ if found. */
+action parse_glyph {
+	/* TODO Unescape delimiters. */
 	if (!hb_font_glyph_from_string (font,
-					tok+1, p - tok - 2, /* Skip "" */
+					tok, p - tok,
 					&info.codepoint))
 	  return false;
 }
 
-action parse_codepoint	{ if (!parse_uint (tok, p, &info.codepoint)) return false; }
 action parse_cluster	{ if (!parse_uint (tok, p, &info.cluster )) return false; }
 action parse_x_offset	{ if (!parse_int  (tok, p, &pos.x_offset )) return false; }
 action parse_y_offset	{ if (!parse_int  (tok, p, &pos.y_offset )) return false; }
@@ -71,47 +67,38 @@ action parse_x_advance	{ if (!parse_int  (tok, p, &pos.x_advance)) return false;
 action parse_y_advance	{ if (!parse_int  (tok, p, &pos.y_advance)) return false; }
 action parse_glyph_flags{ if (!parse_uint (tok, p, &info.mask    )) return false; }
 
-unum	= '0' | [1-9] digit*;
+unum  = '0' | [1-9] digit*;
 num	= '-'? unum;
 
-comma = space* ',' space*;
-colon = space* ':' space*;
+glyph_id = unum;
+glyph_name = ([^\\\]=@+,#|] | '\\' [\\\]=@+,|]) *;
 
-codepoint = unum;
-glyph_name = '"' ([^\\"] | '\\' [\\"])* '"';
+glyph	= (glyph_id | glyph_name) >tok %parse_glyph;
+cluster	= '=' (unum >tok %parse_cluster);
+offsets	= '@' (num >tok %parse_x_offset)   ',' (num >tok %parse_y_offset );
+advances= '+' (num >tok %parse_x_advance) (',' (num >tok %parse_y_advance))?;
+glyphflags= '#' (unum >tok %parse_glyph_flags);
 
-parse_glyph_name   = (glyph_name >tok %parse_glyph_name);
-parse_codepoint = (codepoint >tok %parse_codepoint);
-
-glyph	=  "\"g\""  colon (parse_glyph_name | parse_codepoint);
-unicode	=  "\"u\""  colon parse_codepoint;
-cluster	=  "\"cl\"" colon (unum >tok %parse_cluster);
-xoffset	=  "\"dx\"" colon (num  >tok %parse_x_offset);
-yoffset	=  "\"dy\"" colon (num  >tok %parse_y_offset);
-xadvance=  "\"ax\"" colon (num  >tok %parse_x_advance);
-yadvance=  "\"ay\"" colon (num  >tok %parse_y_advance);
-glyphflags="\"fl\"" colon (unum >tok %parse_glyph_flags);
-
-element = glyph @ensure_glyphs
-	| unicode @ensure_unicode
-	| cluster
-	| xoffset
-	| yoffset
-	| xadvance
-	| yadvance
-	| glyphflags;
-item	=
-	( '{' space* element (comma element)* space* '}')
+glyph_item	=
+	(
+		glyph
+		cluster?
+		offsets?
+		advances?
+		glyphflags?
+	)
 	>clear_item
-	@add_item
+	%add_item
 	;
 
-main := space* item (comma item)* space* (','|']');
+glyphs = glyph_item (space* '|' space* glyph_item)* space* ('|'|']');
+
+main := space* glyphs;
 
 }%%
 
 static hb_bool_t
-_hb_buffer_deserialize_json (hb_buffer_t *buffer,
+_hb_buffer_deserialize_text_glyphs (hb_buffer_t *buffer,
 				    const char *buf,
 				    unsigned int buf_len,
 				    const char **end_ptr,
@@ -141,4 +128,4 @@ _hb_buffer_deserialize_json (hb_buffer_t *buffer,
   return p == pe && *(p-1) != ']';
 }
 
-#endif /* HB_BUFFER_DESERIALIZE_JSON_HH */
+#endif /* HB_BUFFER_DESERIALIZE_TEXT_GLYPHS_HH */
