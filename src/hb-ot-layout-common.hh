@@ -2482,7 +2482,7 @@ struct VarData
     const HBUINT8 *src_delta_bytes = src->get_delta_bytes ();
     unsigned src_row_size = src->get_row_size ();
     unsigned src_word_count = src->wordCount ();
-    unsigned src_long_words = src->longWords ();
+    bool     src_long_words = src->longWords ();
 
     bool has_long = false;
     if (src_long_words)
@@ -2709,6 +2709,14 @@ struct VariationStore
     unsigned int outer = index >> 16;
     unsigned int inner = index & 0xFFFF;
     return get_delta (outer, inner, coords, coord_count, cache);
+  }
+  float get_delta (unsigned int index,
+		   hb_array_t<int> coords,
+		   VarRegionList::cache_t *cache = nullptr) const
+  {
+    return get_delta (index,
+		      coords.arrayZ, coords.length,
+		      cache);
   }
 
   bool sanitize (hb_sanitize_context_t *c) const

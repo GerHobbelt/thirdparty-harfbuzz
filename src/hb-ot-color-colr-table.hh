@@ -184,6 +184,7 @@ struct Variable
 
   protected:
   T      value;
+  public:
   VarIdx varIdxBase;
   public:
   DEFINE_SIZE_STATIC (4 + T::static_size);
@@ -192,6 +193,8 @@ struct Variable
 template <typename T>
 struct NoVariable
 {
+  static constexpr uint32_t varIdxBase = VarIdx::NO_VARIATION;
+
   NoVariable<T>* copy (hb_serialize_context_t *c) const
   {
     TRACE_SERIALIZE (this);
@@ -928,20 +931,32 @@ struct ClipBox
     }
   }
 
-  bool get_extents (hb_glyph_extents_t *extents) const
+  bool get_extents (hb_glyph_extents_t *extents,
+		    const VarStoreInstancer &instancer) const
   {
     switch (u.format) {
     case 1:
-      extents->x_bearing = u.format1.xMin;
-      extents->y_bearing = u.format1.yMax;
-      extents->width = u.format1.xMax - u.format1.xMin;
-      extents->height = u.format1.yMin - u.format1.yMax;
-      return true;
     case 2:
-      // TODO
-      return false;
+    {
+      int xmin = u.format1.xMin;
+      int ymin = u.format1.yMin;
+      int xmax = u.format1.xMax;
+      int ymax = u.format1.yMax;
+      if (u.format == 2 && instancer)
+      {
+        uint32_t varIdx = u.format2.varIdxBase;
+        xmin += _hb_roundf (instancer (varIdx, 0));
+        ymin += _hb_roundf (instancer (varIdx, 1));
+        xmax += _hb_roundf (instancer (varIdx, 2));
+        ymax += _hb_roundf (instancer (varIdx, 3));
+      }
+      extents->x_bearing = xmin;
+      extents->y_bearing = ymax;
+      extents->width = xmax - xmin;
+      extents->height = ymin - ymax;
+      return true;
+    }
     default:
-      // This shouldn't happen
       return false;
     }
   }
@@ -956,6 +971,9 @@ struct ClipBox
 
 struct ClipRecord
 {
+  int cmp (hb_codepoint_t g) const
+  { return g < startGlyphID ? -1 : g <= endGlyphID ? 0 : +1; }
+
   ClipRecord* copy (hb_serialize_context_t *c, const void *base) const
   {
     TRACE_SERIALIZE (this);
@@ -971,9 +989,11 @@ struct ClipRecord
     return_trace (c->check_struct (this) && clipBox.sanitize (c, base));
   }
 
-  bool get_extents (hb_glyph_extents_t *extents, const void *base) const
+  bool get_extents (hb_glyph_extents_t *extents,
+		    const void *base,
+		    const VarStoreInstancer &instancer) const
   {
-    return (base+clipBox).get_extents (extents);
+    return (base+clipBox).get_extents (extents, instancer);
   }
 
   public:
@@ -983,6 +1003,7 @@ struct ClipRecord
   public:
   DEFINE_SIZE_STATIC (7);
 };
+DECLARE_NULL_NAMESPACE_BYTES (OT, ClipRecord);
 
 struct ClipList
 {
@@ -1076,12 +1097,15 @@ struct ClipList
   }
 
   bool
-  get_extents (hb_codepoint_t gid, hb_glyph_extents_t *extents) const
+  get_extents (hb_codepoint_t gid,
+	       hb_glyph_extents_t *extents,
+	       const VarStoreInstancer &instancer) const
   {
-    for (const ClipRecord& record : clips.iter ())
+    auto *rec = clips.as_array ().bsearch (gid);
+    if (rec)
     {
-      if (record.startGlyphID <= gid && gid <= record.endGlyphID)
-        return record.get_extents (extents, this);
+      rec->get_extents (extents, this, instancer);
+      return true;
     }
     return false;
   }
@@ -1550,14 +1574,23 @@ struct COLR
   bool
   get_extents (hb_font_t *font, hb_codepoint_t glyph, hb_glyph_extents_t *extents) const
   {
-    if ((this+clipList).get_extents (glyph, extents))
-      {
-        extents->x_bearing = font->em_scale_x (extents->x_bearing);
-        extents->y_bearing = font->em_scale_x (extents->y_bearing);
-        extents->width = font->em_scale_x (extents->width);
-        extents->height = font->em_scale_x (extents->height);
-        return true;
-      }
+    if (version != 1)
+      return false;
+
+    VarStoreInstancer instancer (this+varStore,
+				 this+varIdxMap,
+				 hb_array (font->coords, font->num_coords));
+
+    if ((this+clipList).get_extents (glyph,
+				     extents,
+				     instancer))
+    {
+      extents->x_bearing = font->em_scale_x (extents->x_bearing);
+      extents->y_bearing = font->em_scale_x (extents->y_bearing);
+      extents->width = font->em_scale_x (extents->width);
+      extents->height = font->em_scale_x (extents->height);
+      return true;
+    }
 
     return false;
   }
