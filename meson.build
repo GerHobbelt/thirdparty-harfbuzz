@@ -2,7 +2,8 @@ project('harfbuzz', 'c', 'cpp',
   meson_version: '>= 0.55.0',
   version: '6.0.0',
   default_options: [
-    'cpp_rtti=false',       # Just to support msvc, we are passing -fno-exceptions also anyway
+    'cpp_eh=none',          # Just to support msvc, we are passing -fno-exceptions also anyway
+    'cpp_rtti=false',       # Just to support msvc, we are passing -fno-rtti also anyway
     'cpp_std=c++11',
     'wrap_mode=nofallback', # Use --wrap-mode=default to revert, https://github.com/harfbuzz/harfbuzz/pull/2548
   ],
@@ -27,17 +28,12 @@ if cpp.get_argument_syntax() == 'msvc'
   # If a warning is harmless but hard to fix, use '/woXXXX' so it's shown once
   # NOTE: Only add warnings here if you are sure they're spurious
   msvc_args = [
-    '/wd4018', # implicit signed/unsigned conversion
-    '/wd4146', # unary minus on unsigned (beware INT_MIN)
     '/wd4244', # lossy type conversion (e.g. double -> int)
-    '/wd4305', # truncating type conversion (e.g. double -> float)
     cpp.get_supported_arguments(['/utf-8']), # set the input encoding to utf-8
   ]
   add_project_arguments(msvc_args, language: ['c', 'cpp'])
   # Disable SAFESEH with MSVC for libs that use external deps that are built with MinGW
   # noseh_link_args = ['/SAFESEH:NO']
-  # disable exception handling
-  add_project_arguments(['/EHs-', '/EHc-'], language: 'cpp')
 endif
 
 add_project_link_arguments(cpp.get_supported_link_arguments([
@@ -211,8 +207,10 @@ if cairo_dep.found()
   conf.set('HAVE_CAIRO', 1)
   if cairo_dep.type_name() == 'internal'
     conf.set('HAVE_CAIRO_USER_FONT_FACE_SET_RENDER_COLOR_GLYPH_FUNC', 1)
+    conf.set('HAVE_CAIRO_FONT_OPTIONS_GET_CUSTOM_PALETTE_COLOR', 1)
   else
     check_funcs += [['cairo_user_font_face_set_render_color_glyph_func', {'deps': cairo_dep}]]
+    check_funcs += [['cairo_font_options_get_custom_palette_color', {'deps': cairo_dep}]]
   endif
 endif
 

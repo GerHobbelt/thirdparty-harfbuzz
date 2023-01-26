@@ -73,16 +73,12 @@ helper_cairo_use_hb_draw (const font_options_t *font_opts)
 {
   const char *env = getenv ("HB_DRAW");
   if (!env)
-#if 1
-    /* Following branch disabled because we prefer our
-     * OpenType extensions working, ie going through hb-draw,
-     * over avoiding the obscure cairo bug. */
-    return true;
-#else
     /* Older cairo had a bug in rendering COLRv0 fonts in
-     * right-to-left direction. */
+     * right-to-left direction as well as clipping issue
+     * with user-fonts.
+     *
+     * https://github.com/harfbuzz/harfbuzz/issues/4051 */
     return cairo_version () >= CAIRO_VERSION_ENCODE (1, 17, 5);
-#endif
 
   return atoi (env);
 }
@@ -124,23 +120,33 @@ helper_cairo_create_scaled_font (const font_options_t *font_opts,
   cairo_font_options_set_hint_style (font_options, CAIRO_HINT_STYLE_NONE);
   cairo_font_options_set_hint_metrics (font_options, CAIRO_HINT_METRICS_OFF);
 #ifdef CAIRO_COLOR_PALETTE_DEFAULT
-  unsigned palette_index = view_opts->palette;
-#ifdef CAIRO_COLOR_PALETTE_CUSTOM
+  cairo_font_options_set_color_palette (font_options, view_opts->palette);
+#endif
+#ifdef HAVE_CAIRO_FONT_OPTIONS_GET_CUSTOM_PALETTE_COLOR
   if (view_opts->custom_palette)
   {
-    palette_index = HB_PAINT_PALETTE_INDEX_CUSTOM;
     char **entries = g_strsplit (view_opts->custom_palette, ",", -1);
+    unsigned idx = 0;
     for (unsigned i = 0; entries[i]; i++)
     {
+      const char *p = strchr (entries[i], '=');
+      if (!p)
+        p = entries[i];
+      else
+      {
+	sscanf (entries[i], "%u", &idx);
+        p++;
+      }
+
       unsigned fr, fg, fb, fa;
       fr = fg = fb = fa = 0;
-      parse_color (entries[i], fr, fg,fb, fa);
-      cairo_font_options_set_custom_palette_color (font_options, i, fr / 255., fg / 255., fb / 255., fa / 255.);
+      if (parse_color (p, fr, fg,fb, fa))
+	cairo_font_options_set_custom_palette_color (font_options, idx, fr / 255., fg / 255., fb / 255., fa / 255.);
+
+      idx++;
     }
     g_strfreev (entries);
   }
-#endif
-  cairo_font_options_set_color_palette (font_options, palette_index);
 #endif
 
   cairo_scaled_font_t *scaled_font = cairo_scaled_font_create (cairo_face,
