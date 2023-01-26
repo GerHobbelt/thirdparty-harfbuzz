@@ -28,6 +28,10 @@
 #include "batch.hh"
 #include "font-options.hh"
 
+#ifdef HB_HAS_GOBJECT
+#include <hb-gobject.h>
+#endif
+
 const unsigned DEFAULT_FONT_SIZE = FONT_SIZE_UPEM;
 const unsigned SUBPIXEL_BITS = 0;
 
@@ -81,7 +85,7 @@ struct info_t
       {"show-all",	0, 0, G_OPTION_ARG_NONE,	&this->show_all,		"Show all short information (default)",	nullptr},
       {"show-face-count",0, 0, G_OPTION_ARG_NONE,	&this->show_face_count,		"Show face count",		nullptr},
       {"show-family",	0, 0, G_OPTION_ARG_NONE,	&this->show_family,		"Show family name",		nullptr},
-      {"show-style",	0, 0, G_OPTION_ARG_NONE,	&this->show_style,		"Show style name",		nullptr},
+      {"show-subfamily",0, 0, G_OPTION_ARG_NONE,	&this->show_subfamily,		"Show subfamily name",		nullptr},
       {"show-unique-name",0, 0, G_OPTION_ARG_NONE,	&this->show_unique_name,	"Show unique name",		nullptr},
       {"show-full-name",0, 0, G_OPTION_ARG_NONE,	&this->show_full_name,		"Show full name",		nullptr},
       {"show-postscript-name",0, 0, G_OPTION_ARG_NONE,	&this->show_postscript_name,	"Show Postscript name",		nullptr},
@@ -93,12 +97,18 @@ struct info_t
       {"show-extents",	0, 0, G_OPTION_ARG_NONE,	&this->show_extents,		"Show extents",			nullptr},
 
       {"get-name",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_name,		"Get name",			"name id; eg. '13'"},
+      {"get-style",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_style,		"Get style",			"style tag; eg. 'wght'"},
       {"get-metric",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_metric,		"Get metric",			"metric tag; eg. 'hasc'"},
       {"get-baseline",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_baseline,		"Get baseline",			"baseline tag; eg. 'hang'"},
       {"get-table",	0, 0, G_OPTION_ARG_STRING,	&this->get_table,		"Get font table",		"table tag; eg. 'cmap'"},
 
       {"list-all",	0, 0, G_OPTION_ARG_NONE,	&this->list_all,		"List all long information",	nullptr},
       {"list-names",	0, 0, G_OPTION_ARG_NONE,	&this->list_names,		"List names",			nullptr},
+#ifdef HB_HAS_GOBJECT
+      {"list-style",	0, 0, G_OPTION_ARG_NONE,	&this->list_style,		"List style",			nullptr},
+      {"list-metrics",	0, 0, G_OPTION_ARG_NONE,	&this->list_metrics,		"List metrics",			nullptr},
+      {"list-baselines",0, 0, G_OPTION_ARG_NONE,	&this->list_baselines,		"List baselines",		nullptr},
+#endif
       {"list-tables",	'l', 0, G_OPTION_ARG_NONE,	&this->list_tables,		"List tables",			nullptr},
       {"list-unicodes",	0, 0, G_OPTION_ARG_NONE,	&this->list_unicodes,		"List characters",		nullptr},
       {"list-glyphs",	0, 0, G_OPTION_ARG_NONE,	&this->list_glyphs,		"List glyphs",			nullptr},
@@ -141,7 +151,7 @@ struct info_t
   hb_bool_t show_all = false;
   hb_bool_t show_face_count = false;
   hb_bool_t show_family = false;
-  hb_bool_t show_style = false;
+  hb_bool_t show_subfamily = false;
   hb_bool_t show_unique_name = false;
   hb_bool_t show_full_name = false;
   hb_bool_t show_postscript_name = false;
@@ -153,12 +163,18 @@ struct info_t
   hb_bool_t show_extents = false;
 
   char **get_name = nullptr;
+  char **get_style = nullptr;
   char **get_metric = nullptr;
   char **get_baseline = nullptr;
   char *get_table = nullptr;
 
   hb_bool_t list_all = false;
   hb_bool_t list_names = false;
+#ifdef HB_HAS_GOBJECT
+  hb_bool_t list_style = false;
+  hb_bool_t list_metrics = false;
+  hb_bool_t list_baselines = false;
+#endif
   hb_bool_t list_tables = false;
   hb_bool_t list_unicodes = false;
   hb_bool_t list_glyphs = false;
@@ -202,7 +218,7 @@ struct info_t
     {
       show_face_count =
       show_family =
-      show_style =
+      show_subfamily =
       show_unique_name =
       show_full_name =
       show_postscript_name =
@@ -219,6 +235,11 @@ struct info_t
     if (list_all)
     {
       list_names =
+#ifdef HB_HAS_GOBJECT
+      list_style =
+      list_metrics =
+      list_baselines =
+#endif
       list_tables =
       list_unicodes =
       list_glyphs =
@@ -233,7 +254,7 @@ struct info_t
 
     if (show_face_count)  _show_face_count ();
     if (show_family)	  _show_family ();
-    if (show_style)	  _show_style ();
+    if (show_subfamily)	  _show_subfamily ();
     if (show_unique_name) _show_unique_name ();
     if (show_full_name)	  _show_full_name ();
     if (show_postscript_name)_show_postscript_name ();
@@ -245,11 +266,17 @@ struct info_t
     if (show_extents)	  _show_extents ();
 
     if (get_name)	  _get_name ();
+    if (get_style)	  _get_style ();
     if (get_metric)	  _get_metric ();
     if (get_baseline)	  _get_baseline ();
     if (get_table)	  _get_table ();
 
     if (list_names)	  _list_names ();
+#ifdef HB_HAS_GOBJECT
+    if (list_style)	  _list_style ();
+    if (list_metrics)	  _list_metrics ();
+    if (list_baselines)	  _list_baselines ();
+#endif
     if (list_tables)	  _list_tables ();
     if (list_unicodes)	  _list_unicodes ();
     if (list_glyphs)	  _list_glyphs ();
@@ -300,7 +327,7 @@ struct info_t
     printf ("%s\n", name);
   }
   void _show_family ()		{ _show_name ("Family", 1); }
-  void _show_style ()
+  void _show_subfamily ()
   {
     hb_ot_name_id_t name_id = 2;
 
@@ -308,7 +335,7 @@ struct info_t
     if (named_instance != HB_FONT_NO_VAR_NAMED_INSTANCE)
       name_id = hb_ot_var_named_instance_get_subfamily_name_id (face, named_instance);
 
-    _show_name ("Style", name_id);
+    _show_name ("Subfamily", name_id);
   }
   void _show_unique_name ()	{ _show_name ("Unique name", 3); }
   void _show_full_name ()	{ _show_name ("Full name", 4); }
@@ -424,6 +451,20 @@ struct info_t
     }
   }
 
+  void _get_style ()
+  {
+    for (char **p = get_style; *p; p++)
+    {
+      hb_style_tag_t tag = (hb_style_tag_t) hb_tag_from_string (*p, -1);
+
+      if (verbose)
+	printf ("Style %c%c%c%c: ", HB_UNTAG (tag));
+
+      float v = hb_style_get_value (font, tag);
+      printf ("%g\n", (double) v);
+    }
+  }
+
   void _get_metric ()
   {
     bool fallback = false;
@@ -436,7 +477,7 @@ struct info_t
 	printf ("Metric %c%c%c%c: ", HB_UNTAG (tag));
 
       if (hb_ot_metrics_get_position (font, tag, &position))
-	printf ("%d\n", position);
+	printf ("%d	\n", position);
       else
       {
 	hb_ot_metrics_get_position_with_fallback (font, tag, &position);
@@ -453,7 +494,6 @@ struct info_t
 
   void _get_baseline ()
   {
-
     hb_tag_t script_tags[HB_OT_MAX_TAGS_PER_SCRIPT];
     hb_tag_t language_tags[HB_OT_MAX_TAGS_PER_LANGUAGE];
     unsigned script_count = HB_OT_MAX_TAGS_PER_SCRIPT;
@@ -471,6 +511,7 @@ struct info_t
     if (ot_language_str)
       language_tag = hb_tag_from_string (ot_language_str, -1);
 
+
     bool fallback = false;
     for (char **p = get_baseline; *p; p++)
     {
@@ -481,7 +522,7 @@ struct info_t
 	printf ("Baseline %c%c%c%c: ", HB_UNTAG (tag));
 
       if (hb_ot_layout_get_baseline (font, tag, direction, script_tag, language_tag, &position))
-	printf ("%d\n", position);
+	printf ("%d	\n", position);
       else
       {
 	hb_ot_layout_get_baseline_with_fallback (font, tag, direction, script_tag, language_tag, &position);
@@ -512,8 +553,12 @@ struct info_t
     {
       separator ();
       printf ("Name information:\n\n");
-      printf ("Id	Text\n------------\n");
+      printf ("Id: Name			Text\n------------------------------------\n");
     }
+
+#ifdef HB_HAS_GOBJECT
+    GEnumClass *enum_class = (GEnumClass *) g_type_class_ref ((GType) HB_GOBJECT_TYPE_OT_NAME_ID_PREDEFINED);
+#endif
 
     unsigned count;
     const auto *entries = hb_ot_name_list_names (face, &count);
@@ -525,9 +570,148 @@ struct info_t
 			    language,
 			    &name_len, name);
 
-      printf ("%u	%s\n", entries[i].name_id, name);
+#ifdef HB_HAS_GOBJECT
+      if (verbose)
+      {
+	GEnumValue *enum_value = g_enum_get_value (enum_class, entries[i].name_id);
+	printf ("%u: %-27s	%s\n", entries[i].name_id, enum_value ? enum_value->value_nick : "", name);
+      }
+      else
+#endif
+	printf ("%u	%s\n", entries[i].name_id, name);
     }
   }
+
+#ifdef HB_HAS_GOBJECT
+  void _list_style ()
+  {
+    if (verbose)
+    {
+      separator ();
+      printf ("Style information:\n\n");
+      printf ("Tag:  Name				Value\n---------------------------------------------\n");
+    }
+
+    GEnumClass *enum_class = (GEnumClass *) g_type_class_ref ((GType) HB_GOBJECT_TYPE_STYLE_TAG);
+
+    unsigned count = enum_class->n_values;
+    const auto *entries = enum_class->values;
+    for (unsigned i = 0; i < count; i++)
+    {
+	float v = hb_style_get_value (font, (hb_style_tag_t) entries[i].value);
+	printf ("%c%c%c%c", HB_UNTAG(entries[i].value));
+	if (verbose)
+	  printf (": %-33s", entries[i].value_nick);
+	printf ("	%g\n", (double) v);
+    }
+  }
+
+  void _list_metrics ()
+  {
+    if (verbose)
+    {
+      separator ();
+      printf ("Metrics information:\n\n");
+      printf ("Tag:  Name				Value\n---------------------------------------------\n");
+    }
+
+    GEnumClass *enum_class = (GEnumClass *) g_type_class_ref ((GType) HB_GOBJECT_TYPE_OT_METRICS_TAG);
+
+    bool any_fallback = false;
+
+    unsigned count = enum_class->n_values;
+    const auto *entries = enum_class->values;
+    for (unsigned i = 0; i < count; i++)
+    {
+	bool fallback = false;
+	hb_position_t v;
+	if (!hb_ot_metrics_get_position (font,
+					(hb_ot_metrics_tag_t) entries[i].value,
+					&v))
+	{
+	  hb_ot_metrics_get_position_with_fallback (font,
+						    (hb_ot_metrics_tag_t) entries[i].value,
+						    &v);
+	  any_fallback = fallback = true;
+	}
+	printf ("%c%c%c%c", HB_UNTAG(entries[i].value));
+	if (verbose)
+	  printf (": %-33s", entries[i].value_nick);
+	printf ("	%d	", v);
+
+	if (fallback)
+	  printf ("*");
+	printf ("\n");
+    }
+
+    if (verbose && any_fallback)
+    {
+      printf ("\n[*] Fallback value\n");
+    }
+  }
+
+  void _list_baselines ()
+  {
+    hb_tag_t script_tags[HB_OT_MAX_TAGS_PER_SCRIPT];
+    hb_tag_t language_tags[HB_OT_MAX_TAGS_PER_LANGUAGE];
+    unsigned script_count = HB_OT_MAX_TAGS_PER_SCRIPT;
+    unsigned language_count = HB_OT_MAX_TAGS_PER_LANGUAGE;
+
+    hb_ot_tags_from_script_and_language (script, language,
+					 &script_count, script_tags,
+					 &language_count, language_tags);
+
+    hb_tag_t script_tag = script_count ? script_tags[script_count - 1] : HB_TAG_NONE;
+    hb_tag_t language_tag = language_count ? language_tags[0] : HB_TAG_NONE;
+
+    if (ot_script_str)
+      script_tag = hb_tag_from_string (ot_script_str, -1);
+    if (ot_language_str)
+      language_tag = hb_tag_from_string (ot_language_str, -1);
+
+
+    if (verbose)
+    {
+      separator ();
+      printf ("Baselines information:\n\n");
+      printf ("Tag:  Name				Value\n---------------------------------------------\n");
+    }
+
+    GEnumClass *enum_class = (GEnumClass *) g_type_class_ref ((GType) HB_GOBJECT_TYPE_OT_LAYOUT_BASELINE_TAG);
+
+    bool any_fallback = false;
+
+    unsigned count = enum_class->n_values;
+    const auto *entries = enum_class->values;
+    for (unsigned i = 0; i < count; i++)
+    {
+	bool fallback = false;
+	hb_position_t v;
+	if (!hb_ot_layout_get_baseline (font, (hb_ot_layout_baseline_tag_t) entries[i].value,
+					direction, script_tag, language_tag,
+					&v))
+	{
+	  hb_ot_layout_get_baseline_with_fallback (font, (hb_ot_layout_baseline_tag_t) entries[i].value,
+						   direction, script_tag, language_tag,
+						   &v);
+	  any_fallback = fallback = true;
+	}
+	printf ("%c%c%c%c", HB_UNTAG(entries[i].value));
+	if (verbose)
+	  printf (": %-33s", entries[i].value_nick);
+	printf ("	%d	", v);
+
+	if (fallback)
+	  printf ("*");
+	printf ("\n");
+    }
+
+    if (verbose && any_fallback)
+    {
+      printf ("\n[*] Fallback value\n");
+    }
+  }
+#endif
 
   void _list_tables ()
   {
