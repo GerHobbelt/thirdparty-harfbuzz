@@ -24,6 +24,8 @@
  * Google Author(s): Matthias Clasen
  */
 
+#include "config.h"
+
 #include "hb-cairo-utils.h"
 
 #include <cairo.h>
@@ -31,6 +33,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <assert.h>
 
@@ -42,16 +45,11 @@
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
 #endif
 
+#define PREALLOCATED_COLOR_STOPS 16
+
 typedef struct {
   float r, g, b, a;
 } color_t;
-
-typedef struct {
-  cairo_t *cr;
-  hb_font_t *font;
-  hb_font_t *unscaled_font;
-} paint_data_t;
-
 
 static inline cairo_extend_t
 cairo_extend (hb_paint_extend_t extend)
@@ -133,6 +131,7 @@ hb_cairo_paint_glyph_image (cairo_t *cr,
                             hb_tag_t format,
                             hb_glyph_extents_t *extents)
 {
+#ifdef CAIRO_HAS_PNG_FUNCTIONS
   if (format != HB_PAINT_IMAGE_FORMAT_PNG || !extents)
     return;
 
@@ -157,6 +156,7 @@ hb_cairo_paint_glyph_image (cairo_t *cr,
 
   cairo_pattern_destroy (pattern);
   cairo_surface_destroy (surface);
+#endif
 }
 
 static void
@@ -241,16 +241,19 @@ hb_cairo_paint_linear_gradient (cairo_t *cr,
                                 float x2, float y2)
 {
   hb_face_t *face = hb_font_get_face (font);
+  hb_color_stop_t stops_[PREALLOCATED_COLOR_STOPS];
+  hb_color_stop_t *stops = stops_;
   unsigned int len;
-  hb_color_stop_t *stops;
   float xx0, yy0, xx1, yy1;
   float xxx0, yyy0, xxx1, yyy1;
   float min, max;
   cairo_pattern_t *pattern;
 
   len = hb_color_line_get_color_stops (color_line, 0, NULL, NULL);
-  stops = (hb_color_stop_t *) alloca (len * sizeof (hb_color_stop_t));
+  if (len > PREALLOCATED_COLOR_STOPS)
+    stops = (hb_color_stop_t *) malloc (len * sizeof (hb_color_stop_t));
   hb_color_line_get_color_stops (color_line, 0, &len, stops);
+
   reduce_anchors (x0, y0, x1, y1, x2, y2, &xx0, &yy0, &xx1, &yy1);
   normalize_color_line (stops, len, &min, &max);
 
@@ -272,6 +275,9 @@ hb_cairo_paint_linear_gradient (cairo_t *cr,
   cairo_paint (cr);
 
   cairo_pattern_destroy (pattern);
+
+  if (stops != stops_)
+    free (stops);
 }
 
 void
@@ -282,16 +288,19 @@ hb_cairo_paint_radial_gradient (cairo_t *cr,
                                 float x1, float y1, float r1)
 {
   hb_face_t *face = hb_font_get_face (font);
+  hb_color_stop_t stops_[PREALLOCATED_COLOR_STOPS];
+  hb_color_stop_t *stops = stops_;
   unsigned int len;
-  hb_color_stop_t *stops;
   float min, max;
   float xx0, yy0, xx1, yy1;
   float rr0, rr1;
   cairo_pattern_t *pattern;
 
   len = hb_color_line_get_color_stops (color_line, 0, NULL, NULL);
-  stops = (hb_color_stop_t *) alloca (len * sizeof (hb_color_stop_t));
+  if (len > PREALLOCATED_COLOR_STOPS)
+    stops = (hb_color_stop_t *) malloc (len * sizeof (hb_color_stop_t));
   hb_color_line_get_color_stops (color_line, 0, &len, stops);
+
   normalize_color_line (stops, len, &min, &max);
 
   xx0 = x0 + min * (x1 - x0);
@@ -315,6 +324,9 @@ hb_cairo_paint_radial_gradient (cairo_t *cr,
   cairo_paint (cr);
 
   cairo_pattern_destroy (pattern);
+
+  if (stops != stops_)
+    free (stops);
 }
 
 typedef struct {
@@ -470,8 +482,10 @@ add_sweep_gradient_patches (hb_font_t *font,
                             cairo_pattern_t *pattern)
 {
   hb_face_t *face = hb_font_get_face (font);
-  float *angles;
-  color_t *colors;
+  float angles_[PREALLOCATED_COLOR_STOPS];
+  float *angles = angles_;
+  color_t colors_[PREALLOCATED_COLOR_STOPS];
+  color_t *colors = colors_;
   color_t color0, color1;
 
   if (start_angle == end_angle)
@@ -516,8 +530,11 @@ add_sweep_gradient_patches (hb_font_t *font,
         }
     }
 
-  angles = alloca (sizeof (float) * n_stops);
-  colors = alloca (sizeof (color_t) * n_stops);
+  if (n_stops > PREALLOCATED_COLOR_STOPS)
+  {
+    angles = (float *) malloc (sizeof (float) * n_stops);
+    colors = (color_t *) malloc (sizeof (color_t) * n_stops);
+  }
 
   for (unsigned i = 0; i < n_stops; i++)
     {
@@ -550,7 +567,7 @@ add_sweep_gradient_patches (hb_font_t *font,
                                        0.,       &color0,
                                        2 * M_PI, &color0,
                                        pattern);
-          return;
+          goto done;
         }
 
       add_sweep_gradient_patches1 (cx, cy, radius,
@@ -587,7 +604,7 @@ add_sweep_gradient_patches (hb_font_t *font,
                                        angles[n_stops - 1], &color0,
                                        2 * M_PI,            &color0,
                                        pattern);
-          return;
+          goto done;
         }
     }
   else
@@ -688,8 +705,14 @@ add_sweep_gradient_patches (hb_font_t *font,
                 }
             }
         }
-done: ;
     }
+
+done:
+
+  if (angles != angles_)
+    free (angles);
+  if (colors != colors_)
+    free (colors);
 }
 
 void
@@ -701,15 +724,18 @@ hb_cairo_paint_sweep_gradient (cairo_t *cr,
                                float end_angle)
 {
   unsigned int len;
-  hb_color_stop_t *stops;
+  hb_color_stop_t stops_[PREALLOCATED_COLOR_STOPS];
+  hb_color_stop_t *stops = stops_;
   cairo_extend_t extend;
   double x1, y1, x2, y2;
   float max_x, max_y, radius;
   cairo_pattern_t *pattern;
 
   len = hb_color_line_get_color_stops (color_line, 0, NULL, NULL);
-  stops = alloca (len * sizeof (hb_color_stop_t));
+  if (len > PREALLOCATED_COLOR_STOPS)
+    stops = (hb_color_stop_t *) malloc (len * sizeof (hb_color_stop_t));
   hb_color_line_get_color_stops (color_line, 0, &len, stops);
+
   qsort (stops, len, sizeof (hb_color_stop_t), cmp_color_stop);
 
   cairo_clip_extents (cr, &x1, &y1, &x2, &y2);
@@ -727,4 +753,7 @@ hb_cairo_paint_sweep_gradient (cairo_t *cr,
   cairo_paint (cr);
 
   cairo_pattern_destroy (pattern);
+
+  if (stops != stops_)
+    free (stops);
 }
