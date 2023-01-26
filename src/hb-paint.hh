@@ -69,15 +69,12 @@ struct hb_paint_funcs_t
   void push_transform (void *paint_data,
                        float xx, float yx,
                        float xy, float yy,
-                       float dx, float dy,
-                       hb_font_t *font)
+                       float dx, float dy)
   { func.push_transform (this, paint_data,
                          xx, yx, xy, yy, dx, dy,
-                         font,
                          !user_data ? nullptr : user_data->push_transform); }
-  void pop_transform (void *paint_data,
-                      hb_font_t *font)
-  { func.pop_transform (this, paint_data, font,
+  void pop_transform (void *paint_data)
+  { func.pop_transform (this, paint_data,
                         !user_data ? nullptr : user_data->pop_transform); }
   void push_clip_glyph (void *paint_data,
                         hb_codepoint_t glyph,
@@ -87,76 +84,62 @@ struct hb_paint_funcs_t
                           font,
                           !user_data ? nullptr : user_data->push_clip_glyph); }
   void push_clip_rectangle (void *paint_data,
-                            float xmin, float ymin, float xmax, float ymax,
-                            hb_font_t *font)
+                           float xmin, float ymin, float xmax, float ymax)
   { func.push_clip_rectangle (this, paint_data,
                               xmin, ymin, xmax, ymax,
-                              font,
                               !user_data ? nullptr : user_data->push_clip_rectangle); }
-  void pop_clip (void *paint_data,
-                 hb_font_t *font)
-  { func.pop_clip (this, paint_data, font,
+  void pop_clip (void *paint_data)
+  { func.pop_clip (this, paint_data,
                    !user_data ? nullptr : user_data->pop_clip); }
   void color (void *paint_data,
-              unsigned int color_index,
-              float alpha,
-              hb_font_t *font)
+              hb_bool_t is_foreground,
+              hb_color_t color)
   { func.color (this, paint_data,
-                color_index, alpha,
-                font,
+                is_foreground, color,
                 !user_data ? nullptr : user_data->color); }
   void image (void *paint_data,
               hb_blob_t *image,
+              unsigned width, unsigned height,
               hb_tag_t format,
-              hb_glyph_extents_t *extents,
-              hb_font_t *font)
+              float slant,
+              hb_glyph_extents_t *extents)
   { func.image (this, paint_data,
-                image, format, extents,
-                font,
+                image, width, height, format, slant, extents,
                 !user_data ? nullptr : user_data->image); }
   void linear_gradient (void *paint_data,
                         hb_color_line_t *color_line,
                         float x0, float y0,
                         float x1, float y1,
-                        float x2, float y2,
-                        hb_font_t *font)
+                        float x2, float y2)
   { func.linear_gradient (this, paint_data,
                           color_line, x0, y0, x1, y1, x2, y2,
-                          font,
                           !user_data ? nullptr : user_data->linear_gradient); }
   void radial_gradient (void *paint_data,
                         hb_color_line_t *color_line,
                         float x0, float y0, float r0,
-                        float x1, float y1, float r1,
-                        hb_font_t *font)
+                        float x1, float y1, float r1)
   { func.radial_gradient (this, paint_data,
                           color_line, x0, y0, r0, x1, y1, r1,
-                          font,
                           !user_data ? nullptr : user_data->radial_gradient); }
   void sweep_gradient (void *paint_data,
                        hb_color_line_t *color_line,
                        float x0, float y0,
                        float start_angle,
-                       float end_angle,
-                       hb_font_t *font)
+                       float end_angle)
   { func.sweep_gradient (this, paint_data,
                          color_line, x0, y0, start_angle, end_angle,
-                         font,
                          !user_data ? nullptr : user_data->sweep_gradient); }
-  void push_group (void *paint_data,
-                   hb_font_t *font)
-  { func.push_group (this, paint_data, font,
+  void push_group (void *paint_data)
+  { func.push_group (this, paint_data,
                      !user_data ? nullptr : user_data->push_group); }
   void pop_group (void *paint_data,
-                  hb_paint_composite_mode_t mode,
-                  hb_font_t *font)
+                  hb_paint_composite_mode_t mode)
   { func.pop_group (this, paint_data,
                     mode,
-                    font,
                     !user_data ? nullptr : user_data->pop_group); }
 
   void push_root_transform (void *paint_data,
-                            hb_font_t *font)
+                            const hb_font_t *font)
   {
     int xscale = font->x_scale, yscale = font->y_scale;
     float upem = font->face->get_upem ();
@@ -164,13 +147,11 @@ struct hb_paint_funcs_t
 
     func.push_transform (this, paint_data,
                          xscale/upem, 0, slant * yscale/upem, yscale/upem, 0, 0,
-                         font,
                          !user_data ? nullptr : user_data->push_transform);
   }
-  void pop_root_transform (void *paint_data,
-                           hb_font_t *font)
+  void pop_root_transform (void *paint_data)
   {
-    func.pop_transform (this, paint_data, font,
+    func.pop_transform (this, paint_data,
                         !user_data ? nullptr : user_data->pop_transform);
   }
 
@@ -182,17 +163,16 @@ struct hb_paint_funcs_t
     float slant = font->slant_xy;
 
     func.push_transform (this, paint_data,
-                         upem/xscale, 0, slant * upem/xscale, upem/yscale, 0, 0,
-                         font,
+                         upem/xscale, 0, -slant * upem/xscale, upem/yscale, 0, 0,
                          !user_data ? nullptr : user_data->push_transform);
   }
-  void pop_inverse_root_transform (void *paint_data,
-                                   hb_font_t *font)
+  void pop_inverse_root_transform (void *paint_data)
   {
-    func.pop_transform (this, paint_data, font,
+    func.pop_transform (this, paint_data,
                         !user_data ? nullptr : user_data->pop_transform);
   }
 };
 DECLARE_NULL_INSTANCE (hb_paint_funcs_t);
+
 
 #endif /* HB_PAINT_HH */

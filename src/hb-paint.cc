@@ -47,12 +47,10 @@ hb_paint_push_transform_nil (hb_paint_funcs_t *funcs, void *paint_data,
                              float xx, float yx,
                              float xy, float yy,
                              float dx, float dy,
-                             hb_font_t *font,
                              void *user_data) {}
 
 static void
 hb_paint_pop_transform_nil (hb_paint_funcs_t *funcs, void *paint_data,
-                            hb_font_t *font,
                             void *user_data) {}
 
 static void
@@ -64,27 +62,26 @@ hb_paint_push_clip_glyph_nil (hb_paint_funcs_t *funcs, void *paint_data,
 static void
 hb_paint_push_clip_rectangle_nil (hb_paint_funcs_t *funcs, void *paint_data,
                                   float xmin, float ymin, float xmax, float ymax,
-                                  hb_font_t *font,
                                   void *user_data) {}
 
 static void
 hb_paint_pop_clip_nil (hb_paint_funcs_t *funcs, void *paint_data,
-                       hb_font_t *font,
                        void *user_data) {}
 
 static void
 hb_paint_color_nil (hb_paint_funcs_t *funcs, void *paint_data,
-                    unsigned int color_index,
-                    float alpha,
-                    hb_font_t *font,
+                    hb_bool_t is_foreground,
+                    hb_color_t color,
                     void *user_data) {}
 
 static void
 hb_paint_image_nil (hb_paint_funcs_t *funcs, void *paint_data,
                     hb_blob_t *image,
+                    unsigned int width,
+                    unsigned int height,
                     hb_tag_t format,
+                    float slant_xy,
                     hb_glyph_extents_t *extents,
-                    hb_font_t *font,
                     void *user_data) {}
 
 static void
@@ -93,7 +90,6 @@ hb_paint_linear_gradient_nil (hb_paint_funcs_t *funcs, void *paint_data,
                               float x0, float y0,
                               float x1, float y1,
                               float x2, float y2,
-                              hb_font_t *font,
                               void *user_data) {}
 
 static void
@@ -101,7 +97,6 @@ hb_paint_radial_gradient_nil (hb_paint_funcs_t *funcs, void *paint_data,
                               hb_color_line_t *color_line,
                               float x0, float y0, float r0,
                               float x1, float y1, float r1,
-                              hb_font_t *font,
                               void *user_data) {}
 
 static void
@@ -110,18 +105,15 @@ hb_paint_sweep_gradient_nil (hb_paint_funcs_t *funcs, void *paint_data,
                              float x0, float y0,
                              float start_angle,
                              float end_angle,
-                             hb_font_t *font,
                              void *user_data) {}
 
 static void
 hb_paint_push_group_nil (hb_paint_funcs_t *funcs, void *paint_data,
-                         hb_font_t *font,
                          void *user_data) {}
 
 static void
 hb_paint_pop_group_nil (hb_paint_funcs_t *funcs, void *paint_data,
                         hb_paint_composite_mode_t mode,
-                        hb_font_t *font,
                         void *user_data) {}
 
 static bool
@@ -382,267 +374,6 @@ hb_bool_t
 hb_paint_funcs_is_immutable (hb_paint_funcs_t *funcs)
 {
   return hb_object_is_immutable (funcs);
-}
-
-/**
- * hb_paint_push_transform:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @xx: xx component of the transform matrix
- * @yx: yx component of the transform matrix
- * @xy: xy component of the transform matrix
- * @yy: yy component of the transform matrix
- * @dx: dx component of the transform matrix
- * @dy: dy component of the transform matrix
- * @font: the font
- *
- * Perform a "push-transform" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_push_transform (hb_paint_funcs_t *funcs, void *paint_data,
-                         float xx, float yx,
-                         float xy, float yy,
-                         float dx, float dy,
-                         hb_font_t *font)
-{
-  funcs->push_transform (paint_data, xx, yx, xy, yy, dx, dy, font);
-}
-
-/**
- * hb_paint_pop_transform:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @font: the font
- *
- * Perform a "pop-transform" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_pop_transform (hb_paint_funcs_t *funcs, void *paint_data,
-                        hb_font_t *font)
-{
-  funcs->pop_transform (paint_data, font);
-}
-
-/**
- * hb_paint_push_clip_glyph:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @glyph: the glyph ID
- * @font: the font
- *
- * Perform a "push-clip-glyph" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_push_clip_glyph (hb_paint_funcs_t *funcs, void *paint_data,
-                          hb_codepoint_t glyph,
-                          hb_font_t *font)
-{
-  funcs->push_clip_glyph (paint_data, glyph, font);
-}
-
-/**
- * hb_paint_push_clip_rectangle:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @xmin: min X for the rectangle
- * @ymin: min Y for the rectangle
- * @xmax: max X for the rectangle
- * @ymax: max Y for the rectangle
- * @font: the font
- *
- * Perform a "push-clip-rect" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_push_clip_rectangle (hb_paint_funcs_t *funcs, void *paint_data,
-                              float xmin, float ymin, float xmax, float ymax,
-                              hb_font_t *font)
-{
-  funcs->push_clip_rectangle (paint_data, xmin, ymin, xmax, ymax, font);
-}
-
-/**
- * hb_paint_pop_clip:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @font: the font
- *
- * Perform a "pop-clip" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_pop_clip (hb_paint_funcs_t *funcs, void *paint_data,
-                   hb_font_t *font)
-{
-  funcs->pop_clip (paint_data, font);
-}
-
-/**
- * hb_paint_color:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @color_index: Index of a color in the fonts selected color palette
- * @alpha: Alpha to apply in addition
- * @font: the font
- *
- * Perform a "color" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_color (hb_paint_funcs_t *funcs, void *paint_data,
-                unsigned int color_index,
-                float alpha,
-                hb_font_t *font)
-{
-  funcs->color (paint_data, color_index, alpha, font);
-}
-
-/**
- * hb_paint_image:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @image: image data
- * @format: tag describing the image data format
- * @extents: (nullable): the extents of the glyph
- * @font: the font
- *
- * Perform a "image" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_image (hb_paint_funcs_t *funcs, void *paint_data,
-                hb_blob_t *image,
-                hb_tag_t format,
-                hb_glyph_extents_t *extents,
-                hb_font_t *font)
-{
-  funcs->image (paint_data, image, format, extents, font);
-}
-
-/**
- * hb_paint_linear_gradient:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @color_line: Color information for the gradient
- * @x0: X coordinate of the first point
- * @y0: Y coordinate of the first point
- * @x1: X coordinate of the second point
- * @y1: Y coordinate of the second point
- * @x2: X coordinate of the third point
- * @y2: Y coordinate of the third point
- * @font: the font
- *
- * Perform a "linear-gradient" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_linear_gradient (hb_paint_funcs_t *funcs, void *paint_data,
-                          hb_color_line_t *color_line,
-                          float x0, float y0,
-                          float x1, float y1,
-                          float x2, float y2,
-                          hb_font_t *font)
-{
-  funcs->linear_gradient (paint_data, color_line, x0, y0, x1, y1, x2, y2, font);
-}
-
-/**
- * hb_paint_radial_gradient:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @color_line: Color information for the gradient
- * @x0: X coordinate of the first circle's center
- * @y0: Y coordinate of the first circle's center
- * @r0: radius of the first circle
- * @x1: X coordinate of the second circle's center
- * @y1: Y coordinate of the second circle's center
- * @r1: radius of the second circle
- * @font: the font
- *
- * Perform a "radial-gradient" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_radial_gradient (hb_paint_funcs_t *funcs, void *paint_data,
-                          hb_color_line_t *color_line,
-                          float x0, float y0, float r0,
-                          float x1, float y1, float r1,
-                          hb_font_t *font)
-{
-  funcs->radial_gradient (paint_data, color_line, x0, y0, r0, y1, x1, r1, font);
-}
-
-/**
- * hb_paint_sweep_gradient:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @color_line: Color information for the gradient
- * @x0: X coordinate of the circle's center
- * @y0: Y coordinate of the circle's center
- * @start_angle: the start angle
- * @end_angle: the end angle
- * @font: the font
- *
- * Perform a "sweep-gradient" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_sweep_gradient (hb_paint_funcs_t *funcs, void *paint_data,
-                         hb_color_line_t *color_line,
-                         float x0, float y0,
-                         float start_angle, float end_angle,
-                         hb_font_t *font)
-{
-  funcs->sweep_gradient (paint_data, color_line, x0, y0, start_angle, end_angle, font);
-}
-
-/**
- * hb_paint_push_group:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @font: the font
- *
- * Perform a "push-group" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_push_group (hb_paint_funcs_t *funcs, void *paint_data,
-                     hb_font_t *font)
-{
-  funcs->push_group (paint_data, font);
-}
-
-/**
- * hb_paint_pop_group:
- * @funcs: paint functions
- * @paint_data: associated data passed by the caller
- * @mode: the compositing mode to use
- * @font: the font
- *
- * Perform a "pop-group" paint operation.
- *
- * Since: REPLACEME
- */
-void
-hb_paint_pop_group (hb_paint_funcs_t *funcs, void *paint_data,
-                    hb_paint_composite_mode_t mode,
-                    hb_font_t *font)
-{
-  funcs->pop_group (paint_data, mode, font);
 }
 
 #endif

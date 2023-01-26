@@ -519,6 +519,8 @@ hb_font_paint_glyph_nil (hb_font_t *font HB_UNUSED,
                          hb_codepoint_t glyph HB_UNUSED,
                          hb_paint_funcs_t *paint_funcs HB_UNUSED,
                          void *paint_data HB_UNUSED,
+                         unsigned int palette HB_UNUSED,
+                         hb_color_t foreground HB_UNUSED,
                          void *user_data HB_UNUSED)
 {
 }
@@ -655,6 +657,8 @@ hb_font_paint_glyph_default (hb_font_t *font,
                              hb_codepoint_t glyph,
                              hb_paint_funcs_t *paint_funcs,
                              void *paint_data,
+                             unsigned int palette,
+                             hb_color_t foreground,
                              void *user_data)
 {
   paint_funcs->push_transform (paint_data,
@@ -663,13 +667,11 @@ hb_font_paint_glyph_default (hb_font_t *font,
 			    (float) font->x_scale / (float) font->parent->y_scale : 0.f,
     0.f,
     font->parent->y_scale ? (float) font->y_scale / (float) font->parent->y_scale : 0.f,
-    0.f,
-    0.f,
-    font);
+    0.f, 0.f);
 
-  font->parent->paint_glyph (glyph, paint_funcs, paint_data);
+  font->parent->paint_glyph (glyph, paint_funcs, paint_data, palette, foreground);
 
-  paint_funcs->pop_transform (paint_data, font);
+  paint_funcs->pop_transform (paint_data);
 }
 
 DEFINE_NULL_INSTANCE (hb_font_funcs_t) =
@@ -1427,6 +1429,8 @@ hb_font_draw_glyph (hb_font_t *font,
  * @glyph: The glyph ID
  * @pfuncs: #hb_paint_funcs_t to paint with
  * @paint_data: User data to pass to paint callbacks
+ * @palette: The palette index to use
+ * @foreground: The foreground color
  *
  * Paints the glyph.
  *
@@ -1442,9 +1446,11 @@ hb_font_draw_glyph (hb_font_t *font,
 void
 hb_font_paint_glyph (hb_font_t *font,
                      hb_codepoint_t glyph,
-                     hb_paint_funcs_t *pfuncs, void *paint_data)
+                     hb_paint_funcs_t *pfuncs, void *paint_data,
+                     unsigned int palette,
+                     hb_color_t foreground)
 {
-  font->paint_glyph (glyph, pfuncs, paint_data);
+  font->paint_glyph (glyph, pfuncs, paint_data, palette, foreground);
 }
 
 /* A bit higher-level, and with fallback */

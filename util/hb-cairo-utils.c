@@ -45,6 +45,11 @@
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
 #endif
 
+#ifndef FALSE
+#define TRUE 1
+#define FALSE 0
+#endif
+
 #define PREALLOCATED_COLOR_STOPS 16
 
 typedef struct {
@@ -65,39 +70,7 @@ cairo_extend (hb_paint_extend_t extend)
   return CAIRO_EXTEND_PAD;
 }
 
-void
-hb_face_get_color (hb_face_t *face,
-                   unsigned int palette_index,
-                   unsigned int color_index,
-                   float alpha,
-                   float *r, float *g, float *b, float *a)
-{
-  if (color_index == 0xffff)
-  {
-    /* foreground color */
-    *r = *g = *b = 0;
-    *a = alpha;
-  }
-  else
-  {
-    hb_color_t color;
-    unsigned int clen = 1;
-
-    if (hb_ot_color_palette_get_colors (face, palette_index, color_index, &clen, &color))
-      {
-        *r = hb_color_get_red (color) / 255.f;
-        *g = hb_color_get_green (color) / 255.f;
-        *b = hb_color_get_blue (color) / 255.f;
-        *a = (hb_color_get_alpha (color) / 255.f) * alpha;
-      }
-    else
-      {
-        *r = *g = *b = 0;
-        *a = alpha;
-      }
-  }
-}
-
+#ifdef CAIRO_HAS_PNG_FUNCTIONS
 typedef struct
 {
   hb_blob_t *blob;
@@ -123,30 +96,99 @@ read_blob (void *closure,
 
   return CAIRO_STATUS_SUCCESS;
 }
+#endif
+
+static const cairo_user_data_key_t *_hb_cairo_surface_blob_user_data_key = {0};
+
+static void
+_hb_cairo_destroy_blob (void *p)
+{
+  hb_blob_destroy ((hb_blob_t *) p);
+}
 
 void
 hb_cairo_paint_glyph_image (cairo_t *cr,
-                            hb_font_t *font,
                             hb_blob_t *blob,
+                            unsigned width,
+                            unsigned height,
                             hb_tag_t format,
+                            float slant,
                             hb_glyph_extents_t *extents)
 {
-#ifdef CAIRO_HAS_PNG_FUNCTIONS
-  if (format != HB_PAINT_IMAGE_FORMAT_PNG || !extents)
+  if (!extents) /* SVG currently. */
     return;
 
-  read_blob_data_t r;
-  r.blob = blob;
-  r.offset = 0;
-  cairo_surface_t *surface = cairo_image_surface_create_from_png_stream (read_blob, &r);
-  int width = cairo_image_surface_get_width (surface);
-  int height = cairo_image_surface_get_width (surface);
+  cairo_surface_t *surface = NULL;
+
+#ifdef CAIRO_HAS_PNG_FUNCTIONS
+  if (format == HB_PAINT_IMAGE_FORMAT_PNG)
+  {
+    read_blob_data_t r;
+    r.blob = blob;
+    r.offset = 0;
+    surface = cairo_image_surface_create_from_png_stream (read_blob, &r);
+
+    /* For PNG, width,height can be unreliable, as is the case for NotoColorEmoji :(.
+     * Just pull them out of the surface. */
+    width = cairo_image_surface_get_width (surface);
+    height = cairo_image_surface_get_width (surface);
+  }
+  else
+#endif
+  if (format == HB_PAINT_IMAGE_FORMAT_BGRA)
+  {
+    /* Byte-endian conversion. */
+    unsigned data_size = hb_blob_get_length (blob);
+    if (data_size < width * height * 4)
+      return;
+
+    unsigned char *data;
+    if (__BYTE_ORDER == __BIG_ENDIAN)
+    {
+      data = (unsigned char *) hb_blob_get_data_writable (blob, NULL);
+      if (!data)
+        return;
+
+      unsigned count = width * height * 4;
+      for (unsigned i = 0; i < count; i += 4)
+      {
+        unsigned char b;
+	b = data[i];
+	data[i] = data[i+3];
+	data[i+3] = b;
+	b = data[i+1];
+	data[i+1] = data[i+2];
+	data[i+2] = b;
+      }
+    }
+    else
+      data = (unsigned char *) hb_blob_get_data (blob, NULL);
+
+    surface = cairo_image_surface_create_for_data (data,
+						   CAIRO_FORMAT_ARGB32,
+						   width, height,
+						   width * 4);
+
+    cairo_surface_set_user_data (surface,
+				 _hb_cairo_surface_blob_user_data_key,
+				 hb_blob_reference (blob),
+				 _hb_cairo_destroy_blob);
+  }
+
+  if (!surface)
+    return;
 
   cairo_pattern_t *pattern = cairo_pattern_create_for_surface (surface);
   cairo_pattern_set_extend (pattern, CAIRO_EXTEND_PAD);
 
   cairo_matrix_t matrix = {(double) width, 0, 0, (double) height, 0, 0};
   cairo_pattern_set_matrix (pattern, &matrix);
+
+  /* Undo slant in the extents and apply it in the context. */
+  extents->width -= extents->height * slant;
+  extents->x_bearing -= extents->y_bearing * slant;
+  cairo_matrix_t cairo_matrix = {1., 0., slant, 1., 0., 0.};
+  cairo_transform (cr, &cairo_matrix);
 
   cairo_translate (cr, extents->x_bearing, extents->y_bearing);
   cairo_scale (cr, extents->width, extents->height);
@@ -156,7 +198,6 @@ hb_cairo_paint_glyph_image (cairo_t *cr,
 
   cairo_pattern_destroy (pattern);
   cairo_surface_destroy (surface);
-#endif
 }
 
 static void
@@ -234,13 +275,11 @@ normalize_color_line (hb_color_stop_t *stops,
 
 void
 hb_cairo_paint_linear_gradient (cairo_t *cr,
-                                hb_font_t *font,
                                 hb_color_line_t *color_line,
                                 float x0, float y0,
                                 float x1, float y1,
                                 float x2, float y2)
 {
-  hb_face_t *face = hb_font_get_face (font);
   hb_color_stop_t stops_[PREALLOCATED_COLOR_STOPS];
   hb_color_stop_t *stops = stops_;
   unsigned int len;
@@ -266,8 +305,11 @@ hb_cairo_paint_linear_gradient (cairo_t *cr,
   cairo_pattern_set_extend (pattern, cairo_extend (hb_color_line_get_extend (color_line)));
   for (unsigned int i = 0; i < len; i++)
     {
-      float r, g, b, a;
-      hb_face_get_color (face, 0, stops[i].color_index, stops[i].alpha, &r, &g, &b, &a);
+      double r, g, b, a;
+      r = hb_color_get_red (stops[i].color) / 255.;
+      g = hb_color_get_green (stops[i].color) / 255.;
+      b = hb_color_get_blue (stops[i].color) / 255.;
+      a = hb_color_get_alpha (stops[i].color) / 255.;
       cairo_pattern_add_color_stop_rgba (pattern, stops[i].offset, r, g, b, a);
     }
 
@@ -282,12 +324,10 @@ hb_cairo_paint_linear_gradient (cairo_t *cr,
 
 void
 hb_cairo_paint_radial_gradient (cairo_t *cr,
-                                hb_font_t *font,
                                 hb_color_line_t *color_line,
                                 float x0, float y0, float r0,
                                 float x1, float y1, float r1)
 {
-  hb_face_t *face = hb_font_get_face (font);
   hb_color_stop_t stops_[PREALLOCATED_COLOR_STOPS];
   hb_color_stop_t *stops = stops_;
   unsigned int len;
@@ -315,8 +355,11 @@ hb_cairo_paint_radial_gradient (cairo_t *cr,
 
   for (unsigned int i = 0; i < len; i++)
     {
-      float r, g, b, a;
-      hb_face_get_color (face, 0, stops[i].color_index, stops[i].alpha, &r, &g, &b, &a);
+      double r, g, b, a;
+      r = hb_color_get_red (stops[i].color) / 255.;
+      g = hb_color_get_green (stops[i].color) / 255.;
+      b = hb_color_get_blue (stops[i].color) / 255.;
+      a = hb_color_get_alpha (stops[i].color) / 255.;
       cairo_pattern_add_color_stop_rgba (pattern, stops[i].offset, r, g, b, a);
     }
 
@@ -471,8 +514,7 @@ add_sweep_gradient_patches1 (float cx, float cy, float radius,
 }
 
 static void
-add_sweep_gradient_patches (hb_font_t *font,
-                            hb_color_stop_t *stops,
+add_sweep_gradient_patches (hb_color_stop_t *stops,
                             unsigned int n_stops,
                             cairo_extend_t extend,
                             float cx, float cy,
@@ -481,7 +523,6 @@ add_sweep_gradient_patches (hb_font_t *font,
                             float end_angle,
                             cairo_pattern_t *pattern)
 {
-  hb_face_t *face = hb_font_get_face (font);
   float angles_[PREALLOCATED_COLOR_STOPS];
   float *angles = angles_;
   color_t colors_[PREALLOCATED_COLOR_STOPS];
@@ -495,7 +536,10 @@ add_sweep_gradient_patches (hb_font_t *font,
           color_t c;
           if (start_angle > 0)
             {
-              hb_face_get_color (face, 0, stops[0].color_index, stops[0].alpha, &c.r, &c.g, &c.b, &c.a);
+              c.r = hb_color_get_red (stops[0].color) / 255.;
+              c.g = hb_color_get_green (stops[0].color) / 255.;
+              c.b = hb_color_get_blue (stops[0].color) / 255.;
+              c.a = hb_color_get_alpha (stops[0].color) / 255.;
               add_sweep_gradient_patches1 (cx, cy, radius,
                                            0.,          &c,
                                            start_angle, &c,
@@ -503,7 +547,10 @@ add_sweep_gradient_patches (hb_font_t *font,
             }
           if (end_angle < 2 * M_PI)
             {
-              hb_face_get_color (face, 0, stops[n_stops-1].color_index, stops[n_stops-1].alpha, &c.r, &c.g, &c.b, &c.a);
+              c.r = hb_color_get_red (stops[n_stops - 1].color) / 255.;
+              c.g = hb_color_get_green (stops[n_stops - 1].color) / 255.;
+              c.b = hb_color_get_blue (stops[n_stops - 1].color) / 255.;
+              c.a = hb_color_get_alpha (stops[n_stops - 1].color) / 255.;
               add_sweep_gradient_patches1 (cx, cy, radius,
                                            end_angle, &c,
                                            2 * M_PI,  &c,
@@ -539,7 +586,10 @@ add_sweep_gradient_patches (hb_font_t *font,
   for (unsigned i = 0; i < n_stops; i++)
     {
       angles[i] = start_angle + stops[i].offset * (end_angle - start_angle);
-      hb_face_get_color (face, 0, stops[i].color_index, stops[i].alpha, &colors[i].r, &colors[i].g, &colors[i].b, &colors[i].a);
+      colors[i].r = hb_color_get_red (stops[i].color) / 255.;
+      colors[i].g = hb_color_get_green (stops[i].color) / 255.;
+      colors[i].b = hb_color_get_blue (stops[i].color) / 255.;
+      colors[i].a = hb_color_get_alpha (stops[i].color) / 255.;
     }
 
   if (extend == CAIRO_EXTEND_PAD)
@@ -717,7 +767,6 @@ done:
 
 void
 hb_cairo_paint_sweep_gradient (cairo_t *cr,
-                               hb_font_t *font,
                                hb_color_line_t *color_line,
                                float cx, float cy,
                                float start_angle,
@@ -746,7 +795,7 @@ hb_cairo_paint_sweep_gradient (cairo_t *cr,
   extend = cairo_extend (hb_color_line_get_extend (color_line));
   pattern = cairo_pattern_create_mesh ();
 
-  add_sweep_gradient_patches (font, stops, len, extend, cx, cy,
+  add_sweep_gradient_patches (stops, len, extend, cx, cy,
                               radius, start_angle, end_angle, pattern);
 
   cairo_set_source (cr, pattern);
