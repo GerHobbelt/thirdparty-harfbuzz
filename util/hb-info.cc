@@ -40,18 +40,21 @@ struct info_t
     {
       {"all",		'a', 0, G_OPTION_ARG_NONE,	&this->all,			"Show everything",		nullptr},
 
-      {"show-all",	0, 0, G_OPTION_ARG_NONE,	&this->show_all,		"Show all short information",	nullptr},
+      {"show-all",	0, 0, G_OPTION_ARG_NONE,	&this->show_all,		"Show all short information (default)",	nullptr},
       {"show-family",	0, 0, G_OPTION_ARG_NONE,	&this->show_family,		"Show family name",		nullptr},
       {"show-style",	0, 0, G_OPTION_ARG_NONE,	&this->show_style,		"Show style name",		nullptr},
       {"show-unique-name",0, 0, G_OPTION_ARG_NONE,	&this->show_unique_name,	"Show unique name",		nullptr},
       {"show-full-name",0, 0, G_OPTION_ARG_NONE,	&this->show_full_name,		"Show full name",		nullptr},
+      {"show-postscript-name",0, 0, G_OPTION_ARG_NONE,	&this->show_postscript_name,	"Show Postscript name",		nullptr},
+      {"show-version",	0, 0, G_OPTION_ARG_NONE,	&this->show_version,		"Show version",			nullptr},
       {"show-upem",	0, 0, G_OPTION_ARG_NONE,	&this->show_upem,		"Show Units-Per-EM",		nullptr},
       {"show-unicode-count",0, 0, G_OPTION_ARG_NONE,	&this->show_unicode_count,	"Show Unicode count",		nullptr},
       {"show-glyph-count",0, 0, G_OPTION_ARG_NONE,	&this->show_glyph_count,	"Show glyph count",		nullptr},
+      {"show-extents",	0, 0, G_OPTION_ARG_NONE,	&this->show_extents,		"Show extents",			nullptr},
 
       {"list-all",	0, 0, G_OPTION_ARG_NONE,	&this->list_all,		"List all long information",	nullptr},
       {"list-names",	0, 0, G_OPTION_ARG_NONE,	&this->list_names,		"List names",			nullptr},
-      {"list-tables",	0, 0, G_OPTION_ARG_NONE,	&this->list_tables,		"List tables",			nullptr},
+      {"list-tables",	'l', 0, G_OPTION_ARG_NONE,	&this->list_tables,		"List tables",			nullptr},
       {"list-unicodes",	0, 0, G_OPTION_ARG_NONE,	&this->list_unicodes,		"List characters",		nullptr},
       {"list-glyphs",	0, 0, G_OPTION_ARG_NONE,	&this->list_glyphs,		"List glyphs",			nullptr},
       {"list-scripts",	0, 0, G_OPTION_ARG_NONE,	&this->list_scripts,		"List layout scripts",		nullptr},
@@ -59,6 +62,9 @@ struct info_t
 #ifndef HB_NO_VAR
       {"list-variations",0, 0, G_OPTION_ARG_NONE,	&this->list_variations,		"List variations",		nullptr},
 #endif
+
+      {"dump-table",	0, 0, G_OPTION_ARG_STRING,	&this->dump_table,		"Dump font table",		"TABLE-TAG"},
+
       {nullptr}
     };
     parser->add_group (entries,
@@ -83,9 +89,12 @@ struct info_t
   hb_bool_t show_style = false;
   hb_bool_t show_unique_name = false;
   hb_bool_t show_full_name = false;
+  hb_bool_t show_postscript_name = false;
+  hb_bool_t show_version = false;
   hb_bool_t show_upem = false;
   hb_bool_t show_unicode_count = false;
   hb_bool_t show_glyph_count = false;
+  hb_bool_t show_extents = false;
 
   hb_bool_t list_all = false;
   hb_bool_t list_names = false;
@@ -97,6 +106,8 @@ struct info_t
 #ifndef HB_NO_VAR
   hb_bool_t list_variations = false;
 #endif
+
+  char *dump_table = nullptr;
 
   public:
 
@@ -120,9 +131,12 @@ struct info_t
       show_style =
       show_unique_name =
       show_full_name =
+      show_postscript_name =
+      show_version =
       show_upem =
       show_unicode_count =
       show_glyph_count =
+      show_extents =
       true;
       first_item = false;
     }
@@ -145,9 +159,12 @@ struct info_t
     if (show_style)	  _show_style ();
     if (show_unique_name) _show_unique_name ();
     if (show_full_name)	  _show_full_name ();
+    if (show_postscript_name)_show_postscript_name ();
+    if (show_version)	  _show_version ();
     if (show_upem)	  _show_upem ();
-    if (show_unicode_count) _show_unicode_count ();
+    if (show_unicode_count)_show_unicode_count ();
     if (show_glyph_count) _show_glyph_count ();
+    if (show_extents)	  _show_extents ();
 
     if (list_names)	  _list_names ();
     if (list_tables)	  _list_tables ();
@@ -158,6 +175,8 @@ struct info_t
 #ifndef HB_NO_VAR
     if (list_variations)  _list_variations ();
 #endif
+
+    if (dump_table)	  _dump_table ();
 
     hb_font_destroy (font);
     hb_face_destroy (face);
@@ -182,7 +201,7 @@ struct info_t
       printf ("%s: ", label);
     }
 
-    auto language = hb_language_get_default ();
+    auto language = hb_language_get_default (); // TODO
 
     char name[128];
     unsigned name_len = sizeof name;
@@ -193,9 +212,30 @@ struct info_t
     printf ("%s\n", name);
   }
   void _show_family ()		{ _show_name ("Family", 1); }
-  void _show_style ()		{ _show_name ("Style", 2); }
+  void _show_style ()
+  {
+    hb_ot_name_id_t name_id = 2;
+
+    unsigned named_instance = hb_font_get_var_named_instance (font);
+    if (named_instance != HB_FONT_NO_VAR_NAMED_INSTANCE)
+      name_id = hb_ot_var_named_instance_get_subfamily_name_id (face, named_instance);
+
+    _show_name ("Style", name_id);
+  }
   void _show_unique_name ()	{ _show_name ("Unique name", 3); }
   void _show_full_name ()	{ _show_name ("Full name", 4); }
+  void _show_postscript_name ()
+  {
+    hb_ot_name_id_t name_id = 6;
+
+    unsigned named_instance = hb_font_get_var_named_instance (font);
+    if (named_instance != HB_FONT_NO_VAR_NAMED_INSTANCE)
+      name_id = hb_ot_var_named_instance_get_postscript_name_id (face, named_instance);
+
+
+    _show_name ("Postscript name", name_id);
+  }
+  void _show_version ()		{ _show_name ("Version", 5); }
 
   void _show_upem ()
   {
@@ -232,6 +272,23 @@ struct info_t
     printf ("%u\n", hb_face_get_glyph_count (face));
   }
 
+  void _show_extents ()
+  {
+    hb_direction_t direction = HB_DIRECTION_LTR; // TODO
+
+    hb_font_extents_t extents;
+    hb_font_get_extents_for_direction (font, direction, &extents);
+
+    if (verbose) printf ("Ascender: ");
+    printf ("%d\n", extents.ascender);
+
+    if (verbose) printf ("Descender: ");
+    printf ("%d\n", extents.descender);
+
+    if (verbose) printf ("Line gap: ");
+    printf ("%d\n", extents.line_gap);
+  }
+
   void _list_names ()
   {
     if (verbose)
@@ -241,7 +298,7 @@ struct info_t
       printf ("Id	Text\n------------\n");
     }
 
-    auto language = hb_language_get_default ();
+    auto language = hb_language_get_default (); // TODO
 
     unsigned count;
     const auto *entries = hb_ot_name_list_names (face, &count);
@@ -434,7 +491,7 @@ struct info_t
     }
 
     hb_tag_t table_tags[] = {HB_OT_TAG_GSUB, HB_OT_TAG_GPOS, HB_TAG_NONE};
-    auto language = hb_language_get_default ();
+    auto language = hb_language_get_default (); // TODO
     hb_set_t *features = hb_set_create ();
 
     for (unsigned int i = 0; table_tags[i]; i++)
@@ -508,13 +565,13 @@ struct info_t
     axes = (hb_ot_var_axis_info_t *) calloc (count, sizeof (hb_ot_var_axis_info_t));
     hb_ot_var_get_axis_infos (face, 0, &count, axes);
 
-    auto language = hb_language_get_default ();
+    auto language = hb_language_get_default (); // TODO
     bool has_hidden = false;
 
     if (verbose && count)
     {
       printf ("Varitation axes:\n\n");
-      printf ("Tag 	Minimum	Default	Maximum	Name\n------------------------------------\n");
+      printf ("Tag	Minimum	Default	Maximum	Name\n------------------------------------\n");
     }
     for (unsigned i = 0; i < count; i++)
     {
@@ -549,6 +606,7 @@ struct info_t
       if (verbose)
       {
 	printf ("\nNamed instances:\n\n");
+      printf ("Index	Name				Position\n------------------------------------------------\n");
       }
 
       for (unsigned i = 0; i < count; i++)
@@ -566,7 +624,7 @@ struct info_t
 	coords = (float *) calloc (coords_count, sizeof (float));
 	hb_ot_var_named_instance_get_design_coords (face, i, &coords_count, coords);
 
-	printf ("%u. %-32s", i, name);
+	printf ("%u	%-32s", i, name);
 	for (unsigned j = 0; j < coords_count; j++)
 	  printf ("%g, ", (double) coords[j]);
 	printf ("\n");
@@ -576,6 +634,16 @@ struct info_t
     }
   }
 #endif
+
+  void
+  _dump_table ()
+  {
+    hb_blob_t *blob = hb_face_reference_table (face, hb_tag_from_string (dump_table, -1));
+    unsigned count = 0;
+    const char *data = hb_blob_get_data (blob, &count);
+    fwrite (data, 1, count, stdout);
+    hb_blob_destroy (blob);
+  }
 };
 
 
