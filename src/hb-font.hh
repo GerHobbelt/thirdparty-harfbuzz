@@ -58,6 +58,7 @@
   HB_FONT_FUNC_IMPLEMENT (glyph_name) \
   HB_FONT_FUNC_IMPLEMENT (glyph_from_name) \
   HB_FONT_FUNC_IMPLEMENT (glyph_shape) \
+  HB_FONT_FUNC_IMPLEMENT (glyph_paint) \
   /* ^--- Add new callbacks here */
 
 struct hb_font_funcs_t
@@ -177,6 +178,18 @@ struct hb_font_t
   {
     *x = parent_scale_x_position (*x);
     *y = parent_scale_y_position (*y);
+  }
+
+  void scale_glyph_extents (hb_glyph_extents_t *extents)
+  {
+    extents->x_bearing = em_scale_x (extents->x_bearing);
+    extents->y_bearing = em_scale_y (extents->y_bearing);
+    extents->width = em_scale_x (extents->width);
+    extents->height = em_scale_y (extents->height);
+
+    /* Apply slant. */
+    extents->x_bearing += roundf (extents->y_bearing * slant_xy);
+    extents->width += roundf (extents->height * slant_xy);
   }
 
 
@@ -389,6 +402,14 @@ struct hb_font_t
 			      !klass->user_data ? nullptr : klass->user_data->glyph_shape);
   }
 
+  void get_glyph_paint (hb_codepoint_t glyph,
+                        hb_paint_funcs_t *paint_funcs, void *paint_data)
+  {
+    klass->get.f.glyph_paint (this, user_data,
+                              glyph,
+                              paint_funcs, paint_data,
+                              !klass->user_data ? nullptr : klass->user_data->glyph_paint);
+  }
 
   /* A bit higher-level, and with fallback */
 
