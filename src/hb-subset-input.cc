@@ -395,7 +395,6 @@ hb_subset_input_get_user_data (const hb_subset_input_t *input,
   return hb_object_get_user_data (input, key);
 }
 
-#ifdef HB_EXPERIMENTAL_API
 #ifndef HB_NO_VAR
 /**
  * hb_subset_input_pin_axis_to_default: (skip)
@@ -406,7 +405,7 @@ hb_subset_input_get_user_data (const hb_subset_input_t *input,
  *
  * Return value: `true` if success, `false` otherwise
  *
- * Since: EXPERIMENTAL
+ * Since: REPLACEME
  **/
 HB_EXTERN hb_bool_t
 hb_subset_input_pin_axis_to_default (hb_subset_input_t  *input,
@@ -430,7 +429,7 @@ hb_subset_input_pin_axis_to_default (hb_subset_input_t  *input,
  *
  * Return value: `true` if success, `false` otherwise
  *
- * Since: EXPERIMENTAL
+ * Since: REPLACEME
  **/
 HB_EXTERN hb_bool_t
 hb_subset_input_pin_axis_location (hb_subset_input_t  *input,
@@ -446,7 +445,6 @@ hb_subset_input_pin_axis_location (hb_subset_input_t  *input,
   return input->axes_location->set (axis_tag, val);
 }
 #endif
-#endif
 
 /**
  * hb_subset_preprocess:
@@ -456,15 +454,15 @@ hb_subset_input_pin_axis_location (hb_subset_input_t  *input,
  * subsetter. Future subsetting operations can then use the precomputed data
  * to speed up the subsetting operation.
  *
- * See https://github.com/harfbuzz/harfbuzz/blob/main/docs/subset-preprocessing.md
+ * See [subset-preprocessing](https://github.com/harfbuzz/harfbuzz/blob/main/docs/subset-preprocessing.md)
  * for more information.
  *
  * Note: the preprocessed face may contain sub-blobs that reference the memory
- * backing the source hb_face_t*. Therefore in the case that this memory is not
+ * backing the source #hb_face_t. Therefore in the case that this memory is not
  * owned by the source face you will need to ensure that memory lives
- * as long as the returned hb_face_t*.
+ * as long as the returned #hb_face_t.
  *
- * Returns: a new hb_face_t*.
+ * Returns: a new #hb_face_t.
  *
  * Since: REPLACEME
  **/

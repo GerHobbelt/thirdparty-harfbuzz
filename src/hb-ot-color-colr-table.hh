@@ -39,11 +39,7 @@
 #define HB_OT_TAG_COLR HB_TAG('C','O','L','R')
 
 #ifndef HB_COLRV1_MAX_NESTING_LEVEL
-#define HB_COLRV1_MAX_NESTING_LEVEL	100
-#endif
-
-#ifndef COLRV1_ENABLE_SUBSETTING
-#define COLRV1_ENABLE_SUBSETTING 1
+#define HB_COLRV1_MAX_NESTING_LEVEL	16
 #endif
 
 namespace OT {
@@ -932,6 +928,24 @@ struct ClipBox
     }
   }
 
+  bool get_extents (hb_glyph_extents_t *extents) const
+  {
+    switch (u.format) {
+    case 1:
+      extents->x_bearing = u.format1.xMin;
+      extents->y_bearing = u.format1.yMax;
+      extents->width = u.format1.xMax - u.format1.xMin;
+      extents->height = u.format1.yMin - u.format1.yMax;
+      return true;
+    case 2:
+      // TODO
+      return false;
+    default:
+      // This shouldn't happen
+      return false;
+    }
+  }
+
   protected:
   union {
   HBUINT8		format;         /* Format identifier */
@@ -955,6 +969,11 @@ struct ClipRecord
   {
     TRACE_SANITIZE (this);
     return_trace (c->check_struct (this) && clipBox.sanitize (c, base));
+  }
+
+  bool get_extents (hb_glyph_extents_t *extents, const void *base) const
+  {
+    return (base+clipBox).get_extents (extents);
   }
 
   public:
@@ -1052,11 +1071,23 @@ struct ClipList
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
+    // TODO Make a formatted struct!
     return_trace (c->check_struct (this) && clips.sanitize (c, this));
   }
 
+  bool
+  get_extents (hb_codepoint_t gid, hb_glyph_extents_t *extents) const
+  {
+    for (const ClipRecord& record : clips.iter ())
+    {
+      if (record.startGlyphID <= gid && gid <= record.endGlyphID)
+        return record.get_extents (extents, this);
+    }
+    return false;
+  }
+
   HBUINT8			format;  // Set to 1.
-  Array32Of<ClipRecord>		clips;  // Clip records, sorted by startGlyphID
+  SortedArray32Of<ClipRecord>	clips;  // Clip records, sorted by startGlyphID
   public:
   DEFINE_SIZE_ARRAY_SIZED (5, clips);
 };
@@ -1359,7 +1390,7 @@ struct COLR
                   (this+baseGlyphsZ).sanitize (c, numBaseGlyphs) &&
                   (this+layersZ).sanitize (c, numLayers) &&
                   (version == 0 ||
-		   (COLRV1_ENABLE_SUBSETTING && version == 1 &&
+		   (version == 1 &&
 		    baseGlyphList.sanitize (c, this) &&
 		    layerList.sanitize (c, this) &&
 		    clipList.sanitize (c, this) &&
@@ -1514,6 +1545,21 @@ struct COLR
     colr_prime->varIdxMap.serialize_copy (c->serializer, varIdxMap, this);
     //TODO: subset varStore once it's implemented in fonttools
     return_trace (true);
+  }
+
+  bool
+  get_extents (hb_font_t *font, hb_codepoint_t glyph, hb_glyph_extents_t *extents) const
+  {
+    if ((this+clipList).get_extents (glyph, extents))
+      {
+        extents->x_bearing = font->em_scale_x (extents->x_bearing);
+        extents->y_bearing = font->em_scale_x (extents->y_bearing);
+        extents->width = font->em_scale_x (extents->width);
+        extents->height = font->em_scale_x (extents->height);
+        return true;
+      }
+
+    return false;
   }
 
   protected:
