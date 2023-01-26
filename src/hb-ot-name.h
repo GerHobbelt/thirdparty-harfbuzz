@@ -33,6 +33,13 @@
 
 HB_BEGIN_DECLS
 
+/**
+ * hb_ot_name_id_predefined_t:
+ *
+ * An enum type representing the pre-defined name IDs.
+ *
+ * Since: REPLACEME
+ **/
 
 /**
  * hb_ot_name_id_t:
@@ -74,7 +81,7 @@ HB_BEGIN_DECLS
  *
  * Since: 2.0.0
  **/
-enum
+typedef enum
 {
   HB_OT_NAME_ID_COPYRIGHT		= 0,
   HB_OT_NAME_ID_FONT_FAMILY		= 1,
@@ -104,7 +111,7 @@ enum
   HB_OT_NAME_ID_VARIATIONS_PS_PREFIX	= 25,
 
   HB_OT_NAME_ID_INVALID			= 0xFFFF
-};
+} hb_ot_name_id_predefined_t;
 
 typedef unsigned int hb_ot_name_id_t;
 

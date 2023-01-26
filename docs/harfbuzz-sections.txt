@@ -172,6 +172,7 @@ HB_HAS_DIRECTWRITE
 HB_HAS_FREETYPE
 HB_HAS_GDI
 HB_HAS_GLIB
+HB_HAS_GOBJECT
 HB_HAS_GRAPHITE
 HB_HAS_ICU
 HB_HAS_UNISCRIBE
@@ -598,6 +599,7 @@ hb_ot_name_get_utf16
 hb_ot_name_get_utf32
 hb_ot_name_get_utf8
 hb_ot_name_id_t
+hb_ot_name_id_predefined_t
 hb_ot_name_entry_t
 </SECTION>
 
