@@ -29,6 +29,9 @@
 
 #ifdef HB_HAS_FREETYPE
 #include <hb-ft.h>
+#if (FREETYPE_MAJOR*10000 + FREETYPE_MINOR*100 + FREETYPE_PATCH) >= 21101
+#define HAVE_FT_COLRv1
+#endif
 #endif
 
 /* Unit tests for hb-paint.h */
@@ -68,9 +71,9 @@ push_transform (hb_paint_funcs_t *funcs,
                 float dx, float dy,
                 void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
 
-  print (data, "start transform %f %f %f %f %f %f", xx, yx, xy, yy, dx, dy);
+  print (data, "start transform %.3g %.3g %.3g %.3g %.3g %.3g", xx, yx, xy, yy, dx, dy);
   data->level++;
 }
 
@@ -79,7 +82,7 @@ pop_transform (hb_paint_funcs_t *funcs,
                void *paint_data,
                void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
 
   data->level--;
   print (data, "end transform");
@@ -92,7 +95,7 @@ push_clip_glyph (hb_paint_funcs_t *funcs,
                  hb_font_t *font,
                  void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
 
   print (data, "start clip glyph %u", glyph);
   data->level++;
@@ -104,9 +107,9 @@ push_clip_rectangle (hb_paint_funcs_t *funcs,
                      float xmin, float ymin, float xmax, float ymax,
                      void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
 
-  print (data, "start clip rectangle %.3f %.3f %.3f %.3f", xmin, ymin, xmax, ymax);
+  print (data, "start clip rectangle %.3g %.3g %.3g %.3g", xmin, ymin, xmax, ymax);
   data->level++;
 }
 
@@ -115,7 +118,7 @@ pop_clip (hb_paint_funcs_t *funcs,
           void *paint_data,
           void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
 
   data->level--;
   print (data, "end clip");
@@ -128,7 +131,7 @@ paint_color (hb_paint_funcs_t *funcs,
              hb_color_t color,
              void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
 
   print (data, "solid %d %d %d %d",
          hb_color_get_red (color),
@@ -148,11 +151,11 @@ paint_image (hb_paint_funcs_t *funcs,
              hb_glyph_extents_t *extents,
              void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
   char buf[5] = { 0, };
 
   hb_tag_to_string (format, buf);
-  print (data, "image type %s size %u %u slant %f extents %d %d %d %d\n",
+  print (data, "image type %s size %u %u slant %.3g extents %d %d %d %d\n",
          buf, width, height, slant,
          extents->x_bearing, extents->y_bearing, extents->width, extents->height);
 
@@ -173,7 +176,7 @@ print_color_line (paint_data_t *data,
   print (data, "colors");
   data->level += 1;
   for (unsigned int i = 0; i < len; i++)
-    print (data, "%f %d %d %d %d",
+    print (data, "%.3g %d %d %d %d",
            stops[i].offset,
            hb_color_get_red (stops[i].color),
            hb_color_get_green (stops[i].color),
@@ -191,13 +194,13 @@ paint_linear_gradient (hb_paint_funcs_t *funcs,
                        float x2, float y2,
                        void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
 
   print (data, "linear gradient");
   data->level += 1;
-  print (data, "p0 %f %f", x0, y0);
-  print (data, "p1 %f %f", x1, y1);
-  print (data, "p2 %f %f", x2, y2);
+  print (data, "p0 %.3g %.3g", x0, y0);
+  print (data, "p1 %.3g %.3g", x1, y1);
+  print (data, "p2 %.3g %.3g", x2, y2);
 
   print_color_line (data, color_line);
   data->level -= 1;
@@ -211,12 +214,12 @@ paint_radial_gradient (hb_paint_funcs_t *funcs,
                        float x1, float y1, float r1,
                        void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
 
   print (data, "radial gradient");
   data->level += 1;
-  print (data, "p0 %f %f radius %f", x0, y0, r0);
-  print (data, "p1 %f %f radius %f", x1, y1, r1);
+  print (data, "p0 %.3g %.3g radius %.3g", x0, y0, r0);
+  print (data, "p1 %.3g %.3g radius %.3g", x1, y1, r1);
 
   print_color_line (data, color_line);
   data->level -= 1;
@@ -231,12 +234,12 @@ paint_sweep_gradient (hb_paint_funcs_t *funcs,
                       float end_angle,
                       void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
 
   print (data, "sweep gradient");
   data->level++;
-  print (data, "center %f %f", cx, cy);
-  print (data, "angles %f %f", start_angle, end_angle);
+  print (data, "center %.3g %.3g", cx, cy);
+  print (data, "angles %.3g %.3g", start_angle, end_angle);
 
   print_color_line (data, color_line);
   data->level -= 1;
@@ -247,7 +250,7 @@ push_group (hb_paint_funcs_t *funcs,
             void *paint_data,
             void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
   print (data, "push group");
   data->level++;
 }
@@ -258,14 +261,41 @@ pop_group (hb_paint_funcs_t *funcs,
            hb_paint_composite_mode_t mode,
            void *user_data)
 {
-  paint_data_t *data = user_data;
+  paint_data_t *data = paint_data;
   data->level--;
   print (data, "pop group mode %d", mode);
 }
 
+static hb_paint_funcs_t *
+get_test_paint_funcs (void)
+{
+  static hb_paint_funcs_t *funcs = NULL;
+
+  if (!funcs)
+  {
+    funcs = hb_paint_funcs_create ();
+
+    hb_paint_funcs_set_push_transform_func (funcs, push_transform, NULL, NULL);
+    hb_paint_funcs_set_pop_transform_func (funcs, pop_transform, NULL, NULL);
+    hb_paint_funcs_set_push_clip_glyph_func (funcs, push_clip_glyph, NULL, NULL);
+    hb_paint_funcs_set_push_clip_rectangle_func (funcs, push_clip_rectangle, NULL, NULL);
+    hb_paint_funcs_set_pop_clip_func (funcs, pop_clip, NULL, NULL);
+    hb_paint_funcs_set_push_group_func (funcs, push_group, NULL, NULL);
+    hb_paint_funcs_set_pop_group_func (funcs, pop_group, NULL, NULL);
+    hb_paint_funcs_set_color_func (funcs, paint_color, NULL, NULL);
+    hb_paint_funcs_set_image_func (funcs, paint_image, NULL, NULL);
+    hb_paint_funcs_set_linear_gradient_func (funcs, paint_linear_gradient, NULL, NULL);
+    hb_paint_funcs_set_radial_gradient_func (funcs, paint_radial_gradient, NULL, NULL);
+    hb_paint_funcs_set_sweep_gradient_func (funcs, paint_sweep_gradient, NULL, NULL);
+
+    hb_paint_funcs_make_immutable (funcs);
+  }
+
+  return funcs;
+}
+
 typedef struct {
   const char *font_file;
-  int scale;
   float slant;
   hb_codepoint_t glyph;
   unsigned int palette;
@@ -285,21 +315,21 @@ typedef struct {
  */
 static paint_test_t paint_tests[] = {
   /* COLRv1 */
-  { NOTO_HAND,   20, 0.,  10,   0, "hand-20-0-10" },
-  { NOTO_HAND,   20, 0.2, 10,   0, "hand-20-0.2-10" },
-  { TEST_GLYPHS, 20, 0,    6,   0, "test-20-0-6" },   // linear gradient
-  { TEST_GLYPHS, 20, 0,   10,   0, "test-20-0-10" },  // sweep gradient
-  { TEST_GLYPHS, 20, 0,   92,   0, "test-20-0-92" },  // radial gradient
-  { TEST_GLYPHS, 20, 0,  106,   0, "test-20-0-106" },
-  { TEST_GLYPHS, 20, 0,  116,   0, "test-20-0-116" }, // compositing
-  { TEST_GLYPHS, 20, 0,  123,   0, "test-20-0-123" },
-  { TEST_GLYPHS, 20, 0,  165,   0, "test-20-0-165" }, // linear gradient
-  { TEST_GLYPHS, 20, 0,  175,   0, "test-20-0-175" }, // layers
-  { BAD_COLRV1,  20, 0,  154,   0, "bad-20-0-154" },  // recursion
+  { NOTO_HAND,   0.,  10,   0, "hand-10" },
+  { NOTO_HAND,   0.2, 10,   0, "hand-10.2" },
+  { TEST_GLYPHS, 0,    6,   0, "test-6" },   // linear gradient
+  { TEST_GLYPHS, 0,   10,   0, "test-10" },  // sweep gradient
+  { TEST_GLYPHS, 0,   92,   0, "test-92" },  // radial gradient
+  { TEST_GLYPHS, 0,  106,   0, "test-106" },
+  { TEST_GLYPHS, 0,  116,   0, "test-116" }, // compositing
+  { TEST_GLYPHS, 0,  123,   0, "test-123" },
+  { TEST_GLYPHS, 0,  165,   0, "test-165" }, // linear gradient
+  { TEST_GLYPHS, 0,  175,   0, "test-175" }, // layers
+  { BAD_COLRV1,  0,  154,   0, "bad-154" },  // recursion
   /* COLRv0 */
-  { ROCHER_ABC, 120, 0.3,  1,   0, "rocher-120-0.3-1" },
-  { ROCHER_ABC, 120, 0.3,  2,   2, "rocher-120-0.3-2" },
-  { ROCHER_ABC, 120, 0,    3, 200, "rocher-120-0-3" },
+  { ROCHER_ABC, 0.3,  1,   0, "rocher-1" },
+  { ROCHER_ABC, 0.3,  2,   2, "rocher-2" },
+  { ROCHER_ABC, 0,    3, 200, "rocher-3" },
 };
 
 static void
@@ -319,27 +349,14 @@ test_hb_paint (gconstpointer d,
   face = hb_test_open_font_file (test->font_file);
   font = hb_font_create (face);
 
-#ifdef HB_HAS_FREETYPE
+  hb_font_set_synthetic_slant (font, test->slant);
+
+#ifdef HAVE_FT_COLRv1
   if (use_ft)
     hb_ft_font_set_funcs (font);
 #endif
 
-  hb_font_set_scale (font, test->scale, test->scale);
-  hb_font_set_synthetic_slant (font, test->slant);
-
-  funcs = hb_paint_funcs_create ();
-  hb_paint_funcs_set_push_transform_func (funcs, push_transform, &data, NULL);
-  hb_paint_funcs_set_pop_transform_func (funcs, pop_transform, &data, NULL);
-  hb_paint_funcs_set_push_clip_glyph_func (funcs, push_clip_glyph, &data, NULL);
-  hb_paint_funcs_set_push_clip_rectangle_func (funcs, push_clip_rectangle, &data, NULL);
-  hb_paint_funcs_set_pop_clip_func (funcs, pop_clip, &data, NULL);
-  hb_paint_funcs_set_push_group_func (funcs, push_group, &data, NULL);
-  hb_paint_funcs_set_pop_group_func (funcs, pop_group, &data, NULL);
-  hb_paint_funcs_set_color_func (funcs, paint_color, &data, NULL);
-  hb_paint_funcs_set_image_func (funcs, paint_image, &data, NULL);
-  hb_paint_funcs_set_linear_gradient_func (funcs, paint_linear_gradient, &data, NULL);
-  hb_paint_funcs_set_radial_gradient_func (funcs, paint_radial_gradient, &data, NULL);
-  hb_paint_funcs_set_sweep_gradient_func (funcs, paint_sweep_gradient, &data, NULL);
+  funcs = get_test_paint_funcs ();
 
   data.string = g_string_new ("");
   data.level = 0;
@@ -391,7 +408,7 @@ test_hb_paint (gconstpointer d,
 
   if (g_strv_length (lines) != g_strv_length (expected))
   {
-    g_test_message ("Unexpected number of lines in output (%d instead of %d)", g_strv_length (lines), g_strv_length (expected));
+    g_test_message ("Unexpected number of lines in output (%d instead of %d):\n%s", g_strv_length (lines), g_strv_length (expected), data.string->str);
     g_test_fail ();
   }
   else
@@ -420,9 +437,55 @@ test_hb_paint (gconstpointer d,
 
   g_string_free (data.string, TRUE);
 
-  hb_paint_funcs_destroy (funcs);
   hb_font_destroy (font);
   hb_face_destroy (face);
+}
+
+static void
+test_compare_ot_ft (gconstpointer d)
+{
+  hb_codepoint_t glyph = GPOINTER_TO_UINT (d);
+  hb_face_t *face;
+  hb_font_t *font;
+  hb_paint_funcs_t *funcs;
+  GString *ot_str;
+  paint_data_t data;
+
+#ifndef HAVE_FT_COLRv1
+  g_test_skip ("FreeType COLRv1 support not present");
+  return;
+#endif
+
+  face = hb_test_open_font_file (TEST_GLYPHS);
+  font = hb_font_create (face);
+
+  funcs = get_test_paint_funcs ();
+
+  data.string = g_string_new ("");
+  data.level = 0;
+
+  hb_font_paint_glyph (font, glyph, funcs, &data, 0, HB_COLOR (0, 0, 0, 255));
+
+  g_assert_true (data.level == 0);
+
+  ot_str = data.string;
+
+  hb_ft_font_set_funcs (font);
+
+  data.string = g_string_new ("");
+  data.level = 0;
+
+  hb_font_paint_glyph (font, glyph, funcs, &data, 0, HB_COLOR (0, 0, 0, 255));
+
+  g_assert_true (data.level == 0);
+
+  g_assert_cmpstr (ot_str->str, ==, data.string->str);
+
+  g_string_free (data.string, TRUE);
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+
+  g_string_free (ot_str, TRUE);
 }
 
 static void
@@ -434,10 +497,10 @@ test_hb_paint_ot (gconstpointer data)
 static void
 test_hb_paint_ft (gconstpointer data)
 {
-#ifdef HB_HAS_FREETYPE
+#ifdef HAVE_FT_COLRv1
   test_hb_paint (data, 1);
 #else
-  g_test_skip_printf ("freetype support not present");
+  g_test_skip ("FreeType COLRv1 support not present");
 #endif
 }
 
@@ -503,7 +566,7 @@ test_color_stops (hb_bool_t use_ft)
   face = hb_test_open_font_file (NOTO_HAND);
   font = hb_font_create (face);
 
-#ifdef HB_HAS_FREETYPE
+#ifdef HAVE_FT_COLRv1
   if (use_ft)
     hb_ft_font_set_funcs (font);
 #endif
@@ -529,7 +592,11 @@ test_color_stops_ot (void)
 static void
 test_color_stops_ft (void)
 {
+#ifdef HAVE_FT_COLRv1
   test_color_stops (1);
+#else
+  g_test_skip ("FreeType COLRv1 support not present");
+#endif
 }
 
 int
@@ -543,6 +610,16 @@ main (int argc, char **argv)
     hb_test_add_data_flavor (&paint_tests[i], paint_tests[i].output, test_hb_paint_ot);
     hb_test_add_data_flavor (&paint_tests[i], paint_tests[i].output, test_hb_paint_ft);
   }
+
+  hb_face_t *face = hb_test_open_font_file (TEST_GLYPHS);
+  for (unsigned int i = 1; i < hb_face_get_glyph_count (face); i++)
+  {
+    char buf[20];
+    snprintf (buf, 20, "test-%u", i);
+    hb_test_add_data_flavor (GUINT_TO_POINTER (i), buf, test_compare_ot_ft);
+  }
+  hb_face_destroy (face);
+
   hb_test_add (test_color_stops_ot);
   hb_test_add (test_color_stops_ft);
 
