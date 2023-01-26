@@ -30,6 +30,7 @@
 
 #include "hb-open-type.hh"
 #include "hb-ot-layout-common.hh"
+#include "hb-paint.hh"
 
 /*
  * sbix -- Standard Bitmap Graphics
@@ -229,6 +230,28 @@ struct sbix
 						  HB_TAG ('p','n','g',' '),
 						  x_offset, y_offset,
 						  num_glyphs, available_ppem);
+    }
+
+    bool paint_glyph (hb_font_t *font, hb_codepoint_t glyph, hb_paint_funcs_t *funcs, void *data) const
+    {
+      if (!has_data ())
+        return false;
+
+      int x_offset = 0, y_offset = 0;
+      unsigned int strike_ppem = 0;
+      hb_blob_t *blob = reference_png (font, glyph, &x_offset, &y_offset, &strike_ppem);
+      hb_glyph_extents_t extents;
+
+      if (blob == hb_blob_get_empty ())
+        return false;
+
+      if (!get_extents (font, glyph, &extents))
+        return false;
+
+      funcs->image (data, blob, "image/png", &extents);
+
+      hb_blob_destroy (blob);
+      return true;
     }
 
     private:

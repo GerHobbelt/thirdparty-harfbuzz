@@ -44,22 +44,24 @@
 #define HB_COLRV1_MAX_NESTING_LEVEL	128
 #endif
 
+
 struct hb_color_line_t {
   const void *base;
-  OT::HBUINT8 format;
+  bool is_variable;
 };
 
 namespace OT {
 
 struct COLR;
 
-struct hb_paint_context_t;
-
 struct Paint;
 
-static void paint_glyph_dispatch (const Paint *paint, hb_paint_context_t *c);
-
-struct hb_paint_context_t {
+struct hb_paint_context_t :
+       hb_dispatch_context_t<hb_paint_context_t>
+{
+  template <typename T>
+  return_t dispatch (const T &obj) { obj.paint_glyph (this); return hb_empty_t (); }
+  static return_t default_return_value () { return hb_empty_t (); }
 
   const COLR* get_colr_table () const
   { return reinterpret_cast<const COLR *> (base); }
@@ -69,6 +71,7 @@ public:
   hb_paint_funcs_t *funcs;
   void *data;
   VarStoreInstancer &instancer;
+  int depth_left = HB_COLRV1_MAX_NESTING_LEVEL;
 
   hb_paint_context_t (const void *base_,
 		      hb_paint_funcs_t *funcs_,
@@ -80,6 +83,7 @@ public:
     instancer (instancer_)
   {}
 
+  inline void recurse (const Paint &paint);
 };
 
 struct hb_colrv1_closure_context_t :
@@ -197,6 +201,8 @@ struct BaseGlyphRecord
 template <typename T>
 struct Variable
 {
+  static constexpr bool is_variable = true;
+
   Variable<T>* copy (hb_serialize_context_t *c) const
   {
     TRACE_SERIALIZE (this);
@@ -245,6 +251,8 @@ struct Variable
 template <typename T>
 struct NoVariable
 {
+  static constexpr bool is_variable = false;
+
   static constexpr uint32_t varIdxBase = VarIdx::NO_VARIATION;
 
   NoVariable<T>* copy (hb_serialize_context_t *c) const
@@ -458,9 +466,12 @@ struct Affine2x3
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
     c->funcs->push_transform (c->data,
-                              xx.to_float (), yx.to_float (),
-                              xy.to_float (), yy.to_float (),
-                              dx.to_float (), dy.to_float ());
+			      xx.to_float (c->instancer (varIdxBase, 0)),
+			      yx.to_float (c->instancer (varIdxBase, 1)),
+                              xy.to_float (c->instancer (varIdxBase, 2)),
+			      yy.to_float (c->instancer (varIdxBase, 3)),
+                              dx.to_float (c->instancer (varIdxBase, 4)),
+			      dy.to_float (c->instancer (varIdxBase, 5)));
   }
 
   F16DOT16 xx;
@@ -494,7 +505,7 @@ struct PaintColrLayers
     return_trace (c->check_struct (this));
   }
 
-  void paint_glyph (hb_paint_context_t *c) const;
+  HB_INTERNAL void paint_glyph (hb_paint_context_t *c) const;
 
   HBUINT8	format; /* format = 1 */
   HBUINT8	numLayers;
@@ -525,7 +536,9 @@ struct PaintSolid
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    c->funcs->solid (c->data, paletteIndex, alpha.to_float ());
+    c->funcs->color (c->data,
+		     paletteIndex,
+		     alpha.to_float (c->instancer (varIdxBase, 0)));
   }
 
   HBUINT8	format; /* format = 2(noVar) or 3(Var)*/
@@ -558,24 +571,15 @@ struct PaintLinearGradient
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    hb_color_line_t cl = { this, format };
+    hb_color_line_t cl = { &(this+colorLine), Var<ColorLine<Var>>::is_variable };
 
     c->funcs->linear_gradient (c->data, &cl,
-                               (float)x0, (float)y0,
-                               (float)x1, (float)y1,
-                               (float)x2, (float)y2);
-  }
-
-  unsigned int get_color_stops (unsigned int start,
-                                unsigned int *count,
-                                hb_color_stop_t *stops) const
-  {
-    return (this+colorLine).get_color_stops (start, count, stops);
-  }
-
-  hb_paint_extend_t get_extend () const
-  {
-    return (this+colorLine).get_extend ();
+			       x0 + c->instancer (varIdxBase, 0),
+			       y0 + c->instancer (varIdxBase, 1),
+			       x1 + c->instancer (varIdxBase, 2),
+			       y1 + c->instancer (varIdxBase, 3),
+			       x2 + c->instancer (varIdxBase, 4),
+			       y2 + c->instancer (varIdxBase, 5));
   }
 
   HBUINT8			format; /* format = 4(noVar) or 5 (Var) */
@@ -614,23 +618,15 @@ struct PaintRadialGradient
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    hb_color_line_t cl = { this, format };
+    hb_color_line_t cl = { &(this+colorLine), Var<ColorLine<Var>>::is_variable };
 
     c->funcs->radial_gradient (c->data, &cl,
-                               (float)x0, (float)y0, (float)radius0,
-                               (float)x1, (float)y1, (float)radius1);
-  }
-
-  unsigned int get_color_stops (unsigned int start,
-                                unsigned int *count,
-                                hb_color_stop_t *stops) const
-  {
-    return (this+colorLine).get_color_stops (start, count, stops);
-  }
-
-  hb_paint_extend_t get_extend () const
-  {
-    return (this+colorLine).get_extend ();
+			       x0 + c->instancer (varIdxBase, 0),
+			       y0 + c->instancer (varIdxBase, 1),
+			       radius0 + c->instancer (varIdxBase, 2),
+			       x1 + c->instancer (varIdxBase, 3),
+			       y1 + c->instancer (varIdxBase, 4),
+			       radius1 + c->instancer (varIdxBase, 5));
   }
 
   HBUINT8			format; /* format = 6(noVar) or 7 (Var) */
@@ -669,24 +665,13 @@ struct PaintSweepGradient
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    hb_color_line_t cl = { this, format };
+    hb_color_line_t cl = { &(this+colorLine), Var<ColorLine<Var>>::is_variable };
 
     c->funcs->sweep_gradient (c->data, &cl,
-                              (float)centerX, (float)centerY,
-                              (startAngle.to_float () + 1) * (float)M_PI,
-                              (endAngle.to_float () + 1) * (float)M_PI);
-  }
-
-  unsigned int get_color_stops (unsigned int start,
-                                unsigned int *count,
-                                hb_color_stop_t *stops) const
-  {
-    return (this+colorLine).get_color_stops (start, count, stops);
-  }
-
-  hb_paint_extend_t get_extend () const
-  {
-    return (this+colorLine).get_extend ();
+			      centerX + c->instancer (varIdxBase, 0),
+			      centerY + c->instancer (varIdxBase, 1),
+                              (startAngle.to_float (c->instancer (varIdxBase, 2)) + 1) * (float) M_PI,
+                              (endAngle.to_float   (c->instancer (varIdxBase, 3)) + 1) * (float) M_PI);
   }
 
   HBUINT8			format; /* format = 8(noVar) or 9 (Var) */
@@ -727,7 +712,7 @@ struct PaintGlyph
   void paint_glyph (hb_paint_context_t *c) const
   {
     c->funcs->push_clip_glyph (c->data, gid);
-    paint_glyph_dispatch (&(this+paint), c);
+    c->recurse (this+paint);
     c->funcs->pop_clip (c->data);
   }
 
@@ -758,7 +743,7 @@ struct PaintColrGlyph
     return_trace (c->check_struct (this));
   }
 
-  void paint_glyph (hb_paint_context_t *c) const;
+  HB_INTERNAL void paint_glyph (hb_paint_context_t *c) const;
 
   HBUINT8	format; /* format = 11 */
   HBUINT16	gid;
@@ -791,7 +776,7 @@ struct PaintTransform
   void paint_glyph (hb_paint_context_t *c) const
   {
     (this+transform).paint_glyph (c);
-    paint_glyph_dispatch (&(this+src), c);
+    c->recurse (this+src);
     c->funcs->pop_transform (c->data);
   }
 
@@ -823,8 +808,11 @@ struct PaintTranslate
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    c->funcs->push_transform (c->data, 1., 0., 0., 1., (float)dx, (float)dy);
-    paint_glyph_dispatch (&(this+src), c);
+    c->funcs->push_transform (c->data,
+			      1., 0., 0., 1.,
+			      dx + c->instancer (varIdxBase, 0),
+			      dy + c->instancer (varIdxBase, 0));
+    c->recurse (this+src);
     c->funcs->pop_transform (c->data);
   }
 
@@ -857,8 +845,12 @@ struct PaintScale
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    c->funcs->push_transform (c->data, scaleX.to_float (), 0., 0., scaleY.to_float (), 0., 0.);
-    paint_glyph_dispatch (&(this+src), c);
+    c->funcs->push_transform (c->data,
+			      scaleX.to_float (c->instancer (varIdxBase, 0)),
+			      0., 0.,
+			      scaleY.to_float (c->instancer (varIdxBase, 1)),
+			      0., 0.);
+    c->recurse (this+src);
     c->funcs->pop_transform (c->data);
   }
 
@@ -891,10 +883,16 @@ struct PaintScaleAroundCenter
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    c->funcs->push_transform (c->data, 0., 0., 0., 0., (float)centerX, (float)centerY);
-    c->funcs->push_transform (c->data, scaleX.to_float (), 0., 0., scaleY.to_float (), 0., 0.);
-    c->funcs->push_transform (c->data, 0., 0., 0., 0., - (float)centerX, - (float)centerY);
-    paint_glyph_dispatch (&(this+src), c);
+    float tCenterX = centerX + c->instancer (varIdxBase, 2);
+    float tCenterY = centerY + c->instancer (varIdxBase, 3);
+    c->funcs->push_transform (c->data, 0., 0., 0., 0., +tCenterX, +tCenterY);
+    c->funcs->push_transform (c->data,
+			      scaleX.to_float (c->instancer (varIdxBase, 0)),
+			      0., 0.,
+			      scaleY.to_float (c->instancer (varIdxBase, 1)),
+			      0., 0.);
+    c->funcs->push_transform (c->data, 0., 0., 0., 0., -tCenterX, -tCenterY);
+    c->recurse (this+src);
     c->funcs->pop_transform (c->data);
     c->funcs->pop_transform (c->data);
     c->funcs->pop_transform (c->data);
@@ -931,8 +929,9 @@ struct PaintScaleUniform
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    c->funcs->push_transform (c->data, scale.to_float (), 0., 0., scale.to_float (), 0., 0.);
-    paint_glyph_dispatch (&(this+src), c);
+    float s = scale + c->instancer (varIdxBase, 0);
+    c->funcs->push_transform (c->data, s, 0., 0., s, 0., 0.);
+    c->recurse (this+src);
     c->funcs->pop_transform (c->data);
   }
 
@@ -964,10 +963,13 @@ struct PaintScaleUniformAroundCenter
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    c->funcs->push_transform (c->data, 0., 0., 0., 0., (float)centerX, (float)centerY);
-    c->funcs->push_transform (c->data, scale.to_float (), 0., 0., scale.to_float (), 0., 0.);
-    c->funcs->push_transform (c->data, 0., 0., 0., 0., - (float)centerX, - (float)centerY);
-    paint_glyph_dispatch (&(this+src), c);
+    float s = scale + c->instancer (varIdxBase, 0);
+    float tCenterX = centerX + c->instancer (varIdxBase, 1);
+    float tCenterY = centerY + c->instancer (varIdxBase, 2);
+    c->funcs->push_transform (c->data, 0., 0., 0., 0., +tCenterX, +tCenterY);
+    c->funcs->push_transform (c->data, s, 0., 0., s, 0., 0.);
+    c->funcs->push_transform (c->data, 0., 0., 0., 0., -tCenterX, -tCenterY);
+    c->recurse (this+src);
     c->funcs->pop_transform (c->data);
     c->funcs->pop_transform (c->data);
     c->funcs->pop_transform (c->data);
@@ -1003,10 +1005,11 @@ struct PaintRotate
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    float cc = cosf (angle.to_float() * (float)M_PI);
-    float ss = sinf (angle.to_float() * (float)M_PI);
+    float a = angle.to_float (c->instancer (varIdxBase, 0));
+    float cc = cosf (a * (float) M_PI);
+    float ss = sinf (a * (float) M_PI);
     c->funcs->push_transform (c->data, cc, ss, -ss, cc, 0., 0.);
-    paint_glyph_dispatch (&(this+src), c);
+    c->recurse (this+src);
     c->funcs->pop_transform (c->data);
   }
 
@@ -1038,12 +1041,15 @@ struct PaintRotateAroundCenter
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    float cc = cosf (angle.to_float() * (float)M_PI);
-    float ss = sinf (angle.to_float() * (float)M_PI);
-    c->funcs->push_transform (c->data, 0., 0., 0., 0., (float)centerX, (float)centerY);
+    float a = angle.to_float (c->instancer (varIdxBase, 0));
+    float cc = cosf (a * (float) M_PI);
+    float ss = sinf (a * (float) M_PI);
+    float tCenterX = centerX + c->instancer (varIdxBase, 1);
+    float tCenterY = centerY + c->instancer (varIdxBase, 2);
+    c->funcs->push_transform (c->data, 0., 0., 0., 0., +tCenterX, +tCenterY);
     c->funcs->push_transform (c->data, cc, ss, -ss, cc, 0., 0.);
-    c->funcs->push_transform (c->data, 0., 0., 0., 0., - (float)centerX, - (float)centerY);
-    paint_glyph_dispatch (&(this+src), c);
+    c->funcs->push_transform (c->data, 0., 0., 0., 0., -tCenterX, -tCenterY);
+    c->recurse (this+src);
     c->funcs->pop_transform (c->data);
     c->funcs->pop_transform (c->data);
     c->funcs->pop_transform (c->data);
@@ -1079,10 +1085,10 @@ struct PaintSkew
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    float x = tanf (xSkewAngle.to_float() * (float)M_PI);
-    float y = - tanf (ySkewAngle.to_float() * (float)M_PI);
+    float x = +tanf (xSkewAngle.to_float(c->instancer (varIdxBase, 0)) * (float) M_PI);
+    float y = -tanf (ySkewAngle.to_float(c->instancer (varIdxBase, 1)) * (float) M_PI);
     c->funcs->push_transform (c->data, 1., y, x, 1., 0., 0.);
-    paint_glyph_dispatch (&(this+src), c);
+    c->recurse (this+src);
     c->funcs->pop_transform (c->data);
   }
 
@@ -1115,12 +1121,14 @@ struct PaintSkewAroundCenter
 
   void paint_glyph (hb_paint_context_t *c, uint32_t varIdxBase) const
   {
-    float x = tanf (xSkewAngle.to_float() * (float)M_PI);
-    float y = - tanf (ySkewAngle.to_float() * (float)M_PI);
-    c->funcs->push_transform (c->data, 0., 0., 0., 0., (float)centerX, (float)centerY);
+    float x = +tanf (xSkewAngle.to_float(c->instancer (varIdxBase, 0)) * (float) M_PI);
+    float y = -tanf (ySkewAngle.to_float(c->instancer (varIdxBase, 1)) * (float) M_PI);
+    float tCenterX = centerX + c->instancer (varIdxBase, 2);
+    float tCenterY = centerY + c->instancer (varIdxBase, 3);
+    c->funcs->push_transform (c->data, 0., 0., 0., 0., +tCenterX, +tCenterY);
     c->funcs->push_transform (c->data, 1., y, x, 1., 0., 0.);
-    c->funcs->push_transform (c->data, 0., 0., 0., 0., - (float)centerX, - (float)centerY);
-    paint_glyph_dispatch (&(this+src), c);
+    c->funcs->push_transform (c->data, 0., 0., 0., 0., -tCenterX, -tCenterY);
+    c->recurse (this+src);
     c->funcs->pop_transform (c->data);
     c->funcs->pop_transform (c->data);
     c->funcs->pop_transform (c->data);
@@ -1161,9 +1169,9 @@ struct PaintComposite
   void paint_glyph (hb_paint_context_t *c) const
   {
     c->funcs->push_group (c->data);
-    paint_glyph_dispatch (&(this+backdrop), c);
+    c->recurse (this+backdrop);
     c->funcs->push_group (c->data);
-    paint_glyph_dispatch (&(this+src), c);
+    c->recurse (this+src);
     c->funcs->pop_group (c->data, (hb_paint_composite_mode_t) (int) mode);
     c->funcs->pop_group (c->data, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
   }
@@ -1476,45 +1484,6 @@ struct Paint
     case 31: return_trace (c->dispatch (u.paintformat31, std::forward<Ts> (ds)...));
     case 32: return_trace (c->dispatch (u.paintformat32, std::forward<Ts> (ds)...));
     default:return_trace (c->default_return_value ());
-    }
-  }
-
-  void paint_glyph (hb_paint_context_t *c) const
-  {
-    switch (u.format) {
-    case  1: u.paintformat1.paint_glyph (c); break;
-    case  2: u.paintformat2.paint_glyph (c); break;
-    case  3: u.paintformat3.paint_glyph (c); break;
-    case  4: u.paintformat4.paint_glyph (c); break;
-    case  5: u.paintformat5.paint_glyph (c); break;
-    case  6: u.paintformat6.paint_glyph (c); break;
-    case  7: u.paintformat7.paint_glyph (c); break;
-    case  8: u.paintformat8.paint_glyph (c); break;
-    case  9: u.paintformat9.paint_glyph (c); break;
-    case 10: u.paintformat10.paint_glyph (c); break;
-    case 11: u.paintformat11.paint_glyph (c); break;
-    case 12: u.paintformat12.paint_glyph (c); break;
-    case 13: u.paintformat13.paint_glyph (c); break;
-    case 14: u.paintformat14.paint_glyph (c); break;
-    case 15: u.paintformat15.paint_glyph (c); break;
-    case 16: u.paintformat16.paint_glyph (c); break;
-    case 17: u.paintformat17.paint_glyph (c); break;
-    case 18: u.paintformat18.paint_glyph (c); break;
-    case 19: u.paintformat19.paint_glyph (c); break;
-    case 20: u.paintformat20.paint_glyph (c); break;
-    case 21: u.paintformat21.paint_glyph (c); break;
-    case 22: u.paintformat22.paint_glyph (c); break;
-    case 23: u.paintformat23.paint_glyph (c); break;
-    case 24: u.paintformat24.paint_glyph (c); break;
-    case 25: u.paintformat25.paint_glyph (c); break;
-    case 26: u.paintformat26.paint_glyph (c); break;
-    case 27: u.paintformat27.paint_glyph (c); break;
-    case 28: u.paintformat28.paint_glyph (c); break;
-    case 29: u.paintformat29.paint_glyph (c); break;
-    case 30: u.paintformat30.paint_glyph (c); break;
-    case 31: u.paintformat31.paint_glyph (c); break;
-    case 32: u.paintformat32.paint_glyph (c); break;
-    default: assert (0);
     }
   }
 
@@ -1951,7 +1920,7 @@ struct COLR
     return false;
   }
 
-  void
+  bool
   paint_glyph (hb_font_t *font, hb_codepoint_t glyph, hb_paint_funcs_t *funcs, void *data) const
   {
     VarStoreInstancer instancer (this+varStore,
@@ -1961,37 +1930,38 @@ struct COLR
     hb_paint_context_t c (this, funcs, data, instancer);
 
     const Paint *paint = get_base_glyph_paint (glyph);
-
     if (paint)
     {
-      int xscale, yscale;
-      unsigned int upem;
+      // COLRv1 glyph
+      c.funcs->push_root_transform (data, font);
 
-      hb_font_get_scale (font, &xscale, &yscale);
-      upem = hb_face_get_upem (hb_font_get_face (font));
+      c.recurse (*paint);
 
-      // FIXME handle slant
-      funcs->push_transform (data, xscale/(float)upem, 0,
-                                   0, yscale/(float)upem,
-                                   0, 0);
+      c.funcs->pop_root_transform (c.data);
 
-      paint_glyph_dispatch (paint, &c);
-
-      funcs->pop_transform (data);
+      return true;
     }
-    else
-    {
-      const BaseGlyphRecord &record = (this+baseGlyphsZ).bsearch (numBaseGlyphs, glyph);
-      hb_array_t<const LayerRecord> all_layers = (this+layersZ).as_array (numLayers);
-      for (unsigned int i = 0; i < record.numLayers; i++)
-      {
-        const LayerRecord *r = &all_layers[record.firstLayerIdx + i];
 
-        c.funcs->push_clip_glyph (c.data, r->glyphId);
-        c.funcs->solid (c.data, r->colorIdx, 1.);
+    const BaseGlyphRecord *record = get_base_glyph_record (glyph);
+    if (record && ((hb_codepoint_t) record->glyphId == glyph))
+    {
+      // COLRv0 glyph
+      funcs->push_root_transform (data, font);
+
+      for (const auto &r : (this+layersZ).as_array (numLayers)
+			   .sub_array (record->firstLayerIdx, record->numLayers))
+      {
+        c.funcs->push_clip_glyph (c.data, r.glyphId);
+        c.funcs->color (c.data, r.colorIdx, 1.);
         c.funcs->pop_clip (c.data);
       }
+
+      c.funcs->pop_root_transform (c.data);
+
+      return true;
     }
+
+    return false;
   }
 
   protected:
@@ -2016,10 +1986,13 @@ struct COLR_accelerator_t : COLR::accelerator_t {
   COLR_accelerator_t (hb_face_t *face) : COLR::accelerator_t (face) {}
 };
 
-static void
-paint_glyph_dispatch (const Paint *paint, hb_paint_context_t *c)
+void
+hb_paint_context_t::recurse (const Paint &paint)
 {
-  paint->paint_glyph (c);
+  depth_left--;
+  if (depth_left > 0)
+    paint.dispatch (this);
+  depth_left++;
 }
 
 } /* namespace OT */

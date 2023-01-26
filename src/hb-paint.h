@@ -30,6 +30,7 @@
 #define HB_PAINT_H
 
 #include "hb.h"
+#include "hb-font.h"
 
 HB_BEGIN_DECLS
 
@@ -48,14 +49,23 @@ HB_BEGIN_DECLS
  *
  * The callbacks also assume that the caller uses
  * hb_ot_color_palette_get_colors() to obtain colors
- * from one of the fonts color palettes.
+ * from one of the fonts color palettes. If the font does
+ * not have color palettes, the color index will always
+ * be 0xFFFF, indicating the use of the foreground color.
+ *
+ * Not all callbacks are required for all kinds of glyphs.
+ * For rendering COLRv0 or non-color outline glyphs, the
+ * gradient and composite callbacks are not needed.
+ *
+ * The paint-image callback is only needed for glyphs
+ * with blobs in the CBDT, sbix or SVG tables.
  *
  * Since: REPLACEME
  **/
 typedef struct hb_paint_funcs_t hb_paint_funcs_t;
 
 HB_EXTERN hb_paint_funcs_t *
-hb_paint_funcs_create ();
+hb_paint_funcs_create (void);
 
 HB_EXTERN hb_paint_funcs_t *
 hb_paint_funcs_reference (hb_paint_funcs_t *funcs);
@@ -143,7 +153,7 @@ typedef void (*hb_paint_push_clip_glyph_func_t) (hb_paint_funcs_t *funcs,
                                                  void *user_data);
 
 /**
- * hb_paint_push_clip_rect_func_t:
+ * hb_paint_push_clip_rectangle_func_t:
  * @funcs: paint functions object
  * @paint_data: The data accompanying the paint functions
  * @xmin: min X for the rectangle
@@ -164,11 +174,11 @@ typedef void (*hb_paint_push_clip_glyph_func_t) (hb_paint_funcs_t *funcs,
  *
  * Since: REPLACEME
  */
-typedef void (*hb_paint_push_clip_rect_func_t) (hb_paint_funcs_t *funcs,
-                                                void *paint_data,
-                                                float xmin, float ymin,
-                                                float xmax, float ymax,
-                                                void *user_data);
+typedef void (*hb_paint_push_clip_rectangle_func_t) (hb_paint_funcs_t *funcs,
+                                                     void *paint_data,
+                                                     float xmin, float ymin,
+                                                     float xmax, float ymax,
+                                                     void *user_data);
 
 /**
  * hb_paint_pop_clip_func_t:
@@ -178,7 +188,7 @@ typedef void (*hb_paint_push_clip_rect_func_t) (hb_paint_funcs_t *funcs,
  *
  * A virtual method for the #hb_paint_funcs_t to undo
  * the effect of a prior call to the #hb_paint_funcs_push_clip_glyph_func_t
- * or #hb_paint_funcs_push_clip_rect_func_t vfuncs.
+ * or #hb_paint_funcs_push_clip_rectangle_func_t vfuncs.
  *
  * Since: REPLACEME
  */
@@ -187,14 +197,14 @@ typedef void (*hb_paint_pop_clip_func_t) (hb_paint_funcs_t *funcs,
                                           void *user_data);
 
 /**
- * hb_paint_solid_func_t:
+ * hb_paint_color_func_t:
  * @funcs: paint functions object
  * @paint_data: The data accompanying the paint functions
  * @color_index: Index of a color in the fonts selected color palette
  * @alpha: alpha to apply in addition
  * @user_data: user data passed to the hb_font_paint_glyph() call
  *
- * A virtual method for the #hb_paint_funcs_t to paint a solid
+ * A virtual method for the #hb_paint_funcs_t to paint a
  * color everywhere within the current clip.
  *
  * The @color_index can be either an index into one of the fonts
@@ -206,12 +216,38 @@ typedef void (*hb_paint_pop_clip_func_t) (hb_paint_funcs_t *funcs,
  *
  * Since: REPLACEME
  */
-typedef void (*hb_paint_solid_func_t) (hb_paint_funcs_t *funcs,
+typedef void (*hb_paint_color_func_t) (hb_paint_funcs_t *funcs,
                                        void *paint_data,
                                        unsigned int color_index,
                                        float alpha,
                                        void *user_data);
 
+/**
+ * hb_paint_image_func_t:
+ * @funcs: paint functions object
+ * @paint_data: The data accompanying the paint functions
+ * @image: the image data
+ * @mimetype: the mime type for the image data
+ * @extents: (nullable): glyph extents
+ * @user_data: user data passed to the hb_font_paint_glyph() call
+ *
+ * A virtual method for the #hb_paint_funcs_t to paint the
+ * glyph image.
+ *
+ * This method is intended for glyphs with image blobs in the CBDT,
+ * sbix or SVG tables. The @mimetype identifies the kind of data
+ * that is contained in @image. Possible values include "image/png"
+ * and "image/svg+xml". The glyph extents are provided if available,
+ * and should be used to position the image.
+ *
+ * Since: REPLACEME
+ */
+typedef void (*hb_paint_image_func_t) (hb_paint_funcs_t *funcs,
+                                       void *paint_data,
+                                       hb_blob_t *image,
+                                       const char *mimetype,
+                                       hb_glyph_extents_t *extents,
+                                       void *user_data);
 
 /**
  * hb_color_line_t:
@@ -476,9 +512,9 @@ hb_paint_funcs_set_push_clip_glyph_func (hb_paint_funcs_t                *funcs,
                                          hb_destroy_func_t                destroy);
 
 /**
- * hb_paint_funcs_set_push_clip_rect_func:
+ * hb_paint_funcs_set_push_clip_rectangle_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The push-clip-rect callback
+ * @func: (closure user_data) (destroy destroy) (scope notified): The push-clip-rectangle callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
@@ -487,10 +523,10 @@ hb_paint_funcs_set_push_clip_glyph_func (hb_paint_funcs_t                *funcs,
  * Since: REPLACEME
  */
 HB_EXTERN void
-hb_paint_funcs_set_push_clip_rect_func (hb_paint_funcs_t               *funcs,
-                                        hb_paint_push_clip_rect_func_t  func,
-                                        void                           *user_data,
-                                        hb_destroy_func_t               destroy);
+hb_paint_funcs_set_push_clip_rectangle_func (hb_paint_funcs_t                    *funcs,
+                                             hb_paint_push_clip_rectangle_func_t  func,
+                                             void                                *user_data,
+                                             hb_destroy_func_t                    destroy);
 
 /**
  * hb_paint_funcs_set_pop_clip_func:
@@ -510,19 +546,36 @@ hb_paint_funcs_set_pop_clip_func (hb_paint_funcs_t         *funcs,
                                   hb_destroy_func_t         destroy);
 
 /**
- * hb_paint_funcs_set_solid_func:
+ * hb_paint_funcs_set_color_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The paint-solid callback
+ * @func: (closure user_data) (destroy destroy) (scope notified): The paint-color callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
- * Sets the paint-solid callback on the paint functions struct.
+ * Sets the paint-color callback on the paint functions struct.
  *
  * Since: REPLACEME
  */
 HB_EXTERN void
-hb_paint_funcs_set_solid_func (hb_paint_funcs_t      *funcs,
-                               hb_paint_solid_func_t  func,
+hb_paint_funcs_set_color_func (hb_paint_funcs_t      *funcs,
+                               hb_paint_color_func_t  func,
+                               void                  *user_data,
+                               hb_destroy_func_t      destroy);
+
+/**
+ * hb_paint_funcs_set_image_func:
+ * @funcs: A paint functions struct
+ * @func: (closure user_data) (destroy destroy) (scope notified): The paint-image callback
+ * @user_data: Data to pass to @func
+ * @destroy: (nullable): Function to call when @user_data is no longer needed
+ *
+ * Sets the paint-image callback on the paint functions struct.
+ *
+ * Since: REPLACEME
+ */
+HB_EXTERN void
+hb_paint_funcs_set_image_func (hb_paint_funcs_t      *funcs,
+                               hb_paint_image_func_t  func,
                                void                  *user_data,
                                hb_destroy_func_t      destroy);
 
@@ -625,17 +678,23 @@ hb_paint_push_clip_glyph (hb_paint_funcs_t *funcs, void *paint_data,
                           hb_codepoint_t glyph);
 
 HB_EXTERN void
-hb_paint_push_clip_rect (hb_paint_funcs_t *funcs, void *paint_data,
-                         float xmin, float ymin,
-                         float xmax, float ymax);
+hb_paint_push_clip_rectangle (hb_paint_funcs_t *funcs, void *paint_data,
+                              float xmin, float ymin,
+                              float xmax, float ymax);
 
 HB_EXTERN void
 hb_paint_pop_clip (hb_paint_funcs_t *funcs, void *paint_data);
 
 HB_EXTERN void
-hb_paint_solid (hb_paint_funcs_t *funcs, void *paint_data,
+hb_paint_color (hb_paint_funcs_t *funcs, void *paint_data,
                 unsigned int color_index,
                 float alpha);
+
+HB_EXTERN void
+hb_paint_image (hb_paint_funcs_t *funcs, void *paint_data,
+                hb_blob_t *image,
+                const char *mimetype,
+                hb_glyph_extents_t *extents);
 
 HB_EXTERN void
 hb_paint_linear_gradient (hb_paint_funcs_t *funcs, void *paint_data,

@@ -2,6 +2,7 @@
 #include <hb-ot.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdarg.h>
 #include <cairo.h>
 #include <math.h>
@@ -167,6 +168,8 @@ move_to (hb_draw_funcs_t *funcs, void *draw_data,
 {
   paint_data_t *data = user_data;
 
+  print (data, "move to %f %f", x, y);
+
   cairo_move_to (data->cr, x, y);
 }
 
@@ -177,6 +180,8 @@ line_to (hb_draw_funcs_t *funcs, void *draw_data,
          void *user_data)
 {
   paint_data_t *data = user_data;
+
+  print (data, "line to %f %f", x, y);
 
   cairo_line_to (data->cr, x, y);
 }
@@ -191,6 +196,8 @@ cubic_to (hb_draw_funcs_t *funcs, void *draw_data,
 {
   paint_data_t *data = user_data;
 
+  print (data, "curve to %f %f  %f %f  %f %f", c1x, c1y, c2x, c2y, x, y);
+
   cairo_curve_to (data->cr, c1x, c1y, c2x, c2y, x, y);
 }
 
@@ -200,6 +207,8 @@ close_path (hb_draw_funcs_t *funcs, void *draw_data,
             void *user_data)
 {
   paint_data_t *data = user_data;
+
+  print (data, "close path\n");
 
   cairo_close_path (data->cr);
 }
@@ -236,14 +245,14 @@ push_clip_glyph (hb_paint_funcs_t *funcs,
 }
 
 static void
-push_clip_rect (hb_paint_funcs_t *funcs,
-                void *paint_data,
-                float xmin, float ymin, float xmax, float ymax,
-                void *user_data)
+push_clip_rectangle (hb_paint_funcs_t *funcs,
+                     void *paint_data,
+                     float xmin, float ymin, float xmax, float ymax,
+                     void *user_data)
 {
   paint_data_t *data = user_data;
 
-  print (data, "start clip rect %f %f %f %f", xmin, ymin, xmax, ymax);
+  print (data, "start clip rectangle %f %f %f %f", xmin, ymin, xmax, ymax);
   data->level++;
 
   cairo_save (data->cr);
@@ -267,11 +276,11 @@ pop_clip (hb_paint_funcs_t *funcs,
 }
 
 static void
-solid (hb_paint_funcs_t *funcs,
-       void *paint_data,
-       unsigned int color_index,
-       float alpha,
-       void *user_data)
+paint_color (hb_paint_funcs_t *funcs,
+             void *paint_data,
+             unsigned int color_index,
+             float alpha,
+             void *user_data)
 {
   paint_data_t *data = user_data;
   color_t c;
@@ -279,8 +288,72 @@ solid (hb_paint_funcs_t *funcs,
   print (data, "solid %u %f", color_index, alpha);
 
   get_color (data, color_index, alpha, &c);
+  data->level++;
+  print (data, "color %f %f %f %f", c.r, c.g, c.b, c.a);
+  data->level--;
   cairo_set_source_rgba (data->cr, c.r, c.g, c.b, c.a);
   cairo_paint (data->cr);
+}
+
+typedef struct
+{
+  hb_blob_t *blob;
+  unsigned int offset;
+} read_blob_data_t;
+
+cairo_status_t
+read_blob (void *closure,
+           unsigned char *data,
+           unsigned int length)
+{
+  read_blob_data_t *r = closure;
+  const char *d;
+  unsigned int size;
+
+  d = hb_blob_get_data (r->blob, &size);
+
+  if (r->offset + length > size)
+    return CAIRO_STATUS_READ_ERROR;
+
+  memcpy (data, d + r->offset, length);
+  r->offset += length;
+
+  return CAIRO_STATUS_SUCCESS;
+}
+
+static void
+paint_image (hb_paint_funcs_t *funcs,
+             void *paint_data,
+             hb_blob_t *blob,
+             const char *mimetype,
+             hb_glyph_extents_t *extents,
+             void *user_data)
+{
+  paint_data_t *data = user_data;
+  read_blob_data_t r;
+  cairo_surface_t *surface;
+  cairo_pattern_t *pattern;
+  cairo_matrix_t m;
+
+  if (strcmp (mimetype, "image/png") != 0)
+    return;
+
+  r.blob = blob;
+  r.offset = 0;
+  surface = cairo_image_surface_create_from_png_stream (read_blob, &r);
+
+  pattern = cairo_pattern_create_for_surface (surface);
+  cairo_matrix_init_scale (&m, 1, -1);
+  cairo_matrix_translate (&m,
+                          extents ? extents->x_bearing : 0,
+                          extents ? - extents->y_bearing : 0);
+  cairo_pattern_set_matrix (pattern, &m);
+  cairo_set_source (data->cr, pattern);
+
+  cairo_paint (data->cr);
+
+  cairo_pattern_destroy (pattern);
+  cairo_surface_destroy (surface);
 }
 
 static void
@@ -357,13 +430,13 @@ normalize_color_line (hb_color_stop_t *stops,
 }
 
 static void
-linear_gradient (hb_paint_funcs_t *funcs,
-                 void *paint_data,
-                 hb_color_line_t *color_line,
-                 float x0, float y0,
-                 float x1, float y1,
-                 float x2, float y2,
-                 void *user_data)
+paint_linear_gradient (hb_paint_funcs_t *funcs,
+                       void *paint_data,
+                       hb_color_line_t *color_line,
+                       float x0, float y0,
+                       float x1, float y1,
+                       float x2, float y2,
+                       void *user_data)
 {
   paint_data_t *data = user_data;
   unsigned int len;
@@ -412,12 +485,12 @@ linear_gradient (hb_paint_funcs_t *funcs,
 }
 
 static void
-radial_gradient (hb_paint_funcs_t *funcs,
-                 void *paint_data,
-                 hb_color_line_t *color_line,
-                 float x0, float y0, float r0,
-                 float x1, float y1, float r1,
-                 void *user_data)
+paint_radial_gradient (hb_paint_funcs_t *funcs,
+                       void *paint_data,
+                       hb_color_line_t *color_line,
+                       float x0, float y0, float r0,
+                       float x1, float y1, float r1,
+                       void *user_data)
 {
   paint_data_t *data = user_data;
   unsigned int len;
@@ -838,18 +911,18 @@ add_sweep_gradient_patches (paint_data_t *data,
                 }
             }
         }
-done:
+done: ;
     }
 }
 
 static void
-sweep_gradient (hb_paint_funcs_t *funcs,
-                void *paint_data,
-                hb_color_line_t *color_line,
-                float cx, float cy,
-                float start_angle,
-                float end_angle,
-                void *user_data)
+paint_sweep_gradient (hb_paint_funcs_t *funcs,
+                      void *paint_data,
+                      hb_color_line_t *color_line,
+                      float cx, float cy,
+                      float start_angle,
+                      float end_angle,
+                      void *user_data)
 {
   paint_data_t *data = user_data;
   unsigned int len;
@@ -952,12 +1025,21 @@ int main (int argc, char *argv[])
   hb_font_set_scale (unscaled_font, upem, upem);
   hb_font_set_synthetic_slant (unscaled_font, 0.);
 
+  printf ("size %f upem %u\n", size, upem);
+
   xmin = extents.x_bearing;
   xmax = xmin + extents.width;
   ymin = - extents.y_bearing;
   ymax = - extents.y_bearing - extents.height;
 
   printf ("surface %f %f, offset %f %f\n", ceil (xmax - xmin), ceil (ymax - ymin), - xmin, - ymin);
+
+  if ((int) ceil (xmax - xmin) == 0 ||
+      (int) ceil (ymax - ymin) == 0)
+  {
+    printf ("ERROR: empty surface\n");
+    return 1;
+  }
 
   surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
                                         (int) ceil (xmax - xmin),
@@ -983,14 +1065,15 @@ int main (int argc, char *argv[])
   hb_paint_funcs_set_push_transform_func (funcs, push_transform, &data, NULL);
   hb_paint_funcs_set_pop_transform_func (funcs, pop_transform, &data, NULL);
   hb_paint_funcs_set_push_clip_glyph_func (funcs, push_clip_glyph, &data, NULL);
-  hb_paint_funcs_set_push_clip_rect_func (funcs, push_clip_rect, &data, NULL);
+  hb_paint_funcs_set_push_clip_rectangle_func (funcs, push_clip_rectangle, &data, NULL);
   hb_paint_funcs_set_pop_clip_func (funcs, pop_clip, &data, NULL);
   hb_paint_funcs_set_push_group_func (funcs, push_group, &data, NULL);
   hb_paint_funcs_set_pop_group_func (funcs, pop_group, &data, NULL);
-  hb_paint_funcs_set_solid_func (funcs, solid, &data, NULL);
-  hb_paint_funcs_set_linear_gradient_func (funcs, linear_gradient, &data, NULL);
-  hb_paint_funcs_set_radial_gradient_func (funcs, radial_gradient, &data, NULL);
-  hb_paint_funcs_set_sweep_gradient_func (funcs, sweep_gradient, &data, NULL);
+  hb_paint_funcs_set_color_func (funcs, paint_color, &data, NULL);
+  hb_paint_funcs_set_image_func (funcs, paint_image, &data, NULL);
+  hb_paint_funcs_set_linear_gradient_func (funcs, paint_linear_gradient, &data, NULL);
+  hb_paint_funcs_set_radial_gradient_func (funcs, paint_radial_gradient, &data, NULL);
+  hb_paint_funcs_set_sweep_gradient_func (funcs, paint_sweep_gradient, &data, NULL);
 
   hb_font_paint_glyph (font, gid, funcs, NULL);
 

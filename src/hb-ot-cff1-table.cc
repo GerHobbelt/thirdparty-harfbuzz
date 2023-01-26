@@ -553,6 +553,19 @@ bool _get_path (const OT::cff1::accelerator_t *cff, hb_font_t *font, hb_codepoin
   return true;
 }
 
+bool OT::cff1::accelerator_t::paint_glyph (hb_font_t *font, hb_codepoint_t glyph, hb_paint_funcs_t *funcs, void *data) const
+{
+    funcs->push_root_transform (data, font);
+
+    funcs->push_clip_glyph (data, glyph);
+    funcs->color (data, 0xffff, 1.);
+    funcs->pop_clip (data);
+
+    funcs->pop_root_transform (data);
+
+    return false;
+}
+
 bool OT::cff1::accelerator_t::get_path (hb_font_t *font, hb_codepoint_t glyph, hb_draw_session_t &draw_session) const
 {
 #ifdef HB_NO_OT_FONT_CFF

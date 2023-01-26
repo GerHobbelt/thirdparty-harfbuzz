@@ -31,9 +31,10 @@
   HB_PAINT_FUNC_IMPLEMENT (push_transform) \
   HB_PAINT_FUNC_IMPLEMENT (pop_transform) \
   HB_PAINT_FUNC_IMPLEMENT (push_clip_glyph) \
-  HB_PAINT_FUNC_IMPLEMENT (push_clip_rect) \
+  HB_PAINT_FUNC_IMPLEMENT (push_clip_rectangle) \
   HB_PAINT_FUNC_IMPLEMENT (pop_clip) \
-  HB_PAINT_FUNC_IMPLEMENT (solid) \
+  HB_PAINT_FUNC_IMPLEMENT (color) \
+  HB_PAINT_FUNC_IMPLEMENT (image) \
   HB_PAINT_FUNC_IMPLEMENT (linear_gradient) \
   HB_PAINT_FUNC_IMPLEMENT (radial_gradient) \
   HB_PAINT_FUNC_IMPLEMENT (sweep_gradient) \
@@ -78,20 +79,27 @@ struct hb_paint_funcs_t
   { func.push_clip_glyph (this, paint_data,
                           glyph,
                           !user_data ? nullptr : user_data->push_clip_glyph); }
-  void push_clip_rect (void *paint_data,
-                       float xmin, float ymin, float xmax, float ymax)
-  { func.push_clip_rect (this, paint_data,
-                         xmin, ymin, xmax, ymax,
-                         !user_data ? nullptr : user_data->push_clip_rect); }
+  void push_clip_rectangle (void *paint_data,
+                            float xmin, float ymin, float xmax, float ymax)
+  { func.push_clip_rectangle (this, paint_data,
+                              xmin, ymin, xmax, ymax,
+                              !user_data ? nullptr : user_data->push_clip_rectangle); }
   void pop_clip (void *paint_data)
   { func.pop_clip (this, paint_data,
                    !user_data ? nullptr : user_data->pop_clip); }
-  void solid (void *paint_data,
+  void color (void *paint_data,
               unsigned int color_index,
               float alpha)
-  { func.solid (this, paint_data,
+  { func.color (this, paint_data,
                 color_index, alpha,
-                !user_data ? nullptr : user_data->solid); }
+                !user_data ? nullptr : user_data->color); }
+  void image (void *paint_data,
+              hb_blob_t *image,
+              const char *mimetype,
+              hb_glyph_extents_t *extents)
+  { func.image (this, paint_data,
+                image, mimetype, extents,
+                !user_data ? nullptr : user_data->image); }
   void linear_gradient (void *paint_data,
                         hb_color_line_t *color_line,
                         float x0, float y0,
@@ -124,6 +132,18 @@ struct hb_paint_funcs_t
                     mode,
                     !user_data ? nullptr : user_data->pop_group); }
 
+  void push_root_transform (void *paint_data,
+                            hb_font_t *font)
+  {
+    int xscale, yscale;
+    float upem;
+    hb_font_get_scale (font, &xscale, &yscale);
+    upem = hb_face_get_upem (hb_font_get_face (font));
+    func.push_transform (this, paint_data, xscale/upem, 0, 0, yscale/upem, 0, 0,
+                         !user_data ? nullptr : user_data->push_transform); }
+  void pop_root_transform (void *paint_data)
+  { func.pop_transform (this, paint_data,
+                        !user_data ? nullptr : user_data->pop_transform); }
 };
 DECLARE_NULL_INSTANCE (hb_paint_funcs_t);
 

@@ -143,6 +143,19 @@ bool OT::cff2::accelerator_t::get_extents (hb_font_t *font,
   return true;
 }
 
+bool OT::cff2::accelerator_t::paint_glyph (hb_font_t *font, hb_codepoint_t glyph, hb_paint_funcs_t *funcs, void *data) const
+{
+    funcs->push_root_transform (data, font);
+
+    funcs->push_clip_glyph (data, glyph);
+    funcs->color (data, 0xffff, 1.);
+    funcs->pop_clip (data);
+
+    funcs->pop_root_transform (data);
+
+    return false;
+}
+
 struct cff2_path_param_t
 {
   cff2_path_param_t (hb_font_t *font_, hb_draw_session_t &draw_session_)
