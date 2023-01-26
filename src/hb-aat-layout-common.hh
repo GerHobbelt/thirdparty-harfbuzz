@@ -784,9 +784,11 @@ struct StateTableDriver
       buffer->clear_output ();
 
     int state = StateTableT::STATE_START_OF_TEXT;
-    auto *last_range = ac->range_flags && (*ac->range_flags) ? &(*ac->range_flags)[0] : nullptr;
+    // If there's only one range, we already checked the flag.
+    auto *last_range = ac->range_flags && (ac->range_flags->length > 1) ? &(*ac->range_flags)[0] : nullptr;
     for (buffer->idx = 0; buffer->successful;)
     {
+      /* This block is copied in NoncontextualSubtable::apply. Keep in sync. */
       if (last_range)
       {
 	auto *range = last_range;
@@ -798,17 +800,15 @@ struct StateTableDriver
 	  while (cluster > range->cluster_last)
 	    range++;
 
-	  if (range != last_range)
-	    state = StateTableT::STATE_START_OF_TEXT;
 
 	  last_range = range;
 	}
-
 	if (!(range->flags & ac->subtable_flags))
 	{
 	  if (buffer->idx == buffer->len || unlikely (!buffer->successful))
 	    break;
 
+	  state = StateTableT::STATE_START_OF_TEXT;
 	  (void) buffer->next_glyph ();
 	  continue;
 	}

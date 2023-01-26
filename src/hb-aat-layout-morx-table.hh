@@ -618,8 +618,27 @@ struct NoncontextualSubtable
 
     hb_glyph_info_t *info = c->buffer->info;
     unsigned int count = c->buffer->len;
+    // If there's only one range, we already checked the flag.
+    auto *last_range = c->range_flags && (c->range_flags->length > 1) ? &(*c->range_flags)[0] : nullptr;
     for (unsigned int i = 0; i < count; i++)
     {
+      /* This block copied from StateTableDriver::drive. Keep in sync. */
+      if (last_range)
+      {
+	auto *range = last_range;
+	{
+	  unsigned cluster = info[i].cluster;
+	  while (cluster < range->cluster_first)
+	    range--;
+	  while (cluster > range->cluster_last)
+	    range++;
+
+	  last_range = range;
+	}
+	if (!(range->flags & c->subtable_flags))
+	  continue;
+      }
+
       const HBGlyphID16 *replacement = substitute.get_value (info[i].codepoint, num_glyphs);
       if (replacement)
       {
@@ -1002,7 +1021,8 @@ struct Chain
     {
       bool reverse;
 
-      if (c->range_flags->length == 1 && !(subtable->subFeatureFlags & (*c->range_flags)[0].flags))
+      if (hb_none (hb_iter (c->range_flags) |
+		   hb_map ([&subtable] (const hb_aat_map_t::range_flags_t _) -> bool { return subtable->subFeatureFlags & (_.flags); })))
 	goto skip;
       c->subtable_flags = subtable->subFeatureFlags;
 
@@ -1120,7 +1140,8 @@ struct mortmorx
   {
     const Chain<Types> *chain = &firstChain;
     unsigned int count = chainCount;
-    map->chain_flags.resize (count);
+    if (unlikely (!map->chain_flags.resize (count)))
+      return;
     for (unsigned int i = 0; i < count; i++)
     {
       map->chain_flags[i].push (hb_aat_map_t::range_flags_t {chain->compile_flags (mapper),
@@ -1134,6 +1155,9 @@ struct mortmorx
 	      const hb_aat_map_t &map) const
   {
     if (unlikely (!c->buffer->successful)) return;
+
+    c->buffer->unsafe_to_concat ();
+
     c->set_lookup_index (0);
     const Chain<Types> *chain = &firstChain;
     unsigned int count = chainCount;
