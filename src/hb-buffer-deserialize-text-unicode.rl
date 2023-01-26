@@ -72,7 +72,7 @@ unicode_item	=
 	%add_item
 	;
 
-unicodes = unicode_item (space* '|' space* unicode_item)* space* ('|'|'>');
+unicodes = unicode_item (space* '|' space* unicode_item)* space*;
 
 main := space* unicodes;
 
@@ -85,12 +85,25 @@ _hb_buffer_deserialize_text_unicode (hb_buffer_t *buffer,
 				     const char **end_ptr,
 				     hb_font_t *font)
 {
-  const char *p = buf, *pe = buf + buf_len;
+  const char *p = buf, *pe = buf + buf_len, *eof = pe, *orig_pe = pe;
 
   while (p < pe && ISSPACE (*p))
     p++;
-  if (p < pe && *p == (buffer->len ? ',' : '<'))
+  if (p < pe && *p == (buffer->len ? '|' : '<'))
     *end_ptr = ++p;
+
+  const char *end = strchr ((char *) p, '>');
+  if (end)
+    pe = eof = end;
+  else
+  {
+    end = strrchr ((char *) p, '|');
+    if (end)
+      pe = eof = end;
+    else
+      pe = eof = p;
+  }
+
 
   const char *tok = nullptr;
   int cs;
@@ -101,9 +114,16 @@ _hb_buffer_deserialize_text_unicode (hb_buffer_t *buffer,
     write exec;
   }%%
 
+  if (pe < orig_pe && *pe == '>')
+  {
+    pe++;
+    if (p == pe)
+      p++;
+  }
+
   *end_ptr = p;
 
-  return p == pe && *(p-1) != ']';
+  return p == pe;
 }
 
 #endif /* HB_BUFFER_DESERIALIZE_TEXT_UNICODE_HH */
