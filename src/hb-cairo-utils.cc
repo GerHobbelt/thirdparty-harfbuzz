@@ -598,6 +598,8 @@ _hb_cairo_add_sweep_gradient_patches (hb_color_stop_t *stops,
 
     for (unsigned i = 0; i < n_stops - 1 - i; i++)
       hb_swap (stops[i], stops[n_stops - 1 - i]);
+    for (unsigned i = 0; i < n_stops; i++)
+      stops[i].offset = 1 - stops[i].offset;
   }
 
   if (n_stops > PREALLOCATED_COLOR_STOPS)
@@ -725,7 +727,7 @@ _hb_cairo_add_sweep_gradient_patches (hb_color_stop_t *stops,
     //assert (angles[0] + k * span <= 0 && 0 < angles[n_stops - 1] + k * span);
     span = fabs (span);
 
-    for (unsigned l = k; l < 1000; l++)
+    for (signed l = k; l < 1000; l++)
     {
       for (unsigned i = 1; i < n_stops; i++)
       {
