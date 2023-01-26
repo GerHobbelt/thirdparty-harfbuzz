@@ -44,15 +44,11 @@ HB_BEGIN_DECLS
  * push/pop calls will be properly nested, so it is fine
  * to store the different kinds of object on a single stack.
  *
- * The callbacks also assume that the caller uses
- * hb_ot_color_palette_get_colors() to obtain colors
- * from the color palette that is selected. If the font does
- * not have color palettes, the color index will always
- * be 0xFFFF, indicating the use of the foreground color.
- *
  * Not all callbacks are required for all kinds of glyphs.
  * For rendering COLRv0 or non-color outline glyphs, the
- * gradient and composite callbacks are not needed.
+ * gradient callbacks are not needed, and the composite
+ * callback only needs to handle simple alpha compositing
+ * (#HB_PAINT_COMPOSITE_MODE_SRC_OVER).
  *
  * The paint-image callback is only needed for glyphs
  * with image blobs in the CBDT, sbix or SVG tables.
@@ -210,7 +206,7 @@ typedef void (*hb_paint_pop_clip_func_t) (hb_paint_funcs_t *funcs,
  * @funcs: paint functions object
  * @paint_data: The data accompanying the paint functions in hb_font_paint_glyph()
  * @is_foreground: whether the color is the foreground
- * @color: The color to use
+ * @color: The color to use, unpremultiplied
  * @user_data: User data pointer passed to hb_paint_funcs_set_color_func()
  *
  * A virtual method for the #hb_paint_funcs_t to paint a
@@ -264,10 +260,9 @@ typedef void (*hb_paint_color_func_t) (hb_paint_funcs_t *funcs,
  * @extents: (nullable): glyph extents for desired rendering
  * @user_data: User data pointer passed to hb_paint_funcs_set_image_func()
  *
- * A virtual method for the #hb_paint_funcs_t to paint the
- * glyph image.
+ * A virtual method for the #hb_paint_funcs_t to paint a glyph image.
  *
- * This method is intended for glyphs with image blobs in the CBDT,
+ * This method is called for glyphs with image blobs in the CBDT,
  * sbix or SVG tables. The @format identifies the kind of data that
  * is contained in @image. Possible values include #HB_PAINT_IMAGE_FORMAT_PNG
  * #HB_PAINT_IMAGE_FORMAT_SVG and #HB_PAINT_IMAGE_FORMAT_BGRA.
@@ -288,24 +283,20 @@ typedef void (*hb_paint_image_func_t) (hb_paint_funcs_t *funcs,
                                        void *user_data);
 
 /**
- * hb_color_line_t:
- *
- * An opaque struct containing color information for a gradient.
- *
- * Since: REPLACEME
- */
-typedef struct hb_color_line_t hb_color_line_t;
-
-/**
  * hb_color_stop_t:
  * @offset: the offset of the color stop
  * @is_foreground: whether the color is the foreground
- * @color: the color
+ * @color: the color, unpremultiplied
  *
  * Information about a color stop on a color line.
  *
  * Color lines typically have offsets ranging between 0 and 1,
  * but that is not required.
+ *
+ * Note: despite @color being unpremultiplied here, interpolation in
+ * gradients shall happen in premultiplied space. See the OpenType spec
+ * [COLR](https://learn.microsoft.com/en-us/typography/opentype/spec/colr)
+ * section for details.
  *
  * Since: REPLACEME
  */
@@ -314,12 +305,6 @@ typedef struct {
   hb_bool_t is_foreground;
   hb_color_t color;
 } hb_color_stop_t;
-
-HB_EXTERN unsigned int
-hb_color_line_get_color_stops (hb_color_line_t *color_line,
-                               unsigned int start,
-                               unsigned int *count,
-                               hb_color_stop_t *color_stops);
 
 /**
  * hb_paint_extend_t:
@@ -336,6 +321,51 @@ typedef enum {
   HB_PAINT_EXTEND_REPEAT,
   HB_PAINT_EXTEND_REFLECT
 } hb_paint_extend_t;
+
+typedef struct hb_color_line_t hb_color_line_t;
+
+typedef unsigned int (*hb_color_line_get_color_stops_func_t) (hb_color_line_t *color_line,
+							      void *color_line_data,
+							      unsigned int start,
+							      unsigned int *count,
+							      hb_color_stop_t *color_stops,
+							      void *user_data);
+
+typedef hb_paint_extend_t (*hb_color_line_get_extend_func_t) (hb_color_line_t *color_line,
+							      void *color_line_data,
+							      void *user_data);
+
+/**
+ * hb_color_line_t:
+ *
+ * A struct containing color information for a gradient.
+ *
+ * Since: REPLACEME
+ */
+struct hb_color_line_t {
+  void *data;
+
+  hb_color_line_get_color_stops_func_t get_color_stops;
+  void *get_color_stops_user_data;
+
+  hb_color_line_get_extend_func_t get_extend;
+  void *get_extend_user_data;
+
+  void *reserved0;
+  void *reserved1;
+  void *reserved2;
+  void *reserved3;
+  void *reserved5;
+  void *reserved6;
+  void *reserved7;
+  void *reserved8;
+};
+
+HB_EXTERN unsigned int
+hb_color_line_get_color_stops (hb_color_line_t *color_line,
+                               unsigned int start,
+                               unsigned int *count,
+                               hb_color_stop_t *color_stops);
 
 HB_EXTERN hb_paint_extend_t
 hb_color_line_get_extend (hb_color_line_t *color_line);
@@ -355,6 +385,9 @@ hb_color_line_get_extend (hb_color_line_t *color_line);
  *
  * A virtual method for the #hb_paint_funcs_t to paint a linear
  * gradient everywhere within the current clip.
+ *
+ * The @color_line object contains information about the colors of the gradients.
+ * It is only valid for the duration of the callback, you cannot keep it around.
  *
  * The coordinates of the points are interpreted according
  * to the current transform.
@@ -389,6 +422,9 @@ typedef void (*hb_paint_linear_gradient_func_t) (hb_paint_funcs_t *funcs,
  * A virtual method for the #hb_paint_funcs_t to paint a radial
  * gradient everywhere within the current clip.
  *
+ * The @color_line object contains information about the colors of the gradients.
+ * It is only valid for the duration of the callback, you cannot keep it around.
+ *
  * The coordinates of the points are interpreted according
  * to the current transform.
  *
@@ -418,6 +454,9 @@ typedef void (*hb_paint_radial_gradient_func_t) (hb_paint_funcs_t *funcs,
  *
  * A virtual method for the #hb_paint_funcs_t to paint a sweep
  * gradient everywhere within the current clip.
+ *
+ * The @color_line object contains information about the colors of the gradients.
+ * It is only valid for the duration of the callback, you cannot keep it around.
  *
  * The coordinates of the points are interpreted according
  * to the current transform.

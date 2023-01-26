@@ -27,8 +27,11 @@
 
 #include "hb.hh"
 
+#include FT_COLOR_H
 
 #ifndef HB_NO_PAINT
+
+#ifdef TT_SUPPORT_COLRV1
 
 static hb_paint_composite_mode_t
 _hb_ft_paint_composite_mode (FT_Composite_Mode mode)
@@ -69,21 +72,119 @@ _hb_ft_paint_composite_mode (FT_Composite_Mode mode)
   }
 }
 
+typedef struct hb_ft_paint_context_t hb_ft_paint_context_t;
+
 static void
-_hb_ft_paint (FT_OpaquePaint opaque_paint,
-	      const hb_ft_font_t *ft_font,
-	      hb_font_t *font,
-	      hb_paint_funcs_t *paint_funcs, void *paint_data,
-	      FT_Color *palette,
-	      hb_color_t foreground)
+_hb_ft_paint (hb_ft_paint_context_t *c,
+	      FT_OpaquePaint opaque_paint);
+
+struct hb_ft_paint_context_t
 {
-  FT_Face ft_face = ft_font->ft_face;
+  hb_ft_paint_context_t (const hb_ft_font_t *ft_font,
+			 hb_font_t *font,
+			 hb_paint_funcs_t *paint_funcs, void *paint_data,
+			 FT_Color *palette,
+			 hb_color_t foreground) :
+    ft_font (ft_font), font(font),
+    funcs (paint_funcs), data (paint_data),
+    palette (palette), foreground (foreground) {}
+
+  void recurse (FT_OpaquePaint paint) { _hb_ft_paint (this, paint);
+  }
+
+  const hb_ft_font_t *ft_font;
+  hb_font_t *font;
+  hb_paint_funcs_t *funcs;
+  void *data;
+  FT_Color *palette;
+  hb_color_t foreground;
+};
+
+static unsigned
+_hb_ft_color_line_get_color_stops (hb_color_line_t *color_line,
+				   void *color_line_data,
+				   unsigned int start,
+				   unsigned int *count,
+				   hb_color_stop_t *color_stops,
+				   void *user_data)
+{
+  FT_ColorLine *cl = (FT_ColorLine *) color_line_data;
+  hb_ft_paint_context_t *c = (hb_ft_paint_context_t *) user_data;
+
+  if (count)
+  {
+    FT_ColorStop stop;
+    unsigned wrote = 0;
+    FT_ColorStopIterator iter = cl->color_stop_iterator;
+
+    if (start >= cl->color_stop_iterator.num_color_stops)
+    {
+      *count = 0;
+      return cl->color_stop_iterator.num_color_stops;
+    }
+
+    while (cl->color_stop_iterator.current_color_stop < start)
+      FT_Get_Colorline_Stops(c->ft_font->ft_face,
+			     &stop,
+			     &cl->color_stop_iterator);
+
+    while (count && *count &&
+	   FT_Get_Colorline_Stops(c->ft_font->ft_face,
+				  &stop,
+				  &cl->color_stop_iterator))
+    {
+      color_stops->offset = stop.stop_offset / 16384.f;
+      color_stops->is_foreground = stop.color.palette_index == 0xFFFF;
+      if (color_stops->is_foreground)
+	color_stops->color = HB_COLOR (hb_color_get_blue (c->foreground),
+				       hb_color_get_green (c->foreground),
+				       hb_color_get_red (c->foreground),
+				       (hb_color_get_alpha (c->foreground) * stop.color.alpha) >> 14);
+      else
+      {
+	FT_Color ft_color = c->palette[stop.color.palette_index];
+	color_stops->color = HB_COLOR (ft_color.blue,
+				       ft_color.green,
+				       ft_color.red,
+				       (ft_color.alpha * stop.color.alpha) >> 14);
+      }
+
+      color_stops++;
+      wrote++;
+    }
+
+    *count = wrote;
+
+    // reset the iterator for next time
+    cl->color_stop_iterator = iter;
+  }
+
+  return cl->color_stop_iterator.num_color_stops;
+}
+
+static hb_paint_extend_t
+_hb_ft_color_line_get_extend (hb_color_line_t *color_line,
+			      void *color_line_data,
+			      void *user_data)
+{
+  FT_ColorLine *c = (FT_ColorLine *) color_line_data;
+  switch (c->extend)
+  {
+    default:
+    case FT_COLR_PAINT_EXTEND_PAD:     return HB_PAINT_EXTEND_PAD;
+    case FT_COLR_PAINT_EXTEND_REPEAT:  return HB_PAINT_EXTEND_REPEAT;
+    case FT_COLR_PAINT_EXTEND_REFLECT: return HB_PAINT_EXTEND_REFLECT;
+  }
+}
+
+void
+_hb_ft_paint (hb_ft_paint_context_t *c,
+	      FT_OpaquePaint opaque_paint)
+{
+  FT_Face ft_face = c->ft_font->ft_face;
   FT_COLR_Paint paint;
   if (!FT_Get_Paint (ft_face, opaque_paint, &paint))
     return;
-
-#define paint_recurse(other_paint) \
-	_hb_ft_paint (other_paint, ft_font, font, paint_funcs, paint_data, palette, foreground)
 
   switch (paint.format)
   {
@@ -94,9 +195,9 @@ _hb_ft_paint (FT_OpaquePaint opaque_paint,
 				  &paint.u.colr_layers.layer_iterator,
 				  &other_paint))
       {
-	paint_funcs->push_group (paint_data);
-	paint_recurse (other_paint);
-	paint_funcs->pop_group (paint_data, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
+	c->funcs->push_group (c->data);
+	c->recurse (other_paint);
+	c->funcs->pop_group (c->data, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
       }
     }
     break;
@@ -105,33 +206,81 @@ _hb_ft_paint (FT_OpaquePaint opaque_paint,
       bool is_foreground = paint.u.solid.color.palette_index ==  0xFFFF;
       hb_color_t color;
       if (is_foreground)
-	color = HB_COLOR (hb_color_get_blue (foreground),
-			  hb_color_get_green (foreground),
-			  hb_color_get_red (foreground),
-			  (hb_color_get_alpha (foreground) * paint.u.solid.color.alpha) >> 14);
+	color = HB_COLOR (hb_color_get_blue (c->foreground),
+			  hb_color_get_green (c->foreground),
+			  hb_color_get_red (c->foreground),
+			  (hb_color_get_alpha (c->foreground) * paint.u.solid.color.alpha) >> 14);
       else
       {
-	FT_Color ft_color = palette[paint.u.solid.color.palette_index];
+	FT_Color ft_color = c->palette[paint.u.solid.color.palette_index];
 	color = HB_COLOR (ft_color.blue,
 			  ft_color.green,
 			  ft_color.red,
-			  ft_color.alpha);
+			  (ft_color.alpha * paint.u.solid.color.alpha) >> 14);
       }
-      paint_funcs->color (paint_data, is_foreground, color);
+      c->funcs->color (c->data, is_foreground, color);
     }
     break;
-    case FT_COLR_PAINTFORMAT_LINEAR_GRADIENT: break;
-    case FT_COLR_PAINTFORMAT_RADIAL_GRADIENT: break;
-    case FT_COLR_PAINTFORMAT_SWEEP_GRADIENT: break;
+    case FT_COLR_PAINTFORMAT_LINEAR_GRADIENT:
+    {
+      hb_color_line_t cl = {
+	&paint.u.linear_gradient.colorline,
+	_hb_ft_color_line_get_color_stops, c,
+	_hb_ft_color_line_get_extend, nullptr
+      };
+
+      c->funcs->linear_gradient (c->data, &cl,
+				    paint.u.linear_gradient.p0.x / 65536.f,
+				    paint.u.linear_gradient.p0.y / 65536.f,
+				    paint.u.linear_gradient.p1.x / 65536.f,
+				    paint.u.linear_gradient.p1.y / 65536.f,
+				    paint.u.linear_gradient.p2.x / 65536.f,
+				    paint.u.linear_gradient.p2.y / 65536.f);
+    }
+    break;
+    case FT_COLR_PAINTFORMAT_RADIAL_GRADIENT:
+    {
+      hb_color_line_t cl = {
+	&paint.u.linear_gradient.colorline,
+	_hb_ft_color_line_get_color_stops, c,
+	_hb_ft_color_line_get_extend, nullptr
+      };
+
+      c->funcs->radial_gradient (c->data, &cl,
+				    paint.u.radial_gradient.c0.x / 65536.f,
+				    paint.u.radial_gradient.c0.y / 65536.f,
+				    paint.u.radial_gradient.r0 / 65536.f,
+				    paint.u.radial_gradient.c1.x / 65536.f,
+				    paint.u.radial_gradient.c1.y / 65536.f,
+				    paint.u.radial_gradient.r1 / 65536.f);
+    }
+    break;
+    case FT_COLR_PAINTFORMAT_SWEEP_GRADIENT:
+    {
+      hb_color_line_t cl = {
+	&paint.u.linear_gradient.colorline,
+	_hb_ft_color_line_get_color_stops, c,
+	_hb_ft_color_line_get_extend, nullptr
+      };
+
+      c->funcs->sweep_gradient (c->data, &cl,
+				   paint.u.sweep_gradient.center.x / 65536.f,
+				   paint.u.sweep_gradient.center.y / 65536.f,
+				   (paint.u.sweep_gradient.start_angle / 65536.f + 1) * (float) M_PI,
+				   (paint.u.sweep_gradient.end_angle / 65536.f + 1) * (float) M_PI);
+    }
+    break;
     case FT_COLR_PAINTFORMAT_GLYPH:
     {
-      //paint_funcs->push_inverse_root_transform (paint_data, font);
-      ft_font->lock.unlock ();
-      paint_funcs->push_clip_glyph (paint_data, paint.u.glyph.glyphID, font);
-      ft_font->lock.lock ();
-      paint_recurse (paint.u.glyph.paint);
-      paint_funcs->pop_clip (paint_data);
-      //paint_funcs->pop_inverse_root_transform (paint_data);
+      c->funcs->push_inverse_root_transform (c->data, c->font);
+      c->ft_font->lock.unlock ();
+      c->funcs->push_clip_glyph (c->data, paint.u.glyph.glyphID, c->font);
+      c->ft_font->lock.lock ();
+      c->funcs->push_root_transform (c->data, c->font);
+      c->recurse (paint.u.glyph.paint);
+      c->funcs->pop_root_transform (c->data);
+      c->funcs->pop_clip (c->data);
+      c->funcs->pop_inverse_root_transform (c->data);
     }
     break;
     case FT_COLR_PAINTFORMAT_COLR_GLYPH:
@@ -141,51 +290,72 @@ _hb_ft_paint (FT_OpaquePaint opaque_paint,
       if (FT_Get_Color_Glyph_Paint (ft_face, paint.u.colr_glyph.glyphID,
 				    FT_COLOR_NO_ROOT_TRANSFORM,
 				    &other_paint))
-	paint_recurse (other_paint);
+      {
+        bool has_clip_box;
+        FT_ClipBox clip_box;
+        has_clip_box = FT_Get_Color_Glyph_ClipBox (ft_face, paint.u.colr_glyph.glyphID, &clip_box);
+        has_clip_box = 0;
+
+        if (has_clip_box)
+          c->funcs->push_clip_rectangle (c->data,
+					    clip_box.bottom_left.x / 64.f,
+					    clip_box.bottom_left.y / 64.f,
+					    clip_box.top_right.x / 64.f,
+					    clip_box.top_right.y / 64.f);
+	c->recurse (other_paint);
+        if (has_clip_box)
+          c->funcs->pop_clip (c->data);
+      }
     }
     break;
     case FT_COLR_PAINTFORMAT_TRANSFORM:
     {
-      paint_funcs->push_transform (paint_data,
+      c->funcs->push_transform (c->data,
 				   paint.u.transform.affine.xx / 65536.f,
 				   paint.u.transform.affine.yx / 65536.f,
 				   paint.u.transform.affine.xy / 65536.f,
 				   paint.u.transform.affine.yy / 65536.f,
 				   paint.u.transform.affine.dx / 65536.f,
 				   paint.u.transform.affine.dy / 65536.f);
-      paint_recurse (paint.u.transform.paint);
-      paint_funcs->pop_transform (paint_data);
+      c->recurse (paint.u.transform.paint);
+      c->funcs->pop_transform (c->data);
     }
     break;
     case FT_COLR_PAINTFORMAT_TRANSLATE:
     {
-      paint_funcs->push_transform (paint_data,
+      c->funcs->push_transform (c->data,
 				   0.f, 0.f, 0.f, 0.f,
 				   paint.u.translate.dx / 65536.f,
 				   paint.u.translate.dy / 65536.f);
-      paint_recurse (paint.u.translate.paint);
-      paint_funcs->pop_transform (paint_data);
+      c->recurse (paint.u.translate.paint);
+      c->funcs->pop_transform (c->data);
     }
     break;
     case FT_COLR_PAINTFORMAT_SCALE:
     {
-      paint_funcs->push_transform (paint_data,
-				   1.f, 0.f, 0.f, 1.f,
-				   +paint.u.scale.center_x / 65536.f,
-				   +paint.u.scale.center_y / 65536.f);
-      paint_funcs->push_transform (paint_data,
-				   paint.u.scale.scale_y / 65536.f,
-				   0.f, 0.f,
+      bool has_translate = paint.u.scale.center_x != 0 || paint.u.scale.center_y != 0;
+      if (has_translate)
+        c->funcs->push_transform (c->data,
+				     1.f, 0.f, 0.f, 1.f,
+				     +paint.u.scale.center_x / 65536.f,
+				     +paint.u.scale.center_y / 65536.f);
+      c->funcs->push_transform (c->data,
 				   paint.u.scale.scale_x / 65536.f,
+				   0.f, 0.f,
+				   paint.u.scale.scale_y / 65536.f,
 				   0.f, 0.f);
-      paint_funcs->push_transform (paint_data,
-				   1.f, 0.f, 0.f, 1.f,
-				   -paint.u.scale.center_x / 65536.f,
-				   -paint.u.scale.center_y / 65536.f);
-      paint_recurse (paint.u.scale.paint);
-      paint_funcs->pop_transform (paint_data);
-      paint_funcs->pop_transform (paint_data);
-      paint_funcs->pop_transform (paint_data);
+      if (has_translate)
+        c->funcs->push_transform (c->data,
+				     1.f, 0.f, 0.f, 1.f,
+				     -paint.u.scale.center_x / 65536.f,
+				     -paint.u.scale.center_y / 65536.f);
+      c->recurse (paint.u.scale.paint);
+      c->funcs->pop_transform (c->data);
+      if (has_translate)
+      {
+        c->funcs->pop_transform (c->data);
+        c->funcs->pop_transform (c->data);
+      }
     }
     break;
     case FT_COLR_PAINTFORMAT_ROTATE:
@@ -193,48 +363,48 @@ _hb_ft_paint (FT_OpaquePaint opaque_paint,
       float a = paint.u.rotate.angle / 65536.f;
       float cc = cosf (a * (float) M_PI);
       float ss = sinf (a * (float) M_PI);
-      paint_funcs->push_transform (paint_data,
+      c->funcs->push_transform (c->data,
 				   1.f, 0.f, 0.f, 1.f,
 				   +paint.u.rotate.center_x / 65536.f,
 				   +paint.u.rotate.center_y / 65536.f);
-      paint_funcs->push_transform (paint_data, cc, ss, -ss, cc, 0., 0.);
-      paint_funcs->push_transform (paint_data,
+      c->funcs->push_transform (c->data, cc, ss, -ss, cc, 0., 0.);
+      c->funcs->push_transform (c->data,
 				   1.f, 0.f, 0.f, 1.f,
 				   -paint.u.rotate.center_x / 65536.f,
 				   -paint.u.rotate.center_y / 65536.f);
-      paint_recurse (paint.u.rotate.paint);
-      paint_funcs->pop_transform (paint_data);
-      paint_funcs->pop_transform (paint_data);
-      paint_funcs->pop_transform (paint_data);
+      c->recurse (paint.u.rotate.paint);
+      c->funcs->pop_transform (c->data);
+      c->funcs->pop_transform (c->data);
+      c->funcs->pop_transform (c->data);
     }
     break;
     case FT_COLR_PAINTFORMAT_SKEW:
     {
       float x = +tanf (paint.u.skew.x_skew_angle / 65536.f * (float) M_PI);
       float y = -tanf (paint.u.skew.y_skew_angle / 65536.f * (float) M_PI);
-      paint_funcs->push_transform (paint_data,
+      c->funcs->push_transform (c->data,
 				   1.f, 0.f, 0.f, 1.f,
 				   +paint.u.skew.center_x / 65536.f,
 				   +paint.u.skew.center_y / 65536.f);
-      paint_funcs->push_transform (paint_data, 1., y, x, 1., 0., 0.);
-      paint_funcs->push_transform (paint_data,
+      c->funcs->push_transform (c->data, 1., y, x, 1., 0., 0.);
+      c->funcs->push_transform (c->data,
 				   1.f, 0.f, 0.f, 1.f,
 				   -paint.u.skew.center_x / 65536.f,
 				   -paint.u.skew.center_y / 65536.f);
-      paint_recurse (paint.u.skew.paint);
-      paint_funcs->pop_transform (paint_data);
-      paint_funcs->pop_transform (paint_data);
-      paint_funcs->pop_transform (paint_data);
+      c->recurse (paint.u.skew.paint);
+      c->funcs->pop_transform (c->data);
+      c->funcs->pop_transform (c->data);
+      c->funcs->pop_transform (c->data);
     }
     break;
     case FT_COLR_PAINTFORMAT_COMPOSITE:
     {
-      paint_funcs->push_group (paint_data);
-      paint_recurse (paint.u.composite.backdrop_paint);
-      paint_funcs->push_group (paint_data);
-      paint_recurse (paint.u.composite.source_paint);
-      paint_funcs->pop_group (paint_data, _hb_ft_paint_composite_mode (paint.u.composite.composite_mode));
-      paint_funcs->pop_group (paint_data, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
+      c->funcs->push_group (c->data);
+      c->recurse (paint.u.composite.backdrop_paint);
+      c->funcs->push_group (c->data);
+      c->recurse (paint.u.composite.source_paint);
+      c->funcs->pop_group (c->data, _hb_ft_paint_composite_mode (paint.u.composite.composite_mode));
+      c->funcs->pop_group (c->data, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
     }
     break;
 
@@ -242,8 +412,9 @@ _hb_ft_paint (FT_OpaquePaint opaque_paint,
     default: HB_FALLTHROUGH;
     case FT_COLR_PAINTFORMAT_UNSUPPORTED: break;
   }
-#undef paint_recurse
 }
+
+#endif
 
 static bool
 hb_ft_paint_glyph_colr (hb_font_t *font,
@@ -271,6 +442,7 @@ hb_ft_paint_glyph_colr (hb_font_t *font,
   if (error)
     palette = NULL;
 
+#ifdef TT_SUPPORT_COLRV1
   /* COLRv1 */
   FT_OpaquePaint paint = {0};
   if (FT_Get_Color_Glyph_Paint (ft_face, gid,
@@ -278,35 +450,30 @@ hb_ft_paint_glyph_colr (hb_font_t *font,
 			        &paint))
   {
     FT_ClipBox clip_box;
-    bool pop_clip = false;
-    if (FT_Get_Color_Glyph_ClipBox (ft_face, gid,
-				    &clip_box))
-    {
-      /* TODO mult's like hb-ft. */
+    bool has_clip;
+
+    has_clip = FT_Get_Color_Glyph_ClipBox (ft_face, gid, &clip_box);
+    if (has_clip)
       paint_funcs->push_clip_rectangle (paint_data,
-					clip_box.bottom_left.x,
-					clip_box.bottom_left.y,
-					clip_box.top_right.x,
-					clip_box.top_right.y);
-#if 0
-      FT_Vector  bottom_left;
-      FT_Vector  top_left;
-      FT_Vector  top_right;
-      FT_Vector  bottom_right;
-#endif
-    }
+                                        clip_box.bottom_left.x - font->slant_xy * clip_box.bottom_left.y,
+                                        clip_box.bottom_left.y,
+                                        clip_box.top_right.x - font->slant_xy * clip_box.top_right.y,
+                                        clip_box.top_right.y);
 
-    _hb_ft_paint (paint,
-		  ft_font,
-		  font,
-		  paint_funcs, paint_data,
-		  palette, foreground);
+    paint_funcs->push_root_transform (paint_data, font);
 
-    if (pop_clip)
+    hb_ft_paint_context_t c (ft_font, font,
+			     paint_funcs, paint_data,
+			     palette, foreground);
+    _hb_ft_paint (&c, paint);
+
+    paint_funcs->pop_root_transform (paint_data);
+    if (has_clip)
       paint_funcs->pop_clip (paint_data);
 
     return true;
   }
+#endif
 
   /* COLRv0 */
   iterator.p  = NULL;
@@ -349,6 +516,7 @@ hb_ft_paint_glyph_colr (hb_font_t *font,
 
   return false;
 }
+
 #endif
 
 
