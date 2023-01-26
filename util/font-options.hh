@@ -59,6 +59,8 @@ struct font_options_t : face_options_t
 
   hb_bool_t sub_font = false;
   hb_bool_t list_features = false;
+  hb_bool_t list_unicodes = false;
+  hb_bool_t list_glyphs = false;
 #ifndef HB_NO_VAR
   hb_bool_t list_variations = false;
   hb_variation_t *variations = nullptr;
@@ -98,6 +100,8 @@ static G_GNUC_NORETURN void _list_features (hb_face_t *face);
 #ifndef HB_NO_VAR
 static G_GNUC_NORETURN void _list_variations (hb_face_t *face);
 #endif
+static G_GNUC_NORETURN void _list_unicodes (hb_font_t *font);
+static G_GNUC_NORETURN void _list_glyphs (hb_font_t *font);
 
 void
 font_options_t::post_parse (GError **error)
@@ -177,6 +181,12 @@ font_options_t::post_parse (GError **error)
   if (list_variations)
     _list_variations (face);
 #endif
+
+  if (list_unicodes)
+    _list_unicodes (font);
+
+  if (list_glyphs)
+    _list_glyphs (font);
 }
 
 static G_GNUC_NORETURN void
@@ -400,6 +410,85 @@ parse_variations (const char *name G_GNUC_UNUSED,
 }
 #endif
 
+static G_GNUC_NORETURN void
+_list_unicodes (hb_font_t *font)
+{
+  hb_face_t *face = hb_font_get_face (font);
+
+  hb_set_t *unicodes = hb_set_create ();
+  hb_map_t *cmap = hb_map_create ();
+
+  hb_face_collect_nominal_glyph_mapping (face, cmap, unicodes);
+
+  for (hb_codepoint_t u = HB_SET_VALUE_INVALID;
+       hb_set_next (unicodes, &u);)
+  {
+    hb_codepoint_t gid = hb_map_get (cmap, u);
+
+    char glyphname[64];
+    if (!hb_font_get_glyph_name (font, gid,
+				 glyphname, sizeof glyphname))
+      snprintf (glyphname, sizeof glyphname, "gid%u", gid);
+
+    printf ("U+%04X	%s\n", u, glyphname);
+  }
+
+  hb_map_destroy (cmap);
+
+
+  /* List variation-selector sequences. */
+  hb_set_t *vars = hb_set_create ();
+
+  hb_face_collect_variation_selectors (face, vars);
+
+  for (hb_codepoint_t vs = HB_SET_VALUE_INVALID;
+       hb_set_next (vars, &vs);)
+  {
+    hb_set_clear (unicodes);
+    hb_face_collect_variation_unicodes (face, vs, unicodes);
+
+    for (hb_codepoint_t u = HB_SET_VALUE_INVALID;
+	 hb_set_next (unicodes, &u);)
+    {
+      hb_codepoint_t gid = 0;
+      bool b = hb_font_get_variation_glyph (font, u, vs, &gid);
+      assert (b);
+
+      char glyphname[64];
+      if (!hb_font_get_glyph_name (font, gid,
+				   glyphname, sizeof glyphname))
+	snprintf (glyphname, sizeof glyphname, "gid%u", gid);
+
+      printf ("U+%04X,U+%04X	%s\n", vs, u, glyphname);
+    }
+  }
+
+  hb_set_destroy (vars);
+  hb_set_destroy (unicodes);
+
+  exit(0);
+}
+
+static G_GNUC_NORETURN void
+_list_glyphs (hb_font_t *font)
+{
+  hb_face_t *face = hb_font_get_face (font);
+
+  unsigned num_glyphs = hb_face_get_glyph_count (face);
+
+  for (hb_codepoint_t gid = 0; gid < num_glyphs; gid++)
+  {
+    char glyphname[64];
+    if (!hb_font_get_glyph_name (font, gid,
+				 glyphname, sizeof glyphname))
+      snprintf (glyphname, sizeof glyphname, "gid%u", gid);
+
+    printf ("%u	%s\n", gid, glyphname);
+  }
+
+  exit(0);
+}
+
 static gboolean
 parse_font_size (const char *name G_GNUC_UNUSED,
 		 const char *arg,
@@ -490,6 +579,8 @@ font_options_t::add_options (option_parser_t *parser)
 			      G_OPTION_ARG_NONE,	&this->sub_font,		"Create a sub-font (default: false)",		"boolean"},
     {"ft-load-flags",	0, 0, G_OPTION_ARG_INT,		&this->ft_load_flags,		"Set FreeType load-flags (default: 2)",		"integer"},
     {"list-features",	0, 0, G_OPTION_ARG_NONE,	&this->list_features,		"List available font features and quit",	nullptr},
+    {"list-unicodes",	0, 0, G_OPTION_ARG_NONE,	&this->list_unicodes,		"List available characters in the font and quit",	nullptr},
+    {"list-glyphs",	0, 0, G_OPTION_ARG_NONE,	&this->list_glyphs,		"List available glyphs in the font and quit",	nullptr},
     {nullptr}
   };
   parser->add_group (entries,
