@@ -58,15 +58,17 @@ struct info_t
       {"all",		'a', 0, G_OPTION_ARG_NONE,	&this->all,			"Show everything",		nullptr},
 
       {"show-all",	0, 0, G_OPTION_ARG_NONE,	&this->show_all,		"Show all short information (default)",	nullptr},
+      {"show-face-count",0, 0, G_OPTION_ARG_NONE,	&this->show_face_count,		"Show face count",		nullptr},
       {"show-family",	0, 0, G_OPTION_ARG_NONE,	&this->show_family,		"Show family name",		nullptr},
       {"show-style",	0, 0, G_OPTION_ARG_NONE,	&this->show_style,		"Show style name",		nullptr},
       {"show-unique-name",0, 0, G_OPTION_ARG_NONE,	&this->show_unique_name,	"Show unique name",		nullptr},
       {"show-full-name",0, 0, G_OPTION_ARG_NONE,	&this->show_full_name,		"Show full name",		nullptr},
       {"show-postscript-name",0, 0, G_OPTION_ARG_NONE,	&this->show_postscript_name,	"Show Postscript name",		nullptr},
       {"show-version",	0, 0, G_OPTION_ARG_NONE,	&this->show_version,		"Show version",			nullptr},
-      {"show-upem",	0, 0, G_OPTION_ARG_NONE,	&this->show_upem,		"Show Units-Per-EM",		nullptr},
+      {"show-technology",0, 0, G_OPTION_ARG_NONE,	&this->show_technology,		"Show technology",		nullptr},
       {"show-unicode-count",0, 0, G_OPTION_ARG_NONE,	&this->show_unicode_count,	"Show Unicode count",		nullptr},
       {"show-glyph-count",0, 0, G_OPTION_ARG_NONE,	&this->show_glyph_count,	"Show glyph count",		nullptr},
+      {"show-upem",	0, 0, G_OPTION_ARG_NONE,	&this->show_upem,		"Show Units-Per-EM",		nullptr},
       {"show-extents",	0, 0, G_OPTION_ARG_NONE,	&this->show_extents,		"Show extents",			nullptr},
 
       {"get-metric",	0, 0, G_OPTION_ARG_STRING_ARRAY,&this->get_metric,		"Get metric",			"metric tag; eg. 'hasc'"},
@@ -93,10 +95,11 @@ struct info_t
 		       "Query options:",
 		       "Options to query the font instance",
 		       this,
-		       false /* We add below. */);
+		       false);
   }
 
   protected:
+  hb_blob_t *blob = nullptr;
   hb_face_t *face = nullptr;
   hb_font_t *font = nullptr;
 
@@ -115,15 +118,17 @@ struct info_t
   hb_bool_t all = false;
 
   hb_bool_t show_all = false;
+  hb_bool_t show_face_count = false;
   hb_bool_t show_family = false;
   hb_bool_t show_style = false;
   hb_bool_t show_unique_name = false;
   hb_bool_t show_full_name = false;
   hb_bool_t show_postscript_name = false;
   hb_bool_t show_version = false;
-  hb_bool_t show_upem = false;
+  hb_bool_t show_technology = false;
   hb_bool_t show_unicode_count = false;
   hb_bool_t show_glyph_count = false;
+  hb_bool_t show_upem = false;
   hb_bool_t show_extents = false;
 
   char **get_metric = nullptr;
@@ -148,6 +153,7 @@ struct info_t
   template <typename app_t>
   void operator () (app_t *app)
   {
+    blob = hb_blob_reference (((font_options_t *) app)->blob);
     face = hb_face_reference (((font_options_t *) app)->face);
     font = hb_font_reference (((font_options_t *) app)->font);
     verbose = !app->quiet;
@@ -168,15 +174,17 @@ struct info_t
 
     if (show_all)
     {
+      show_face_count =
       show_family =
       show_style =
       show_unique_name =
       show_full_name =
       show_postscript_name =
       show_version =
-      show_upem =
+      show_technology =
       show_unicode_count =
       show_glyph_count =
+      show_upem =
       show_extents =
       true;
       first_item = false;
@@ -197,15 +205,17 @@ struct info_t
       true;
     }
 
+    if (show_face_count)  _show_face_count ();
     if (show_family)	  _show_family ();
     if (show_style)	  _show_style ();
     if (show_unique_name) _show_unique_name ();
     if (show_full_name)	  _show_full_name ();
     if (show_postscript_name)_show_postscript_name ();
     if (show_version)	  _show_version ();
-    if (show_upem)	  _show_upem ();
+    if (show_technology)  _show_technology ();
     if (show_unicode_count)_show_unicode_count ();
     if (show_glyph_count) _show_glyph_count ();
+    if (show_upem)	  _show_upem ();
     if (show_extents)	  _show_extents ();
 
     if (get_metric)	  _get_metric ();
@@ -226,6 +236,7 @@ struct info_t
 
     hb_font_destroy (font);
     hb_face_destroy (face);
+    hb_blob_destroy (blob);
   }
 
   protected:
@@ -240,7 +251,14 @@ struct info_t
     printf ("\n===\n\n");
   }
 
-  void _show_name (const char *label, hb_ot_name_id_t name_id)
+  void
+  _show_face_count ()
+  {
+    printf ("Face count: %u\n", hb_face_count (blob));
+  }
+
+  void
+  _show_name (const char *label, hb_ot_name_id_t name_id)
   {
     if (verbose)
     {
@@ -281,14 +299,44 @@ struct info_t
   }
   void _show_version ()		{ _show_name ("Version", 5); }
 
-  void _show_upem ()
+  bool _has_blob (hb_tag_t tag)
   {
-    if (verbose)
-    {
-      printf ("Units-Per-EM: ");
-    }
+    hb_blob_t *blob = hb_face_reference_table (face, tag);
+    bool ret = hb_blob_get_length (blob);
+    hb_blob_destroy (blob);
+    return ret;
+  }
 
-    printf ("%u\n", hb_face_get_upem (face));
+  void _show_technology ()
+  {
+    if (_has_blob (HB_TAG('g','l','y','f')))
+      printf ("Has TrueType outlines\n");
+    if (_has_blob (HB_TAG('C','F','F',' ')) || _has_blob (HB_TAG('C','F','F','2')))
+      printf ("Has Postscript outlines\n");
+
+    if (_has_blob (HB_TAG('f','p','g','m')) || _has_blob (HB_TAG('p','r','e','p')) || _has_blob (HB_TAG('c','v','t',' ')))
+      printf ("Has TrueType hinting\n");
+
+    if (_has_blob (HB_TAG('G','S','U','B')) || _has_blob (HB_TAG('G','P','O','S')))
+      printf ("Has OpenType layout\n");
+    if (_has_blob (HB_TAG('m','o','r','x')) || _has_blob (HB_TAG('k','e','r','x')))
+      printf ("Has AAT layout\n");
+    if (_has_blob (HB_TAG('S','i','l','f')))
+      printf ("Has Graphite layout\n");
+    if (_has_blob (HB_TAG('k','e','r','n')))
+      printf ("Has legacy kerning\n");
+
+    if (_has_blob (HB_TAG('E','B','D','T')))
+      printf ("Has monochrome bitmaps\n");
+
+    if (_has_blob (HB_TAG('C','B','D','T')) || _has_blob (HB_TAG('s','b','i','x')))
+      printf ("Has color bitmaps\n");
+    if (_has_blob (HB_TAG('S','V','G',' ')))
+      printf ("Has color SVGs\n");
+    if (_has_blob (HB_TAG('C','O','L','R')))
+      printf ("Has color paintings\n");
+
+    if (_has_blob (HB_TAG('f','v','a','r')))  printf ("Has variations\n");
   }
 
   void _show_unicode_count ()
@@ -314,6 +362,16 @@ struct info_t
     }
 
     printf ("%u\n", hb_face_get_glyph_count (face));
+  }
+
+  void _show_upem ()
+  {
+    if (verbose)
+    {
+      printf ("Units-Per-EM: ");
+    }
+
+    printf ("%u\n", hb_face_get_upem (face));
   }
 
   void _show_extents ()
@@ -896,7 +954,7 @@ struct info_t
       if (verbose)
       {
 	printf ("\nPalettes:\n\n");
-	printf ("Index	Name	Flags\n---------------------\n");
+	printf ("Index	Flags	Name\n---------------------\n");
       }
       unsigned count = hb_ot_color_palette_get_count (face);
       for (unsigned i = 0; i < count; i++)
@@ -910,15 +968,15 @@ struct info_t
 			     language,
 			     &name_len, name);
 
-	printf ("%u	%s	", i, name);
+	printf ("%u	", i);
 	if (flags)
 	{
 	  if (flags & HB_OT_COLOR_PALETTE_FLAG_USABLE_WITH_LIGHT_BACKGROUND)
-	    printf ("Usable with light background,");
+	    printf ("Light");
 	  if (flags & HB_OT_COLOR_PALETTE_FLAG_USABLE_WITH_DARK_BACKGROUND)
-	    printf ("Usable with dark background,");
+	    printf ("Dark");
 	}
-	printf ("\n");
+	printf ("%s\n", name);
       }
     }
 
