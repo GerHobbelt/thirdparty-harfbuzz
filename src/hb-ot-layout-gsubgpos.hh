@@ -4470,7 +4470,7 @@ struct GSUBGPOS
     }
 
     hb_blob_ptr_t<T> table;
-  protected:
+//  protected:
     unsigned int lookup_count;
     hb_ot_layout_lookup_accelerator_t *accels;
   };
