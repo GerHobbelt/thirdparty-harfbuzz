@@ -85,6 +85,7 @@ _hb_ot_font_create (hb_font_t *font)
 
   ot_font->ot_face = &font->face->table;
 
+  // retry:
   auto *cmap_cache  = (hb_ot_font_cmap_cache_t *) hb_face_get_user_data (font->face,
 									 &hb_ot_font_cmap_cache_user_data_key);
   if (!cmap_cache)
@@ -92,19 +93,20 @@ _hb_ot_font_create (hb_font_t *font)
     cmap_cache = (hb_ot_font_cmap_cache_t *) hb_malloc (sizeof (hb_ot_font_cmap_cache_t));
     if (unlikely (!cmap_cache)) goto out;
     cmap_cache->init ();
-    if (!hb_face_set_user_data (font->face,
-				&hb_ot_font_cmap_cache_user_data_key,
-				cmap_cache,
-				hb_free,
-				false))
+    if (unlikely (!hb_face_set_user_data (font->face,
+					  &hb_ot_font_cmap_cache_user_data_key,
+					  cmap_cache,
+					  hb_free,
+					  false)))
     {
-      /* Normally we would retry after this, but that would
+      hb_free (cmap_cache);
+      cmap_cache = nullptr;
+      /* Normally we would retry here, but that would
        * infinite-loop if the face is the empty-face.
        * Just let it go and this font will be uncached if it
        * happened to collide with another thread creating the
        * cache at the same time. */
-      hb_free (cmap_cache);
-      cmap_cache = nullptr;
+      // goto retry;
     }
   }
   out:
