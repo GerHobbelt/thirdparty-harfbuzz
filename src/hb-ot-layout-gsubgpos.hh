@@ -532,6 +532,30 @@ struct hb_ot_apply_context_t :
     may_skip (const hb_glyph_info_t &info) const
     { return matcher.may_skip (c, info); }
 
+    enum match_t {
+      MATCH,
+      NOT_MATCH,
+      SKIP
+    };
+
+    match_t match (hb_glyph_info_t &info)
+    {
+      matcher_t::may_skip_t skip = matcher.may_skip (c, info);
+      if (unlikely (skip == matcher_t::SKIP_YES))
+	return SKIP;
+
+      matcher_t::may_match_t match = matcher.may_match (info, get_glyph_data ());
+      if (match == matcher_t::MATCH_YES ||
+	  (match == matcher_t::MATCH_MAYBE &&
+	   skip == matcher_t::SKIP_NO))
+	return MATCH;
+
+      if (skip == matcher_t::SKIP_NO)
+        return NOT_MATCH;
+
+      return SKIP;
+  }
+
     bool next (unsigned *unsafe_to = nullptr)
     {
       assert (num_items > 0);
@@ -543,27 +567,22 @@ struct hb_ot_apply_context_t :
       while ((signed) idx < stop)
       {
 	idx++;
-	hb_glyph_info_t &info = c->buffer->info[idx];
-
-	matcher_t::may_skip_t skip = matcher.may_skip (c, info);
-	if (unlikely (skip == matcher_t::SKIP_YES))
-	  continue;
-
-	matcher_t::may_match_t match = matcher.may_match (info, get_glyph_data ());
-	if (match == matcher_t::MATCH_YES ||
-	    (match == matcher_t::MATCH_MAYBE &&
-	     skip == matcher_t::SKIP_NO))
+	switch (match (c->buffer->info[idx]))
 	{
-	  num_items--;
-	  advance_glyph_data ();
-	  return true;
-	}
-
-	if (skip == matcher_t::SKIP_NO)
-	{
-	  if (unsafe_to)
-	    *unsafe_to = idx + 1;
-	  return false;
+	  case MATCH:
+	  {
+	    num_items--;
+	    advance_glyph_data ();
+	    return true;
+	  }
+	  case NOT_MATCH:
+	  {
+	    if (unsafe_to)
+	      *unsafe_to = idx + 1;
+	    return false;
+	  }
+	  case SKIP:
+	    continue;
 	}
       }
       if (unsafe_to)
@@ -578,37 +597,25 @@ struct hb_ot_apply_context_t :
       unsigned stop = num_items - 1;
       if (c->buffer->flags & HB_BUFFER_FLAG_PRODUCE_UNSAFE_TO_CONCAT)
         stop = 1 - 1;
-
-      /* When looking back, limit how far we search; this function is mostly
-       * used for looking back for base glyphs when attaching marks. If we
-       * don't limit, we can get O(n^2) behavior where n is the number of
-       * consecutive marks. */
-      stop = (unsigned) hb_max ((int) stop, (int) idx - HB_MAX_CONTEXT_LENGTH);
-
       while (idx > stop)
       {
 	idx--;
-	hb_glyph_info_t &info = c->buffer->out_info[idx];
-
-	matcher_t::may_skip_t skip = matcher.may_skip (c, info);
-	if (unlikely (skip == matcher_t::SKIP_YES))
-	  continue;
-
-	matcher_t::may_match_t match = matcher.may_match (info, get_glyph_data ());
-	if (match == matcher_t::MATCH_YES ||
-	    (match == matcher_t::MATCH_MAYBE &&
-	     skip == matcher_t::SKIP_NO))
+	switch (match (c->buffer->out_info[idx]))
 	{
-	  num_items--;
-	  advance_glyph_data ();
-	  return true;
-	}
-
-	if (skip == matcher_t::SKIP_NO)
-	{
-	  if (unsafe_from)
-	    *unsafe_from = hb_max (1u, idx) - 1u;
-	  return false;
+	  case MATCH:
+	  {
+	    num_items--;
+	    advance_glyph_data ();
+	    return true;
+	  }
+	  case NOT_MATCH:
+	  {
+	    if (unsafe_from)
+	      *unsafe_from = hb_max (1u, idx) - 1u;
+	    return false;
+	  }
+	  case SKIP:
+	    continue;
 	}
       }
       if (unsafe_from)
@@ -705,6 +712,9 @@ struct hb_ot_apply_context_t :
   uint32_t random_state = 1;
   unsigned new_syllables = (unsigned) -1;
 
+  signed last_base = -1; // GPOS uses
+  unsigned last_base_until = 0; // GPOS uses
+
   hb_ot_apply_context_t (unsigned int table_index_,
 			 hb_font_t *font_,
 			 hb_buffer_t *buffer_) :
@@ -743,7 +753,7 @@ struct hb_ot_apply_context_t :
     iter_context.init (this, true);
   }
 
-  void set_lookup_mask (hb_mask_t mask) { lookup_mask = mask; init_iters (); }
+  void set_lookup_mask (hb_mask_t mask) { lookup_mask = mask; last_base = -1; last_base_until = 0; init_iters (); }
   void set_auto_zwj (bool auto_zwj_) { auto_zwj = auto_zwj_; init_iters (); }
   void set_auto_zwnj (bool auto_zwnj_) { auto_zwnj = auto_zwnj_; init_iters (); }
   void set_per_syllable (bool per_syllable_) { per_syllable = per_syllable_; init_iters (); }
