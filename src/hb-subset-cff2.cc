@@ -59,7 +59,10 @@ struct cff2_top_dict_op_serializer_t : cff_top_dict_op_serializer_t<>
     switch (opstr.op)
     {
       case OpCode_vstore:
-	return_trace (FontDict::serialize_link4_op(c, opstr.op, info.var_store_link));
+        if (info.var_store_link)
+	  return_trace (FontDict::serialize_link4_op(c, opstr.op, info.var_store_link));
+	else
+	  return_trace (true);
 
       default:
 	return_trace (cff_top_dict_op_serializer_t<>::serialize (c, opstr, info));
@@ -243,16 +246,17 @@ struct cff2_subr_subsetter_t : subr_subsetter_t<cff2_subr_subsetter_t, CFF2Subrs
   }
 };
 
-struct cff2_subset_plan {
-
+struct cff2_subset_plan
+{
   bool create (const OT::cff2::accelerator_subset_t &acc,
 	      hb_subset_plan_t *plan)
   {
     orig_fdcount = acc.fdArray->count;
 
     drop_hints = plan->flags & HB_SUBSET_FLAGS_NO_HINTING;
+    pinned = (bool) plan->normalized_coords;
     desubroutinize = plan->flags & HB_SUBSET_FLAGS_DESUBROUTINIZE ||
-		     plan->normalized_coords; // For instancing we need this path
+		     pinned; // For instancing we need this path
 
     if (desubroutinize)
     {
@@ -271,7 +275,7 @@ struct cff2_subset_plan {
 	return false;
 
       /* encode charstrings, global subrs, local subrs with new subroutine numbers */
-      if (!subr_subsetter.encode_charstrings (subset_charstrings))
+      if (!subr_subsetter.encode_charstrings (subset_charstrings, !pinned))
 	return false;
 
       if (!subr_subsetter.encode_globalsubrs (subset_globalsubrs))
@@ -311,8 +315,9 @@ struct cff2_subset_plan {
 
   unsigned int    orig_fdcount = 0;
   unsigned int    subset_fdcount = 1;
-  unsigned int	  subset_fdselect_size = 0;
+  unsigned int    subset_fdselect_size = 0;
   unsigned int    subset_fdselect_format = 0;
+  bool            pinned = false;
   hb_vector_t<code_pair_t>   subset_fdselect_ranges;
 
   hb_inc_bimap_t   fdmap;
@@ -356,7 +361,7 @@ static bool _serialize_cff2 (hb_serialize_context_t *c,
       PrivateDict *pd = c->start_embed<PrivateDict> ();
       if (unlikely (!pd)) return false;
       c->push ();
-      cff_private_dict_op_serializer_t privSzr (plan.desubroutinize, plan.drop_hints);
+      cff_private_dict_op_serializer_t privSzr (plan.desubroutinize, plan.drop_hints, plan.pinned);
       if (likely (pd->serialize (c, acc.privateDicts[i], privSzr, subrs_link)))
       {
 	unsigned fd = plan.fdmap[i];
@@ -424,7 +429,8 @@ static bool _serialize_cff2 (hb_serialize_context_t *c,
   }
 
   /* variation store */
-  if (acc.varStore != &Null (CFF2VariationStore))
+  if (acc.varStore != &Null (CFF2VariationStore) &&
+      !plan.pinned)
   {
     c->push ();
     CFF2VariationStore *dest = c->start_embed<CFF2VariationStore> ();
