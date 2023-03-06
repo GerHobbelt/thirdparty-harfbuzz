@@ -116,8 +116,9 @@ struct hb_font_t
 
   float x_embolden;
   float y_embolden;
-  int32_t x_shift; /* x_embolden, in scaled units. */
-  int32_t y_shift; /* y_embolden, in scaled units. */
+  bool embolden_in_place;
+  int32_t x_strength; /* x_embolden, in scaled units. */
+  int32_t y_strength; /* y_embolden, in scaled units. */
 
   float slant;
   float slant_xy;
@@ -207,6 +208,21 @@ struct hb_font_t
     extents->width = ceilf (x2) - extents->x_bearing;
     extents->height = ceilf (y2) - extents->y_bearing;
 
+    if (x_strength || y_strength)
+    {
+      /* Y */
+      int y_shift = y_strength;
+      if (y_scale < 0) y_shift = -y_shift;
+      extents->y_bearing += y_shift;
+      extents->height -= y_shift;
+
+      /* X */
+      int x_shift = x_strength;
+      if (x_scale < 0) x_shift = -x_shift;
+      if (embolden_in_place)
+	extents->x_bearing -= x_shift / 2;
+      extents->width += x_shift;
+    }
   }
 
 
@@ -681,8 +697,8 @@ struct hb_font_t
     bool y_neg = y_scale < 0;
     y_mult = (y_neg ? -((int64_t) -y_scale << 16) : ((int64_t) y_scale << 16)) / upem;
 
-    x_shift = fabs (roundf (x_scale * x_embolden));
-    y_shift = fabs (roundf (y_scale * y_embolden));
+    x_strength = fabs (roundf (x_scale * x_embolden));
+    y_strength = fabs (roundf (y_scale * y_embolden));
 
     slant_xy = y_scale ? slant * x_scale / y_scale : 0.f;
 
