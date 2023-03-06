@@ -34,7 +34,7 @@
 #include "hb-font.hh"
 #include "hb-machinery.hh"
 #include "hb-ot-face.hh"
-#include "hb-draw-embolden.hh"
+#include "hb-outline.hh"
 
 #include "hb-ot-cmap-table.hh"
 #include "hb-ot-glyf-table.hh"
@@ -467,17 +467,17 @@ hb_ot_draw_glyph (hb_font_t *font,
   hb_outline_t outline;
   auto *pen = hb_outline_recording_pen_get_funcs ();
 
-  hb_draw_session_t draw_session (pen, &outline, font->slant_xy);
-  if (!font->face->table.glyf->get_path (font, glyph, draw_session))
+  { // Need draw_session to be destructed before emboldening.
+    hb_draw_session_t draw_session (pen, &outline, font->slant_xy);
+    if (!font->face->table.glyf->get_path (font, glyph, draw_session))
 #ifndef HB_NO_CFF
-  if (!font->face->table.cff1->get_path (font, glyph, draw_session))
-  if (!font->face->table.cff2->get_path (font, glyph, draw_session))
+    if (!font->face->table.cff1->get_path (font, glyph, draw_session))
+    if (!font->face->table.cff2->get_path (font, glyph, draw_session))
 #endif
-  {}
+    {}
+  }
 
-  float xstr = font->x_scale / 20;
-  float ystr = font->y_scale / 20;
-  outline.embolden (xstr, ystr);
+  outline.embolden (font->x_shift, font->y_shift);
   outline.replay (draw_funcs, draw_data);
 
 }
