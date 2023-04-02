@@ -31,6 +31,12 @@ struct glyf
 
   static constexpr hb_tag_t tableTag = HB_OT_TAG_glyf;
 
+  static bool has_valid_glyf_format(const hb_face_t* face)
+  {
+    const OT::head &head = *face->table.head;
+    return head.indexToLocFormat <= 1 && head.glyphDataFormat <= 1;
+  }
+
   bool sanitize (hb_sanitize_context_t *c HB_UNUSED) const
   {
     TRACE_SANITIZE (this);
@@ -72,6 +78,13 @@ struct glyf
   {
     TRACE_SUBSET (this);
 
+    if (!has_valid_glyf_format (c->plan->source)) {
+      // glyf format is unknown don't attempt to subset it.
+      DEBUG_MSG (SUBSET, nullptr,
+                 "unkown glyf format, dropping from subset.");
+      return_trace (false);
+    }
+
     glyf *glyf_prime = c->serializer->start_embed <glyf> ();
     if (unlikely (!c->serializer->check_success (glyf_prime))) return_trace (false);
 
@@ -85,11 +98,17 @@ struct glyf
     hb_vector_t<unsigned> padded_offsets;
     unsigned num_glyphs = c->plan->num_output_glyphs ();
     if (unlikely (!padded_offsets.resize (num_glyphs)))
+    {
+      hb_font_destroy (font);
       return false;
+    }
 
     hb_vector_t<glyf_impl::SubsetGlyph> glyphs;
     if (!_populate_subset_glyphs (c->plan, font, glyphs))
+    {
+      hb_font_destroy (font);
       return false;
+    }
 
     if (font)
       hb_font_destroy (font);
@@ -162,7 +181,7 @@ struct glyf_accelerator_t
     vmtx = nullptr;
 #endif
     const OT::head &head = *face->table.head;
-    if (head.indexToLocFormat > 1 || head.glyphDataFormat > 0)
+    if (!glyf::has_valid_glyf_format (face))
       /* Unknown format.  Leave num_glyphs=0, that takes care of disabling us. */
       return;
     short_offset = 0 == head.indexToLocFormat;
@@ -451,7 +470,10 @@ glyf::_create_font_for_instancing (const hb_subset_plan_t *plan) const
 
   hb_vector_t<hb_variation_t> vars;
   if (unlikely (!vars.alloc (plan->user_axes_location.get_population (), true)))
+  {
+    hb_font_destroy (font);
     return nullptr;
+  }
 
   for (auto _ : plan->user_axes_location)
   {
