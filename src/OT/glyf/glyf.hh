@@ -131,7 +131,7 @@ struct glyf
 
     bool result = glyf_prime->serialize (c->serializer, glyphs.writer (), use_short_loca, c->plan);
     if (c->plan->normalized_coords && !c->plan->pinned_at_default)
-      _free_compiled_subset_glyphs (glyphs, glyphs.length - 1);
+      _free_compiled_subset_glyphs (glyphs);
 
     if (!result) return false;
 
@@ -150,9 +150,9 @@ struct glyf
   hb_font_t *
   _create_font_for_instancing (const hb_subset_plan_t *plan) const;
 
-  void _free_compiled_subset_glyphs (hb_vector_t<glyf_impl::SubsetGlyph> &glyphs, unsigned index) const
+  void _free_compiled_subset_glyphs (hb_vector_t<glyf_impl::SubsetGlyph> &glyphs) const
   {
-    for (unsigned i = 0; i <= index && i < glyphs.length; i++)
+    for (unsigned i = 0; i < glyphs.length; i++)
       glyphs[i].free_compiled_bytes ();
   }
 
@@ -424,7 +424,6 @@ glyf::_populate_subset_glyphs (const hb_subset_plan_t   *plan,
   unsigned num_glyphs = plan->num_output_glyphs ();
   if (!glyphs.resize (num_glyphs)) return false;
 
-  unsigned idx = 0;
   for (auto p : plan->glyph_map->iter ())
   {
     unsigned new_gid = p.second;
@@ -452,11 +451,10 @@ glyf::_populate_subset_glyphs (const hb_subset_plan_t   *plan,
       if (unlikely (!subset_glyph.compile_bytes_with_deltas (plan, font, glyf)))
       {
         // when pinned at default, only bounds are updated, thus no need to free
-        if (!plan->pinned_at_default && idx > 0)
-          _free_compiled_subset_glyphs (glyphs, idx - 1);
+        if (!plan->pinned_at_default)
+          _free_compiled_subset_glyphs (glyphs);
         return false;
       }
-      idx++;
     }
   }
   return true;
