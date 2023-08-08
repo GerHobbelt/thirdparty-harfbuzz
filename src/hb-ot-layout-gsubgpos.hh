@@ -818,7 +818,7 @@ struct hb_ot_apply_context_t :
      * match_props has the set index.
      */
     if (match_props & LookupFlag::UseMarkFilteringSet)
-      return gdef.mark_set_covers (match_props >> 16, glyph);
+      return gdef_accel.mark_set_covers (match_props >> 16, glyph);
 
     /* The second byte of match_props has the meaning
      * "ignore marks of attachment type different than
@@ -2214,6 +2214,8 @@ struct RuleSet
       unsafe_to2 = skippy_iter.idx + 1;
     }
 
+    auto match_input = lookup_context.funcs.match;
+    auto *input_data = lookup_context.match_data;
     for (unsigned int i = 0; i < num_rules; i++)
     {
       const auto &r = this+rule.arrayZ[i];
@@ -2221,13 +2223,13 @@ struct RuleSet
       const auto &input = r.inputZ;
 
       if (r.inputCount <= 1 ||
-	  (!lookup_context.funcs.match ||
-	   lookup_context.funcs.match (*first, input.arrayZ[0], lookup_context.match_data)))
+	  (!match_input ||
+	   match_input (*first, input.arrayZ[0], input_data)))
       {
         if (!second ||
 	    (r.inputCount <= 2 ||
-	     (!lookup_context.funcs.match ||
-	      lookup_context.funcs.match (*second, input.arrayZ[1], lookup_context.match_data)))
+	     (!match_input ||
+	      match_input (*second, input.arrayZ[1], input_data)))
 	   )
 	{
 	  if (r.apply (c, lookup_context))
@@ -3371,7 +3373,12 @@ struct ChainRuleSet
       return_trace (
       + hb_iter (rule)
       | hb_map (hb_add (this))
-      | hb_filter ([&] (const ChainRule &_) { return _.inputX.lenP1 <= 1 && _.lookaheadX.len == 0; })
+      | hb_filter ([&] (const ChainRule &_)
+		   {
+		     const auto &input = StructAfter<decltype (_.inputX)> (_.backtrack);
+		     const auto &lookahead = StructAfter<decltype (_.lookaheadX)> (input);
+		     return input.lenP1 <= 1 && lookahead.len == 0;
+		   })
       | hb_map ([&] (const ChainRule &_) { return _.apply (c, lookup_context); })
       | hb_any
       )
@@ -3384,6 +3391,10 @@ struct ChainRuleSet
       unsafe_to2 = skippy_iter.idx + 1;
      }
 
+    auto match_input = lookup_context.funcs.match[1];
+    auto match_lookahead = lookup_context.funcs.match[2];
+    auto *input_data = lookup_context.match_data[1];
+    auto *lookahead_data = lookup_context.match_data[2];
     for (unsigned int i = 0; i < num_rules; i++)
     {
       const auto &r = this+rule.arrayZ[i];
@@ -3391,20 +3402,21 @@ struct ChainRuleSet
       const auto &input = StructAfter<decltype (r.inputX)> (r.backtrack);
       const auto &lookahead = StructAfter<decltype (r.lookaheadX)> (input);
 
-      if (input.lenP1 > 1 ?
-	   (!lookup_context.funcs.match[1] ||
-	    lookup_context.funcs.match[1] (*first, input.arrayZ[0], lookup_context.match_data[1]))
+      unsigned lenP1 = hb_max ((unsigned) input.lenP1, 1u);
+      if (lenP1 > 1 ?
+	   (!match_input ||
+	    match_input (*first, input.arrayZ[0], input_data))
 	  :
-	   (!lookahead.len || !lookup_context.funcs.match[2] ||
-	    lookup_context.funcs.match[2] (*first, lookahead.arrayZ[0], lookup_context.match_data[2])))
+	   (!lookahead.len || !match_lookahead ||
+	    match_lookahead (*first, lookahead.arrayZ[0], lookahead_data)))
       {
         if (!second ||
-	    (input.lenP1 > 2 ?
-	     (!lookup_context.funcs.match[1] ||
-	      lookup_context.funcs.match[1] (*second, input.arrayZ[1], lookup_context.match_data[1]))
+	    (lenP1 > 2 ?
+	     (!match_input ||
+	      match_input (*second, input.arrayZ[1], input_data))
 	     :
-	     (lookahead.len <= 2 - input.lenP1 || !lookup_context.funcs.match[2] ||
-	      lookup_context.funcs.match[2] (*second, lookahead.arrayZ[2 - input.lenP1], lookup_context.match_data[2]))))
+	     (lookahead.len <= 2 - lenP1 || !match_lookahead ||
+	      match_lookahead (*second, lookahead.arrayZ[2 - lenP1], lookahead_data))))
 	{
 	  if (r.apply (c, lookup_context))
 	  {
