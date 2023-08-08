@@ -465,10 +465,7 @@ struct cff1_subset_plan
       }
 
       if (code != last_code + 1)
-      {
-	code_pair_t pair { code, glyph };
-	subset_enc_code_ranges.push (pair);
-      }
+	subset_enc_code_ranges.push (code_pair_t {code, glyph});
       last_code = code;
 
       if (encoding != &Null (Encoding))
@@ -476,10 +473,7 @@ struct cff1_subset_plan
 	hb_codepoint_t  sid = acc.glyph_to_sid (old_glyph, &glyph_to_sid_cache);
 	encoding->get_supplement_codes (sid, supp_codes);
 	for (unsigned int i = 0; i < supp_codes.length; i++)
-	{
-	  code_pair_t pair { supp_codes[i], sid };
-	  subset_enc_supp_codes.push (pair);
-	}
+	  subset_enc_supp_codes.push (code_pair_t {supp_codes[i], sid});
       }
     }
     supp_codes.fini ();
@@ -519,9 +513,9 @@ struct cff1_subset_plan
       return;
     }
 
-    hb_vector_t<uint16_t> *glyph_to_sid_map = acc.cff_accelerator ?
-					      acc.cff_accelerator->glyph_to_sid_map.get_acquire () :
-					      nullptr;
+    glyph_to_sid_map_t *glyph_to_sid_map = acc.cff_accelerator ?
+					   acc.cff_accelerator->glyph_to_sid_map.get_acquire () :
+					   nullptr;
     bool created_map = false;
     if (!glyph_to_sid_map && acc.cff_accelerator)
     {
@@ -533,6 +527,7 @@ struct cff1_subset_plan
     if (it->first == 0) it++;
     auto _ = *it;
     bool not_is_cid = !acc.is_CID ();
+    bool skip = !not_is_cid && glyph_to_sid_map;
     if (not_is_cid)
       sidmap.alloc (num_glyphs);
     for (glyph = 1; glyph < num_glyphs; glyph++)
@@ -548,15 +543,22 @@ struct cff1_subset_plan
 	/* Retain the SID for the old missing glyph ID */
 	old_glyph = glyph;
       }
-      unsigned sid = glyph_to_sid_map ? glyph_to_sid_map->arrayZ[old_glyph] : acc.glyph_to_sid (old_glyph, &glyph_to_sid_cache);
+      unsigned sid = glyph_to_sid_map ?
+		     glyph_to_sid_map->arrayZ[old_glyph].code :
+		     acc.glyph_to_sid (old_glyph, &glyph_to_sid_cache);
 
       if (not_is_cid)
 	sid = sidmap.add (sid);
 
       if (sid != last_sid + 1)
       {
-	code_pair_t pair { sid, glyph };
-	subset_charset_ranges.push (pair);
+	subset_charset_ranges.push (code_pair_t {sid, glyph});
+
+	if (skip && glyph == old_glyph)
+	{
+	  glyph = hb_min (_.first - 1, glyph_to_sid_map->arrayZ[old_glyph].glyph - 1);
+	  sid += glyph - old_glyph;
+	}
       }
       last_sid = sid;
     }
@@ -566,7 +568,7 @@ struct cff1_subset_plan
       if ((!plan->accelerator && acc.cff_accelerator) ||
 	  !acc.cff_accelerator->glyph_to_sid_map.cmpexch (nullptr, glyph_to_sid_map))
       {
-	glyph_to_sid_map->~hb_vector_t ();
+	glyph_to_sid_map->~glyph_to_sid_map_t ();
 	hb_free (glyph_to_sid_map);
       }
     }
