@@ -42,7 +42,9 @@ struct cff_subset_accelerator_t;
 
 namespace OT {
 struct SubtableUnicodesCache;
-};
+struct cff1_subset_accelerator_t;
+struct cff2_subset_accelerator_t;
+}
 
 struct hb_subset_accelerator_t
 {
@@ -51,7 +53,8 @@ struct hb_subset_accelerator_t
     return &_hb_subset_accelerator_user_data_key;
   }
 
-  static hb_subset_accelerator_t* create(const hb_map_t& unicode_to_gid_,
+  static hb_subset_accelerator_t* create(hb_face_t *source,
+					 const hb_map_t& unicode_to_gid_,
 					 const hb_set_t& unicodes_,
 					 bool has_seac_) {
     hb_subset_accelerator_t* accel =
@@ -59,7 +62,8 @@ struct hb_subset_accelerator_t
 
     if (unlikely (!accel)) return accel;
 
-    new (accel) hb_subset_accelerator_t (unicode_to_gid_,
+    new (accel) hb_subset_accelerator_t (source,
+					 unicode_to_gid_,
 					 unicodes_,
 					 has_seac_);
 
@@ -77,7 +81,8 @@ struct hb_subset_accelerator_t
     hb_free (accel);
   }
 
-  hb_subset_accelerator_t (const hb_map_t& unicode_to_gid_,
+  hb_subset_accelerator_t (hb_face_t *source,
+			   const hb_map_t& unicode_to_gid_,
 			   const hb_set_t& unicodes_,
 			   bool has_seac_) :
     unicode_to_gid(unicode_to_gid_),
@@ -85,8 +90,7 @@ struct hb_subset_accelerator_t
     cmap_cache(nullptr),
     destroy_cmap_cache(nullptr),
     has_seac(has_seac_),
-    cff_accelerator(nullptr),
-    destroy_cff_accelerator(nullptr)
+    source(hb_face_reference (source))
   {
     gid_to_unicodes.resize (unicode_to_gid.get_population ());
     for (const auto &_ : unicode_to_gid)
@@ -97,14 +101,7 @@ struct hb_subset_accelerator_t
     }
   }
 
-  ~hb_subset_accelerator_t ()
-  {
-    if (cff_accelerator && destroy_cff_accelerator)
-      destroy_cff_accelerator ((void*) cff_accelerator);
-
-    if (cmap_cache && destroy_cmap_cache)
-      destroy_cmap_cache ((void*) cmap_cache);
-  }
+  HB_INTERNAL ~hb_subset_accelerator_t ();
 
   // Generic
 
@@ -121,8 +118,6 @@ struct hb_subset_accelerator_t
 
   // CFF
   bool has_seac;
-  const CFF::cff_subset_accelerator_t* cff_accelerator;
-  hb_destroy_func_t destroy_cff_accelerator;
 
   // TODO(garretrieger): cumulative glyf checksum map
 
@@ -133,6 +128,13 @@ struct hb_subset_accelerator_t
 	   unicodes.in_error () ||
 	   sanitized_table_cache.in_error ();
   }
+
+  hb_face_t *source;
+#ifndef HB_NO_SUBSET_CFF
+  // These have to be immediately after source:
+  mutable hb_face_lazy_loader_t<OT::cff1_subset_accelerator_t, 1> cff1_accel;
+  mutable hb_face_lazy_loader_t<OT::cff2_subset_accelerator_t, 2> cff2_accel;
+#endif
 };
 
 

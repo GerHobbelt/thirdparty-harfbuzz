@@ -48,10 +48,24 @@
 using OT::Layout::GSUB;
 using OT::Layout::GPOS;
 
+
+hb_subset_accelerator_t::~hb_subset_accelerator_t ()
+{
+  if (cmap_cache && destroy_cmap_cache)
+    destroy_cmap_cache ((void*) cmap_cache);
+
+#ifndef HB_NO_SUBSET_CFF
+  cff1_accel.fini ();
+  cff2_accel.fini ();
+#endif
+  hb_face_destroy (source);
+}
+
+
 typedef hb_hashmap_t<unsigned, hb::unique_ptr<hb_set_t>> script_langsys_map;
 #ifndef HB_NO_SUBSET_CFF
 static inline bool
-_add_cff_seac_components (const OT::cff1::accelerator_t &cff,
+_add_cff_seac_components (const OT::cff1::accelerator_subset_t &cff,
 			  hb_codepoint_t gid,
 			  hb_set_t *gids_to_retain)
 {
@@ -689,7 +703,11 @@ _populate_gids_to_retain (hb_subset_plan_t* plan,
 {
   OT::glyf_accelerator_t glyf (plan->source);
 #ifndef HB_NO_SUBSET_CFF
-  OT::cff1::accelerator_t cff (plan->source);
+  // Note: we cannot use inprogress_accelerator here, since it has not been
+  // created yet. So in case of preprocessed-face (and otherwise), we do an
+  // extra sanitize pass here, which is not ideal.
+  OT::cff1::accelerator_subset_t stack_cff (plan->accelerator ? nullptr : plan->source);
+  const OT::cff1::accelerator_subset_t *cff (plan->accelerator ? plan->accelerator->cff1_accel.get () : &stack_cff);
 #endif
 
   plan->_glyphset_gsub.add (0); // Not-def
@@ -751,9 +769,9 @@ _populate_gids_to_retain (hb_subset_plan_t* plan,
   if (!plan->accelerator || plan->accelerator->has_seac)
   {
     bool has_seac = false;
-    if (cff.is_valid ())
+    if (cff->is_valid ())
       for (hb_codepoint_t gid : cur_glyphset)
-	if (_add_cff_seac_components (cff, gid, &plan->_glyphset))
+	if (_add_cff_seac_components (*cff, gid, &plan->_glyphset))
 	  has_seac = true;
     plan->has_seac = has_seac;
   }
@@ -1130,7 +1148,8 @@ hb_subset_plan_t::hb_subset_plan_t (hb_face_t *face,
   if (attach_accelerator_data)
   {
     inprogress_accelerator =
-      hb_subset_accelerator_t::create (*codepoint_to_glyph,
+      hb_subset_accelerator_t::create (source,
+				       *codepoint_to_glyph,
                                        unicodes,
 				       has_seac);
 
@@ -1141,6 +1160,29 @@ hb_subset_plan_t::hb_subset_plan_t (hb_face_t *face,
 #include "hb-subset-plan-member-list.hh"
 #undef HB_SUBSET_PLAN_MEMBER
 }
+
+hb_subset_plan_t::~hb_subset_plan_t()
+{
+  hb_face_destroy (dest);
+
+  hb_map_destroy (codepoint_to_glyph);
+  hb_map_destroy (glyph_map);
+  hb_map_destroy (reverse_glyph_map);
+#ifndef HB_NO_SUBSET_CFF
+  cff1_accel.fini ();
+  cff2_accel.fini ();
+#endif
+  hb_face_destroy (source);
+
+#ifdef HB_EXPERIMENTAL_API
+  for (auto _ : name_table_overrides.iter_ref ())
+    _.second.fini ();
+#endif
+
+  if (inprogress_accelerator)
+    hb_subset_accelerator_t::destroy ((void*) inprogress_accelerator);
+}
+
 
 /**
  * hb_subset_plan_create_or_fail:
