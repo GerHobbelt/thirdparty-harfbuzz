@@ -55,7 +55,7 @@ struct glyf
 
     unsigned init_len = c->length ();
     for (auto &_ : it)
-      if (unlikely (!_.second.serialize (c, use_short_loca, plan)))
+      if (unlikely (!_.serialize (c, use_short_loca, plan)))
         return false;
 
     /* As a special case when all glyph in the font are empty, add a zero byte
@@ -95,15 +95,7 @@ struct glyf
       if (unlikely (!font)) return false;
     }
 
-    hb_vector_t<unsigned> padded_offsets;
-    unsigned num_glyphs = c->plan->num_output_glyphs ();
-    if (unlikely (!padded_offsets.resize (num_glyphs, false, true)))
-    {
-      hb_font_destroy (font);
-      return false;
-    }
-
-    hb_sorted_vector_t<hb_pair_t<hb_codepoint_t, glyf_impl::SubsetGlyph>> glyphs;
+    hb_vector_t<glyf_impl::SubsetGlyph> glyphs;
     if (!_populate_subset_glyphs (c->plan, font, glyphs))
     {
       hb_font_destroy (font);
@@ -113,14 +105,18 @@ struct glyf
     if (font)
       hb_font_destroy (font);
 
+    // Calculate glyph sizes for `loca` table
+
+    hb_vector_t<unsigned> padded_offsets;
+    if (unlikely (!padded_offsets.alloc (glyphs.length, true)))
+      return false;
+
     unsigned max_offset = 0;
-    for (unsigned i = 0, j = 0; i < num_glyphs; i++)
+    for (auto &g : glyphs)
     {
-      if (i == glyphs[j].first)
-	padded_offsets.arrayZ[i] = glyphs[j++].second.padded_size ();
-      else
-	padded_offsets.arrayZ[i] = 0;
-      max_offset += padded_offsets[i];
+      unsigned size = g.padded_size ();
+      padded_offsets.push (size);
+      max_offset += size;
     }
 
     bool use_short_loca = false;
@@ -129,11 +125,9 @@ struct glyf
 
     if (!use_short_loca)
     {
-      for (unsigned i = 0, j = 0; i < num_glyphs; i++)
-	if (i == glyphs[j].first)
-	  padded_offsets.arrayZ[i] = glyphs[j++].second.length ();
-	else
-	  padded_offsets.arrayZ[i] = 0;
+      padded_offsets.resize (0);
+      for (auto &g : glyphs)
+	padded_offsets.push (g.length ());
     }
 
     bool result = glyf_prime->serialize (c->serializer, glyphs, use_short_loca, c->plan);
@@ -146,21 +140,23 @@ struct glyf
 
     return_trace (c->serializer->check_success (glyf_impl::_add_loca_and_head (c->plan,
 									       padded_offsets.iter (),
+									       c->plan->new_to_old_gid_list,
+									       c->plan->num_output_glyphs (),
 									       use_short_loca)));
   }
 
   bool
   _populate_subset_glyphs (const hb_subset_plan_t   *plan,
 			   hb_font_t                *font,
-			   hb_sorted_vector_t<hb_pair_t<hb_codepoint_t, glyf_impl::SubsetGlyph>>& glyphs /* OUT */) const;
+			   hb_vector_t<glyf_impl::SubsetGlyph>& glyphs /* OUT */) const;
 
   hb_font_t *
   _create_font_for_instancing (const hb_subset_plan_t *plan) const;
 
-  void _free_compiled_subset_glyphs (hb_sorted_vector_t<hb_pair_t<hb_codepoint_t, glyf_impl::SubsetGlyph>> &glyphs) const
+  void _free_compiled_subset_glyphs (hb_vector_t<glyf_impl::SubsetGlyph> &glyphs) const
   {
     for (unsigned i = 0; i < glyphs.length; i++)
-      glyphs[i].second.free_compiled_bytes ();
+      glyphs[i].free_compiled_bytes ();
   }
 
   protected:
@@ -435,17 +431,17 @@ struct glyf_accelerator_t
 inline bool
 glyf::_populate_subset_glyphs (const hb_subset_plan_t   *plan,
 			       hb_font_t *font,
-			       hb_sorted_vector_t<hb_pair_t<hb_codepoint_t, glyf_impl::SubsetGlyph>>& glyphs /* OUT */) const
+			       hb_vector_t<glyf_impl::SubsetGlyph>& glyphs /* OUT */) const
 {
   OT::glyf_accelerator_t glyf (plan->source);
   if (!glyphs.alloc (plan->glyph_map->get_population (), true)) return false;
 
-  for (hb_codepoint_t old_gid : *plan->glyphset ())
+  for (const auto &pair : plan->new_to_old_gid_list)
   {
-    hb_codepoint_t new_gid = (*plan->glyph_map)[old_gid];
-    hb_pair_t<hb_codepoint_t, glyf_impl::SubsetGlyph> *pair = glyphs.push ();
-    pair->first = new_gid;
-    glyf_impl::SubsetGlyph& subset_glyph = pair->second;
+    hb_codepoint_t new_gid = pair.first;
+    hb_codepoint_t old_gid = pair.second;
+    glyf_impl::SubsetGlyph *p = glyphs.push ();
+    glyf_impl::SubsetGlyph& subset_glyph = *p;
     subset_glyph.old_gid = old_gid;
 
     if (unlikely (old_gid == 0 && new_gid == 0 &&
