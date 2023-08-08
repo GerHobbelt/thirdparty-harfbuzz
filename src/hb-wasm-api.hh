@@ -29,11 +29,16 @@
 
 #include <wasm_export.h>
 
-#define HB_WASM_API(x) HB_INTERNAL x
 #define HB_WASM_BEGIN_DECLS namespace hb { namespace wasm {
 #define HB_WASM_END_DECLS }}
 
+#define HB_WASM_API(ret_t, name) HB_INTERNAL ret_t name
+#define HB_WASM_API_COMPOUND(ret_t, name) HB_INTERNAL void name
+
 #define HB_WASM_EXEC_ENV wasm_exec_env_t exec_env,
+#define HB_WASM_EXEC_ENV_COMPOUND wasm_exec_env_t exec_env, ptr_t() retptr,
+
+#define ptr_t(type_t) uint32_t
 
 #include "hb-wasm-api.h"
 
@@ -42,52 +47,57 @@
 #undef HB_WASM_END_DECLS
 
 
+enum {
+  hb_wasm_ref_type_none,
+  hb_wasm_ref_type_face,
+  hb_wasm_ref_type_font,
+  hb_wasm_ref_type_buffer,
+};
+
+HB_INTERNAL extern hb_user_data_key_t _hb_wasm_ref_type_key;
+
 #define nullref 0
-#define module_inst wasm_runtime_get_module_inst (exec_env)
+
 #define HB_REF2OBJ(obj) \
   hb_##obj##_t *obj = nullptr; \
-  (void) wasm_externref_ref2obj (obj##ref, (void **) &obj)
+  HB_STMT_START { \
+    (void) wasm_externref_ref2obj (obj##ref, (void **) &obj); \
+    /* Check object type. */ \
+    /* This works because all our objects have the same hb_object_t layout. */ \
+    if (unlikely (hb_##obj##_get_user_data (obj, &_hb_wasm_ref_type_key) != \
+		  (void *) hb_wasm_ref_type_##obj)) \
+      obj = hb_##obj##_get_empty (); \
+  } HB_STMT_END
+
 #define HB_OBJ2REF(obj) \
   uint32_t obj##ref = nullref; \
-  (void) wasm_externref_obj2ref (module_inst, obj, &obj##ref)
+  HB_STMT_START { \
+    hb_##obj##_set_user_data (obj, &_hb_wasm_ref_type_key, \
+			      (void *) hb_wasm_ref_type_##obj, \
+			      nullptr, false); \
+    (void) wasm_externref_obj2ref (module_inst, obj, &obj##ref); \
+  } HB_STMT_END
 
+#define HB_RETURN_TYPE(type, name) \
+  type *_name_ptr = nullptr; \
+  { \
+    if (likely (wasm_runtime_validate_app_addr (module_inst, \
+						retptr, sizeof (type)))) \
+    { \
+      _name_ptr = (type *) wasm_runtime_addr_app_to_native (module_inst, retptr); \
+      if (unlikely (!_name_ptr)) \
+	return; \
+    } \
+  } \
+  type &name = *_name_ptr
 
-#include "hb-wasm-font.hh"
-
-#ifdef HB_DEBUG_WASM
-namespace hb { namespace wasm {
-static void
-debugprint (HB_WASM_EXEC_ENV
-	    char *the_string)
-{
-  printf("%s", the_string);
-}
-}}
-#endif
-
-
-#undef nullref
-#undef module_inst
-#undef HB_WASM_EXEC_ENV
-#undef HB_REF2OBJ
-#undef HB_OBJ2REF
-
-
-  /* Define an array of NativeSymbol for the APIs to be exported.
-   * Note: the array must be static defined since runtime will keep it after registration
-   * For the function signature specifications, goto the link:
-   * https://github.com/bytecodealliance/wasm-micro-runtime/blob/main/doc/export_native_api.md
-   */
-
-#define NATIVE_SYMBOL(signature, name) {#name, (void *) hb::wasm::name, signature, NULL}
-  static NativeSymbol _hb_wasm_native_symbols[] =
-  {
-    NATIVE_SYMBOL ("(i)i",	font_get_face),
-#ifdef HB_DEBUG_WASM
-    NATIVE_SYMBOL ("($)",	debugprint),
-#endif
-  };
-#undef NATIVE_SYMBOL
+#define HB_STRUCT_TYPE(type, name) \
+  type *name = nullptr; \
+  HB_STMT_START { \
+    if (likely (wasm_runtime_validate_app_addr (module_inst, \
+						name##ptr, sizeof (type)))) \
+      name = (type *) wasm_runtime_addr_app_to_native (module_inst, name##ptr); \
+  } HB_STMT_END
 
 
 #endif /* HB_WASM_API_HH */

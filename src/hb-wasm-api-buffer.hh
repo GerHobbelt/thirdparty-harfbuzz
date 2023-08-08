@@ -22,31 +22,49 @@
  * PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  */
 
-#ifndef HB_WASM_FONT_HH
-#define HB_WASM_FONT_HH
+#ifndef HB_WASM_API_BUFFER_HH
+#define HB_WASM_API_BUFFER_HH
 
-#include <hb-wasm-api.hh>
+#include "hb-wasm-api.hh"
+
+#include "hb-buffer.hh"
 
 namespace hb {
 namespace wasm {
 
 
-face_t
-font_get_face (HB_WASM_EXEC_ENV
-	       font_t fontref)
+void
+buffer_contents_free (HB_WASM_EXEC_ENV
+		      ptr_t(buffer_contents_t) contentsptr)
 {
-  HB_REF2OBJ (font);
-  if (unlikely (!font))
-    return nullref;
+  HB_STRUCT_TYPE (buffer_contents_t, contents);
+  if (unlikely (!contents))
+    return;
 
-  hb_face_t *face = hb_font_get_face (font);
-
-  HB_OBJ2REF (face);
-  return faceref;
+  module_free (contents->info);
+  module_free (contents->pos);
 }
 
+void
+buffer_copy_contents (HB_WASM_EXEC_ENV_COMPOUND
+		      ptr_t(buffer_t) bufferref)
+{
+  HB_RETURN_TYPE (buffer_contents_t, ret);
+  HB_REF2OBJ (buffer);
+
+  if (buffer->have_output)
+    buffer->sync ();
+
+  static_assert (sizeof (glyph_info_t) == sizeof (hb_glyph_info_t), "");
+  static_assert (sizeof (glyph_position_t) == sizeof (hb_glyph_position_t), "");
+
+  unsigned length = buffer->len;
+  ret.length = length;
+  ret.info = wasm_runtime_module_dup_data (module_inst, (const char *) buffer->info, length * sizeof (buffer->info[0]));
+  ret.pos = wasm_runtime_module_dup_data (module_inst, (const char *) buffer->pos, length * sizeof (buffer->pos[0]));
+}
 
 
 }}
 
-#endif /* HB_WASM_FONT_HH */
+#endif /* HB_WASM_API_BUFFER_HH */

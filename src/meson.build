@@ -325,7 +325,15 @@ hb_glib_headers = files('hb-glib.h')
 hb_graphite2_sources = files('hb-graphite2.cc')
 hb_graphite2_headers = files('hb-graphite2.h')
 
-hb_wasm_sources = files('hb-wasm-shape.cc')
+hb_wasm_sources = files(
+  'hb-wasm-api.cc',
+  'hb-wasm-api.hh',
+  'hb-wasm-api-blob.hh',
+  'hb-wasm-api-buffer.hh',
+  'hb-wasm-api-face.hh',
+  'hb-wasm-api-font.hh',
+  'hb-wasm-shape.cc',
+)
 hb_wasm_headers = files()
 
 # System-dependent sources and headers
