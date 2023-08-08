@@ -384,9 +384,6 @@ struct ValueFormat : HBUINT16
   {
     TRACE_SANITIZE (this);
 
-    if (c->lazy_some_gpos)
-      return_trace (true);
-
     if (!has_device ()) return_trace (true);
 
     for (unsigned int i = 0; i < count; i++) {
