@@ -52,7 +52,6 @@ enum EncodingID { StandardEncoding = 0, ExpertEncoding = 1 };
 enum CharsetID { ISOAdobeCharset = 0, ExpertCharset = 1, ExpertSubsetCharset = 2 };
 
 typedef CFFIndex<HBUINT16>  CFF1Index;
-template <typename Type> struct CFF1IndexOf : CFFIndexOf<HBUINT16, Type> {};
 
 typedef CFFIndex<HBUINT16> CFF1Index;
 typedef CFF1Index          CFF1CharStrings;
@@ -632,7 +631,7 @@ struct Charset
 struct CFF1StringIndex : CFF1Index
 {
   bool serialize (hb_serialize_context_t *c, const CFF1StringIndex &strings,
-		  const hb_inc_bimap_t &sidmap)
+		  const hb_map_t &sidmap)
   {
     TRACE_SERIALIZE (this);
     if (unlikely ((strings.count == 0) || (sidmap.get_population () == 0)))
@@ -643,15 +642,13 @@ struct CFF1StringIndex : CFF1Index
       return_trace (true);
     }
 
-    byte_str_array_t bytesArray;
-    if (!bytesArray.resize (sidmap.get_population ()))
+    if (unlikely (sidmap.in_error ())) return_trace (false);
+
+    hb_vector_t<hb_ubytes_t> bytesArray;
+    if (!bytesArray.resize (sidmap.get_population ()), false)
       return_trace (false);
-    for (unsigned int i = 0; i < strings.count; i++)
-    {
-      hb_codepoint_t  j = sidmap[i];
-      if (j != HB_MAP_VALUE_INVALID)
-	bytesArray[j] = strings[i];
-    }
+    for (auto _ : sidmap)
+      bytesArray.arrayZ[_.second] = strings[_.first];
 
     bool result = CFF1Index::serialize (c, bytesArray);
     return_trace (result);
@@ -1004,7 +1001,7 @@ typedef dict_interpreter_t<cff1_top_dict_opset_t, cff1_top_dict_values_t, cff1_t
 typedef dict_interpreter_t<cff1_font_dict_opset_t, cff1_font_dict_values_t> cff1_font_dict_interpreter_t;
 
 typedef CFF1Index CFF1NameIndex;
-typedef CFF1IndexOf<TopDict> CFF1TopDictIndex;
+typedef CFF1Index CFF1TopDictIndex;
 
 struct cff1_font_dict_values_mod_t
 {
