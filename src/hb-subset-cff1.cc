@@ -38,18 +38,39 @@
 
 using namespace CFF;
 
-struct remap_sid_t : hb_map_t
+struct remap_sid_t
 {
+  unsigned get_population () const { return map.get_population (); }
+
+  void reset ()
+  {
+    map.reset ();
+    vector.resize (0);
+    next = 0;
+  }
+
+  void resize (unsigned size)
+  {
+    map.resize (size);
+    vector.alloc (size);
+  }
+
+  bool in_error () const
+  { return map.in_error () || vector.in_error (); }
+
   unsigned int add (unsigned int sid)
   {
     if ((sid != CFF_UNDEF_SID) && !is_std_std (sid))
     {
       sid = unoffset_sid (sid);
       unsigned v = next;
-      if (set (sid, v, false))
+      if (map.set (sid, v, false))
+      {
+        vector.push (sid);
         next++;
+      }
       else
-        v = get (sid); // already exists
+        v = map.get (sid); // already exists
       return offset_sid (v);
     }
     else
@@ -61,7 +82,7 @@ struct remap_sid_t : hb_map_t
     if (is_std_std (sid) || (sid == CFF_UNDEF_SID))
       return sid;
     else
-      return offset_sid (get (unoffset_sid (sid)));
+      return offset_sid (map.get (unoffset_sid (sid)));
   }
 
   static const unsigned int num_std_strings = 391;
@@ -70,6 +91,9 @@ struct remap_sid_t : hb_map_t
   static unsigned int offset_sid (unsigned int sid) { return sid + num_std_strings; }
   static unsigned int unoffset_sid (unsigned int sid) { return sid - num_std_strings; }
   unsigned next = 0;
+
+  hb_map_t map;
+  hb_vector_t<unsigned> vector;
 };
 
 struct cff1_sub_table_info_t : cff_sub_table_info_t
@@ -451,7 +475,7 @@ struct cff1_subset_plan
 
       if (code != last_code + 1)
       {
-	code_pair_t pair = { code, glyph };
+	code_pair_t pair { code, glyph };
 	subset_enc_code_ranges.push (pair);
       }
       last_code = code;
@@ -462,7 +486,7 @@ struct cff1_subset_plan
 	encoding->get_supplement_codes (sid, supp_codes);
 	for (unsigned int i = 0; i < supp_codes.length; i++)
 	{
-	  code_pair_t pair = { supp_codes[i], sid };
+	  code_pair_t pair { supp_codes[i], sid };
 	  subset_enc_supp_codes.push (pair);
 	}
       }
@@ -492,16 +516,6 @@ struct cff1_subset_plan
       return;
     }
 
-    hb_vector_t<uint16_t> *glyph_to_sid_map = acc.cff_accelerator ?
-					      acc.cff_accelerator->glyph_to_sid_map.get_acquire () :
-					      nullptr;
-    bool created_map = false;
-    if (!glyph_to_sid_map && acc.cff_accelerator)
-    {
-      created_map = true;
-      glyph_to_sid_map = acc.create_glyph_to_sid_map ();
-    }
-
     code_pair_t glyph_to_sid_cache {0, HB_CODEPOINT_INVALID};
 
     unsigned int glyph;
@@ -512,6 +526,16 @@ struct cff1_subset_plan
     {
       plan->check_success (false);
       return;
+    }
+
+    hb_vector_t<uint16_t> *glyph_to_sid_map = acc.cff_accelerator ?
+					      acc.cff_accelerator->glyph_to_sid_map.get_acquire () :
+					      nullptr;
+    bool created_map = false;
+    if (!glyph_to_sid_map && acc.cff_accelerator)
+    {
+      created_map = true;
+      glyph_to_sid_map = acc.create_glyph_to_sid_map ();
     }
 
     auto it = hb_iter (plan->new_to_old_gid_list);
@@ -540,7 +564,7 @@ struct cff1_subset_plan
 
       if (sid != last_sid + 1)
       {
-	code_pair_t pair = { sid, glyph };
+	code_pair_t pair { sid, glyph };
 	subset_charset_ranges.push (pair);
       }
       last_sid = sid;
@@ -581,8 +605,7 @@ struct cff1_subset_plan
       unsigned int sid = acc.topDict.nameSIDs[i];
       if (sid != CFF_UNDEF_SID)
       {
-	(void)sidmap.add (sid);
-	topDictModSIDs[i] = sidmap[sid];
+	topDictModSIDs[i] = sidmap.add (sid);
       }
     }
 
@@ -811,12 +834,13 @@ OT::cff1::accelerator_subset_t::serialize (hb_serialize_context_t *c,
   {
     c->push<CFF1CharStrings> ();
 
-    unsigned total_size = CFF1CharStrings::total_size (plan.subset_charstrings);
+    unsigned data_size = 0;
+    unsigned total_size = CFF1CharStrings::total_size (plan.subset_charstrings, &data_size);
     if (unlikely (!c->start_zerocopy (total_size)))
        return false;
 
     auto *cs = c->start_embed<CFF1CharStrings> ();
-    if (likely (cs->serialize (c, plan.subset_charstrings)))
+    if (likely (cs->serialize (c, plan.subset_charstrings, data_size)))
       plan.info.char_strings_link = c->pop_pack (false);
     else
     {
@@ -903,7 +927,8 @@ OT::cff1::accelerator_subset_t::serialize (hb_serialize_context_t *c,
   /* String INDEX */
   {
     auto *dest = c->push<CFF1StringIndex> ();
-    if (likely (dest->serialize (c, *stringIndex, plan.sidmap)))
+    if (likely (!plan.sidmap.in_error () &&
+		dest->serialize (c, *stringIndex, plan.sidmap.vector)))
       c->pop_pack ();
     else
     {
