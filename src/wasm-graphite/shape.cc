@@ -35,20 +35,48 @@ static void free_table (const void *data, const void *table_data)
   blob_free (&blob);
 }
 
-bool_t
-shape (font_t *font, buffer_t *buffer)
+void *
+shape_plan_create (face_t *face)
 {
-  face_t *face = font_get_face (font);
-
-  blob_t blob = face_reference_table (face, TAG ('c','m','a','p'));
-
-  blob_free (&blob);
-
-  buffer_contents_t contents = buffer_copy_contents (buffer);
-  direction_t direction = buffer_get_direction (buffer);
-
   const gr_face_ops ops = {sizeof (gr_face_ops), &copy_table, &free_table};
   gr_face *grface = gr_make_face_with_ops (face, &ops, gr_face_preloadAll);
+  return grface;
+}
+
+void
+shape_plan_destroy (void *data)
+{
+  gr_face_destroy ((gr_face *) data);
+}
+
+bool_t
+shape (void *shape_plan,
+       font_t *font,
+       buffer_t *buffer,
+       const feature_t *features,
+       uint32_t num_features)
+{
+  face_t *face = font_get_face (font);
+  gr_face *grface = (gr_face *) shape_plan;
+
+  direction_t direction = buffer_get_direction (buffer);
+  direction_t horiz_dir = script_get_horizontal_direction (buffer_get_script (buffer));
+  /* TODO vertical:
+   * The only BTT vertical script is Ogham, but it's not clear to me whether OpenType
+   * Ogham fonts are supposed to be implemented BTT or not.  Need to research that
+   * first. */
+  if ((DIRECTION_IS_HORIZONTAL (direction) &&
+       direction != horiz_dir && horiz_dir != DIRECTION_INVALID) ||
+      (DIRECTION_IS_VERTICAL   (direction) &&
+       direction != DIRECTION_TTB))
+  {
+    buffer_reverse_clusters (buffer);
+    direction = DIRECTION_REVERSE (direction);
+  }
+
+  buffer_contents_t contents = buffer_copy_contents (buffer);
+  if (!contents.length)
+    return false;
 
   gr_segment *seg = nullptr;
   const gr_slot *is;
@@ -57,6 +85,8 @@ shape (font_t *font, buffer_t *buffer)
   unsigned length = contents.length;
 
   uint32_t *chars = (uint32_t *) malloc (length * sizeof (uint32_t));
+  if (!chars)
+    return false;
   for (unsigned int i = 0; i < contents.length; ++i)
     chars[i] = contents.info[i].codepoint;
 
@@ -85,9 +115,12 @@ shape (font_t *font, buffer_t *buffer)
   };
 
   length = glyph_count;
-  buffer_contents_realloc (&contents, length);
+  if (!buffer_contents_realloc (&contents, length))
+    return false;
   cluster_t *clusters = (cluster_t *) malloc (length * sizeof (cluster_t));
   uint32_t *gids = (uint32_t *) malloc (length * sizeof (uint32_t));
+  if (!clusters || !gids)
+    return false;
 
   memset (clusters, 0, sizeof (clusters[0]) * length);
   codepoint_t *pg = gids;

@@ -40,9 +40,16 @@
 
 #define HB_WASM_TAG_WASM HB_TAG('W','a','s','m')
 
+struct hb_wasm_shape_plan_t {
+  wasm_module_inst_t module_inst;
+  wasm_exec_env_t exec_env;
+  ptr_d(void, wasm_shape_plan);
+};
+
 struct hb_wasm_face_data_t {
   hb_blob_t *wasm_blob;
   wasm_module_t wasm_module;
+  mutable hb_atomic_ptr_t<hb_wasm_shape_plan_t> plan;
 };
 
 static bool
@@ -54,6 +61,11 @@ init_wasm ()
 
   RuntimeInitArgs init_args;
   memset (&init_args, 0, sizeof (RuntimeInitArgs));
+
+  if (wasm_runtime_is_running_mode_supported (Mode_LLVM_JIT))
+    init_args.running_mode = Mode_LLVM_JIT;
+  else if (wasm_runtime_is_running_mode_supported (Mode_Fast_JIT))
+    init_args.running_mode = Mode_Fast_JIT;
 
   init_args.mem_alloc_type = Alloc_With_Allocator;
   init_args.mem_alloc_option.allocator.malloc_func = (void *) hb_malloc;
@@ -72,7 +84,6 @@ init_wasm ()
     DEBUG_MSG (WASM, nullptr, "Init runtime environment failed.");
     return false;
   }
-
 
   initialized = true;
   return true;
@@ -101,7 +112,6 @@ _hb_wasm_shaper_face_data_create (hb_face_t *face)
     goto fail;
   }
 
-
   data = (hb_wasm_face_data_t *) hb_calloc (1, sizeof (hb_wasm_face_data_t));
   if (unlikely (!data))
     goto fail;
@@ -119,9 +129,125 @@ fail:
   return nullptr;
 }
 
+static hb_wasm_shape_plan_t *
+acquire_shape_plan (hb_face_t *face,
+		    const hb_wasm_face_data_t *face_data)
+{
+  constexpr uint32_t stack_size = 32 * 1024, heap_size = 2 * 1024 * 1024;
+
+  wasm_module_inst_t module_inst = nullptr;
+  wasm_exec_env_t exec_env = nullptr;
+  wasm_function_inst_t func = nullptr;
+
+  /* Fetch cached one if available. */
+  hb_wasm_shape_plan_t *plan = face_data->plan.get_acquire ();
+  if (likely (plan && face_data->plan.cmpexch (plan, nullptr)))
+    return plan;
+
+  plan = (hb_wasm_shape_plan_t *) hb_calloc (1, sizeof (hb_wasm_shape_plan_t));
+
+  module_inst = plan->module_inst = wasm_runtime_instantiate(face_data->wasm_module,
+							     stack_size, heap_size,
+							     nullptr, 0);
+  if (unlikely (!module_inst))
+  {
+    DEBUG_MSG (WASM, face_data, "Create wasm module instance failed.");
+    goto fail;
+  }
+
+  exec_env = plan->exec_env = wasm_runtime_create_exec_env (module_inst,
+							    stack_size);
+  if (unlikely (!exec_env)) {
+    DEBUG_MSG (WASM, face_data, "Create wasm execution environment failed.");
+    goto fail;
+  }
+
+  func = wasm_runtime_lookup_function (module_inst, "shape_plan_create", nullptr);
+  if (func)
+  {
+    wasm_val_t results[1];
+    wasm_val_t arguments[1];
+
+    HB_OBJ2REF (face);
+    if (unlikely (!faceref))
+    {
+      DEBUG_MSG (WASM, face_data, "Failed to register face object.");
+      goto fail;
+    }
+
+    results[0].kind = WASM_I32;
+    arguments[0].kind = WASM_I32;
+    arguments[0].of.i32 = faceref;
+    bool ret = wasm_runtime_call_wasm_a (exec_env, func,
+					 ARRAY_LENGTH (results), results,
+					 ARRAY_LENGTH (arguments), arguments);
+
+    if (unlikely (!ret))
+    {
+      DEBUG_MSG (WASM, module_inst, "Calling shape_plan_create() failed: %s",
+		 wasm_runtime_get_exception(module_inst));
+      goto fail;
+    }
+    plan->wasm_shape_planptr = results[0].of.i32;
+  }
+
+  return plan;
+
+fail:
+
+  if (exec_env)
+    wasm_runtime_destroy_exec_env (exec_env);
+  if (module_inst)
+    wasm_runtime_deinstantiate (module_inst);
+  hb_free (plan);
+  return nullptr;
+}
+
+static void
+release_shape_plan (const hb_wasm_face_data_t *face_data,
+		    hb_wasm_shape_plan_t *plan,
+		    bool cache = false)
+{
+  if (cache && face_data->plan.cmpexch (nullptr, plan))
+    return;
+
+  auto *module_inst = plan->module_inst;
+  auto *exec_env = plan->exec_env;
+
+  /* Is there even any point to having a shape_plan_destroy function
+   * and calling it? */
+  if (plan->wasm_shape_planptr)
+  {
+
+    auto *func = wasm_runtime_lookup_function (module_inst, "shape_plan_destroy", nullptr);
+    if (func)
+    {
+      wasm_val_t arguments[1];
+
+      arguments[0].kind = WASM_I32;
+      arguments[0].of.i32 = plan->wasm_shape_planptr;
+      bool ret = wasm_runtime_call_wasm_a (exec_env, func,
+					   0, nullptr,
+					   ARRAY_LENGTH (arguments), arguments);
+
+      if (unlikely (!ret))
+      {
+	DEBUG_MSG (WASM, module_inst, "Calling shape_plan_destroy() failed: %s",
+		   wasm_runtime_get_exception(module_inst));
+      }
+    }
+  }
+
+  wasm_runtime_destroy_exec_env (exec_env);
+  wasm_runtime_deinstantiate (module_inst);
+  hb_free (plan);
+}
+
 void
 _hb_wasm_shaper_face_data_destroy (hb_wasm_face_data_t *data)
 {
+  if (data->plan.get_relaxed ())
+    release_shape_plan (data, data->plan);
   wasm_runtime_unload (data->wasm_module);
   hb_blob_destroy (data->wasm_blob);
   hb_free (data);
@@ -157,24 +283,31 @@ _hb_wasm_shape (hb_shape_plan_t    *shape_plan,
 		const hb_feature_t *features,
 		unsigned int        num_features)
 {
+  if (unlikely (buffer->in_error ()))
+    return false;
+
   bool ret = true;
-  const hb_wasm_face_data_t *face_data = font->face->data.wasm;
-  constexpr uint32_t stack_size = 8092, heap_size = 2 * 1024 * 1024;
+  hb_face_t *face = font->face;
+  const hb_wasm_face_data_t *face_data = face->data.wasm;
 
-  /* TODO ensure_native_direction. */
-
-  wasm_module_inst_t module_inst = nullptr;
-  wasm_exec_env_t exec_env = nullptr;
-  wasm_function_inst_t shape_func = nullptr;
-
-  module_inst = wasm_runtime_instantiate(face_data->wasm_module,
-					 stack_size, heap_size,
-					 nullptr, 0);
-  if (unlikely (!module_inst))
+  bool retried = false;
+  if (0)
   {
-    DEBUG_MSG (WASM, face_data->wasm_module, "Instantiate wasm module failed.");
+retry:
+    DEBUG_MSG (WASM, font, "Retrying...");
+  }
+
+  wasm_function_inst_t func = nullptr;
+
+  hb_wasm_shape_plan_t *plan = acquire_shape_plan (face, face_data);
+  if (unlikely (!plan))
+  {
+    DEBUG_MSG (WASM, face_data, "Acquiring shape-plan failed.");
     return false;
   }
+
+  auto *module_inst = plan->module_inst;
+  auto *exec_env = plan->exec_env;
 
   // cmake -DWAMR_BUILD_REF_TYPES=1 for these to work
   HB_OBJ2REF (font);
@@ -185,39 +318,49 @@ _hb_wasm_shape (hb_shape_plan_t    *shape_plan,
     goto fail;
   }
 
-  exec_env = wasm_runtime_create_exec_env (module_inst, stack_size);
-  if (unlikely (!exec_env)) {
-    DEBUG_MSG (WASM, module_inst, "Create wasm execution environment failed.");
-    goto fail;
-  }
-
-  shape_func = wasm_runtime_lookup_function (module_inst, "shape", nullptr);
-  if (unlikely (!shape_func))
+  func = wasm_runtime_lookup_function (module_inst, "shape", nullptr);
+  if (unlikely (!func))
   {
     DEBUG_MSG (WASM, module_inst, "Shape function not found.");
     goto fail;
   }
 
   wasm_val_t results[1];
-  wasm_val_t arguments[2];
+  wasm_val_t arguments[5];
 
   results[0].kind = WASM_I32;
   arguments[0].kind = WASM_I32;
-  arguments[0].of.i32 = fontref;
+  arguments[0].of.i32 = plan->wasm_shape_planptr;
   arguments[1].kind = WASM_I32;
-  arguments[1].of.i32 = bufferref;
+  arguments[1].of.i32 = fontref;
+  arguments[2].kind = WASM_I32;
+  arguments[2].of.i32 = bufferref;
+  arguments[3].kind = WASM_I32;
+  arguments[3].of.i32 = wasm_runtime_module_dup_data (module_inst,
+						      (const char *) features,
+						      num_features * sizeof (features[0]));
+  arguments[4].kind = WASM_I32;
+  arguments[4].of.i32 = num_features;
 
-   ret = wasm_runtime_call_wasm_a (exec_env, shape_func,
-				   ARRAY_LENGTH (results), results,
-				   ARRAY_LENGTH (arguments), arguments);
-  if (unlikely (!ret))
+  ret = wasm_runtime_call_wasm_a (exec_env, func,
+				  ARRAY_LENGTH (results), results,
+				  ARRAY_LENGTH (arguments), arguments);
+
+  wasm_runtime_module_free (module_inst, arguments[2].of.i32);
+
+  if (unlikely (!ret || !results[0].of.i32))
   {
-    DEBUG_MSG (WASM, module_inst, "Calling shape function failed: %s",
-	       wasm_runtime_get_exception(module_inst));
-    goto fail;
+    DEBUG_MSG (WASM, module_inst, "Calling shape() failed: %s",
+	       wasm_runtime_get_exception (module_inst));
+    if (retried)
+      goto fail;
+    buffer->successful = true;
+    retried = true;
+    release_shape_plan (face_data, plan);
+    goto retry;
   }
 
-  /* TODO Regularize clusters accordint to direction & cluster level,
+  /* TODO Regularize clusters according to direction & cluster level,
    * such that client doesn't crash with unmet expectations. */
 
   if (!results[0].of.i32)
@@ -226,10 +369,13 @@ fail:
     ret = false;
   }
 
-  if (exec_env)
-    wasm_runtime_destroy_exec_env (exec_env);
-  if (module_inst)
-    wasm_runtime_deinstantiate (module_inst);
+  release_shape_plan (face_data, plan, ret);
+
+  if (ret)
+  {
+    buffer->clear_glyph_flags ();
+    buffer->unsafe_to_break ();
+  }
 
   return ret;
 }

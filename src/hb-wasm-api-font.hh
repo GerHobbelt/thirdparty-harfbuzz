@@ -31,9 +31,8 @@ namespace hb {
 namespace wasm {
 
 
-ptr_t(face_t)
-font_get_face (HB_WASM_EXEC_ENV
-	       ptr_t(font_t) fontref)
+HB_WASM_API (ptr_t(face_t), font_get_face) (HB_WASM_EXEC_ENV
+					    ptr_d(font_t, font))
 {
   HB_REF2OBJ (font);
 
@@ -43,25 +42,23 @@ font_get_face (HB_WASM_EXEC_ENV
   return faceref;
 }
 
-void
-font_get_scale (HB_WASM_EXEC_ENV
-		ptr_t(font_t) fontref,
-		ptr_t(int32_t) x_scaleptr,
-		ptr_t(int32_t) y_scaleptr)
+HB_WASM_API (void, font_get_scale) (HB_WASM_EXEC_ENV
+				    ptr_d(font_t, font),
+				    ptr_d(int32_t, x_scale),
+				    ptr_d(int32_t, y_scale))
 {
   HB_REF2OBJ (font);
 
-  HB_OUT_PARAM(int32_t, x_scale);
-  HB_OUT_PARAM(int32_t, y_scale);
+  HB_PTR_PARAM(int32_t, x_scale);
+  HB_PTR_PARAM(int32_t, y_scale);
 
   hb_font_get_scale (font, x_scale, y_scale);
 }
 
-codepoint_t
-font_get_glyph (HB_WASM_EXEC_ENV
-		ptr_t(font_t) fontref,
-		codepoint_t unicode,
-		codepoint_t variation_selector)
+HB_WASM_API (codepoint_t, font_get_glyph) (HB_WASM_EXEC_ENV
+					      ptr_d(font_t, font),
+					      codepoint_t unicode,
+					      codepoint_t variation_selector)
 {
   HB_REF2OBJ (font);
   codepoint_t glyph;
@@ -70,29 +67,42 @@ font_get_glyph (HB_WASM_EXEC_ENV
   return glyph;
 }
 
-hb_position_t
-font_get_glyph_h_advance (HB_WASM_EXEC_ENV
-			  ptr_t(font_t) fontref,
-			  codepoint_t glyph)
+HB_WASM_API (position_t, font_get_glyph_h_advance) (HB_WASM_EXEC_ENV
+						    ptr_d(font_t, font),
+						    codepoint_t glyph)
 {
   HB_REF2OBJ (font);
   return hb_font_get_glyph_h_advance (font, glyph);
 }
 
-hb_position_t
-font_get_glyph_v_advance (HB_WASM_EXEC_ENV
-			  ptr_t(font_t) fontref,
-			  codepoint_t glyph)
+HB_WASM_API (position_t, font_get_glyph_v_advance) (HB_WASM_EXEC_ENV
+						    ptr_d(font_t, font),
+						    codepoint_t glyph)
 {
   HB_REF2OBJ (font);
   return hb_font_get_glyph_v_advance (font, glyph);
 }
 
-void
-font_glyph_to_string (HB_WASM_EXEC_ENV
-		      ptr_t(font_t) fontref,
-		      codepoint_t glyph,
-		      char *s, uint32_t size)
+static_assert (sizeof (glyph_extents_t) == sizeof (hb_glyph_extents_t), "");
+
+HB_WASM_API (bool_t, font_get_glyph_extents) (HB_WASM_EXEC_ENV
+					      ptr_d(font_t, font),
+					      codepoint_t glyph,
+					      ptr_d(glyph_extents_t, extents))
+{
+  HB_REF2OBJ (font);
+  HB_PTR_PARAM (glyph_extents_t, extents);
+  if (unlikely (!extents))
+    return false;
+
+  return hb_font_get_glyph_extents (font, glyph,
+				    (hb_glyph_extents_t *) extents);
+}
+
+HB_WASM_API (void, font_glyph_to_string) (HB_WASM_EXEC_ENV
+					  ptr_d(font_t, font),
+					  codepoint_t glyph,
+					  char *s, uint32_t size)
 {
   HB_REF2OBJ (font);
 

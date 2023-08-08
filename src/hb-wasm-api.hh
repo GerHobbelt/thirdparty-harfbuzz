@@ -39,10 +39,10 @@
 #define HB_WASM_EXEC_ENV_COMPOUND wasm_exec_env_t exec_env, ptr_t() retptr,
 
 #define ptr_t(type_t) uint32_t
+#define ptr_d(type_t, name) uint32_t name##ptr
 
 #include "hb-wasm-api.h"
 
-#undef HB_WASM_API
 #undef HB_WASM_BEGIN_DECLS
 #undef HB_WASM_END_DECLS
 
@@ -61,7 +61,7 @@ HB_INTERNAL extern hb_user_data_key_t _hb_wasm_ref_type_key;
 #define HB_REF2OBJ(obj) \
   hb_##obj##_t *obj = nullptr; \
   HB_STMT_START { \
-    (void) wasm_externref_ref2obj (obj##ref, (void **) &obj); \
+    (void) wasm_externref_ref2obj (obj##ptr, (void **) &obj); \
     /* Check object type. */ \
     /* This works because all our objects have the same hb_object_t layout. */ \
     if (unlikely (hb_##obj##_get_user_data (obj, &_hb_wasm_ref_type_key) != \
@@ -91,11 +91,20 @@ HB_INTERNAL extern hb_user_data_key_t _hb_wasm_ref_type_key;
   } \
   type &name = *_name_ptr
 
-#define HB_OUT_PARAM(type, name) \
+#define HB_PTR_PARAM(type, name) \
   type *name = nullptr; \
   HB_STMT_START { \
     if (likely (wasm_runtime_validate_app_addr (module_inst, \
 						name##ptr, sizeof (type)))) \
+      name = (type *) wasm_runtime_addr_app_to_native (module_inst, name##ptr); \
+  } HB_STMT_END
+
+#define HB_ARRAY_PARAM(type, name, length) \
+  type *name = nullptr; \
+  HB_STMT_START { \
+    if (likely (!hb_unsigned_mul_overflows (length, sizeof (type)) && \
+		wasm_runtime_validate_app_addr (module_inst, \
+						name##ptr, length * sizeof (type)))) \
       name = (type *) wasm_runtime_addr_app_to_native (module_inst, name##ptr); \
   } HB_STMT_END
 

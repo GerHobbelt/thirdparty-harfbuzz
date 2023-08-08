@@ -22,8 +22,8 @@
  * PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  */
 
-#ifndef HB_WASM_API_FACE_HH
-#define HB_WASM_API_FACE_HH
+#ifndef HB_WASM_API_COMMON_HH
+#define HB_WASM_API_COMMON_HH
 
 #include "hb-wasm-api.hh"
 
@@ -31,33 +31,14 @@ namespace hb {
 namespace wasm {
 
 
-HB_WASM_API_COMPOUND (blob_t, face_reference_table) (HB_WASM_EXEC_ENV_COMPOUND
-						     ptr_d(face_t, face),
-						     tag_t table_tag)
+HB_WASM_API (direction_t, script_get_horizontal_direction) (HB_WASM_EXEC_ENV
+							    script_t script)
 {
-  HB_RETURN_STRUCT (blob_t, ret);
-  HB_REF2OBJ (face);
-
-  hb_blob_t *blob = hb_face_reference_table (face, table_tag);
-
-  unsigned length;
-  const char *data = hb_blob_get_data (blob, &length);
-
-  ret.length = length;
-  ret.data = wasm_runtime_module_dup_data (module_inst, data, length);
-
-  hb_blob_destroy (blob);
-}
-
-HB_WASM_API (unsigned, face_get_upem) (HB_WASM_EXEC_ENV
-				       ptr_d(face_t, face))
-{
-  HB_REF2OBJ (face);
-
-  return hb_face_get_upem (face);
+  return (direction_t)
+	 hb_script_get_horizontal_direction (hb_script_from_iso15924_tag (script));
 }
 
 
 }}
 
-#endif /* HB_WASM_API_FACE_HH */
+#endif /* HB_WASM_API_COMMON_HH */
