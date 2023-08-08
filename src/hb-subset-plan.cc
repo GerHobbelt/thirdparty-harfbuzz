@@ -590,9 +590,10 @@ _populate_unicodes_to_retain (const hb_set_t *unicodes,
     }
 
     /* Add gids which where requested, but not mapped in cmap */
+    unsigned num_glyphs = plan->source->get_num_glyphs ();
     for (hb_codepoint_t gid : *glyphs)
     {
-      if (gid >= plan->source->get_num_glyphs ())
+      if (gid >= num_glyphs)
 	break;
       plan->_glyphset_gsub.add (gid);
     }
@@ -1128,20 +1129,8 @@ hb_subset_plan_t::hb_subset_plan_t (hb_face_t *face,
 
   if (attach_accelerator_data)
   {
-    hb_multimap_t gid_to_unicodes;
-
-    hb_map_t &unicode_to_gid = *codepoint_to_glyph;
-
-    gid_to_unicodes.resize (unicodes.get_population ());
-    for (auto unicode : unicodes)
-    {
-      auto gid = unicode_to_gid[unicode];
-      gid_to_unicodes.add (gid, unicode);
-    }
-
     inprogress_accelerator =
       hb_subset_accelerator_t::create (*codepoint_to_glyph,
-				       gid_to_unicodes,
                                        unicodes,
 				       has_seac);
 
