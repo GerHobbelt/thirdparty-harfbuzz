@@ -158,26 +158,31 @@ struct hmtxvmtx
 	   hb_requires (hb_is_iterator (Iterator))>
   void serialize (hb_serialize_context_t *c,
 		  Iterator it,
+		  const hb_vector_t<hb_codepoint_pair_t> new_to_old_gid_list,
 		  unsigned num_long_metrics,
                   unsigned total_num_metrics)
   {
-    unsigned idx = 0;
-    LongMetric* long_metrics = c->allocate_size<LongMetric> (num_long_metrics * LongMetric::static_size, false);
-    FWORD* short_metrics = c->allocate_size<FWORD> ((total_num_metrics - num_long_metrics) * FWORD::static_size, false);
+    LongMetric* long_metrics = c->allocate_size<LongMetric> (num_long_metrics * LongMetric::static_size);
+    FWORD* short_metrics = c->allocate_size<FWORD> ((total_num_metrics - num_long_metrics) * FWORD::static_size);
     if (!long_metrics || !short_metrics) return;
-    for (auto _ : it)
+
+    short_metrics -= num_long_metrics;
+
+    for (auto _ : hb_zip (new_to_old_gid_list, it))
     {
-      if (idx < num_long_metrics)
+      hb_codepoint_t gid = _.first.first;
+      auto mtx = _.second;
+
+      if (gid < num_long_metrics)
       {
-	LongMetric& lm = long_metrics[idx];
-	lm.advance = _.first;
-	lm.sb = _.second;
+	LongMetric& lm = long_metrics[gid];
+	lm.advance = mtx.first;
+	lm.sb = mtx.second;
       }
-      else if (idx < 0x10000u)
-        *(short_metrics++) = _.second;
+      else if (gid < 0x10000u)
+        short_metrics[gid] = mtx.second;
       else
-        *((UFWORD*) short_metrics++) = _.first;
-      idx++;
+        ((UFWORD*) short_metrics)[gid] = mtx.first;
     }
   }
 
@@ -204,16 +209,12 @@ struct hmtxvmtx
       }
     }
 
-    unsigned j = 0;
-    const auto &new_to_old_gid_list = c->plan->new_to_old_gid_list;
     auto it =
-    + hb_range (c->plan->num_output_glyphs ())
-    | hb_map ([c, &j, &new_to_old_gid_list, &_mtx, mtx_map] (hb_codepoint_t new_gid)
+    + hb_iter (c->plan->new_to_old_gid_list)
+    | hb_map ([c, &_mtx, mtx_map] (hb_codepoint_pair_t _)
 	      {
-	        if (new_gid != new_to_old_gid_list[j].first)
-		  return hb_pair (0u, 0);
-		unsigned old_gid = new_to_old_gid_list.arrayZ[j].second;
-		j++;
+		hb_codepoint_t new_gid = _.first;
+		hb_codepoint_t old_gid = _.second;
 
 		hb_pair_t<unsigned, int> *v = nullptr;
 		if (!mtx_map->has (new_gid, &v))
@@ -227,7 +228,11 @@ struct hmtxvmtx
 	      })
     ;
 
-    table_prime->serialize (c->serializer, it, num_long_metrics, c->plan->num_output_glyphs ());
+    table_prime->serialize (c->serializer,
+			    it,
+			    c->plan->new_to_old_gid_list,
+			    num_long_metrics,
+			    c->plan->num_output_glyphs ());
 
     if (unlikely (c->serializer->in_error ()))
       return_trace (false);
