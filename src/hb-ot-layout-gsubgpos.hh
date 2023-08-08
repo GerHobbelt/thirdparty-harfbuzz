@@ -661,6 +661,7 @@ struct hb_ot_apply_context_t :
       return false;
     }
 
+    HB_ALWAYS_INLINE
     hb_codepoint_t
     get_glyph_data ()
     {
@@ -671,6 +672,7 @@ struct hb_ot_apply_context_t :
 #endif
       return 0;
     }
+    HB_ALWAYS_INLINE
     void
     advance_glyph_data ()
     {
@@ -1198,6 +1200,10 @@ static inline void collect_array (hb_collect_glyphs_context_t *c HB_UNUSED,
 }
 
 
+static inline bool match_always (hb_glyph_info_t &info HB_UNUSED, unsigned value HB_UNUSED, const void *data HB_UNUSED)
+{
+  return true;
+}
 static inline bool match_glyph (hb_glyph_info_t &info, unsigned value, const void *data HB_UNUSED)
 {
   return info.codepoint == value;
@@ -1216,6 +1222,28 @@ static inline bool match_class_cached (hb_glyph_info_t &info, unsigned value, co
   klass = class_def.get_class (info.codepoint);
   if (likely (klass < 255))
     info.syllable() = klass;
+  return klass == value;
+}
+static inline bool match_class_cached1 (hb_glyph_info_t &info, unsigned value, const void *data)
+{
+  unsigned klass = info.syllable() & 0x0F;
+  if (klass < 15)
+    return klass == value;
+  const ClassDef &class_def = *reinterpret_cast<const ClassDef *>(data);
+  klass = class_def.get_class (info.codepoint);
+  if (likely (klass < 15))
+    info.syllable() = (info.syllable() & 0xF0) | klass;
+  return klass == value;
+}
+static inline bool match_class_cached2 (hb_glyph_info_t &info, unsigned value, const void *data)
+{
+  unsigned klass = (info.syllable() & 0xF0) >> 4;
+  if (klass < 15)
+    return klass == value;
+  const ClassDef &class_def = *reinterpret_cast<const ClassDef *>(data);
+  klass = class_def.get_class (info.codepoint);
+  if (likely (klass < 15))
+    info.syllable() = (info.syllable() & 0x0F) | (klass << 4);
   return klass == value;
 }
 static inline bool match_coverage (hb_glyph_info_t &info, unsigned value, const void *data)
@@ -1944,6 +1972,9 @@ static inline bool context_apply_lookup (hb_ot_apply_context_t *c,
 template <typename Types>
 struct Rule
 {
+  template <typename T>
+  friend struct RuleSet;
+
   bool intersects (const hb_set_t *glyphs, ContextClosureLookupContext &lookup_context) const
   {
     return context_intersects (glyphs,
@@ -2131,13 +2162,76 @@ struct RuleSet
 	      const ContextApplyLookupContext &lookup_context) const
   {
     TRACE_APPLY (this);
-    return_trace (
-    + hb_iter (rule)
-    | hb_map (hb_add (this))
-    | hb_map ([&] (const Rule &_) { return _.apply (c, lookup_context); })
-    | hb_any
-    )
-    ;
+
+    unsigned num_rules = rule.len;
+
+#ifndef HB_NO_OT_RULESETS_FAST_PATH
+    if (HB_OPTIMIZE_SIZE_VAL || num_rules <= 4)
+#endif
+    {
+    slow:
+      return_trace (
+      + hb_iter (rule)
+      | hb_map (hb_add (this))
+      | hb_map ([&] (const Rule &_) { return _.apply (c, lookup_context); })
+      | hb_any
+      )
+      ;
+    }
+
+    /* This version is optimized for speed by matching the first component
+     * of the rule here, instead of calling into the matching code.
+     *
+     * Replicated from LigatureSet::apply(). */
+
+    hb_ot_apply_context_t::skipping_iterator_t &skippy_iter = c->iter_input;
+    skippy_iter.reset (c->buffer->idx, 1);
+    skippy_iter.set_match_func (match_always, nullptr);
+    skippy_iter.set_glyph_data ((HBUINT16 *) nullptr);
+    unsigned unsafe_to;
+    hb_glyph_info_t *first = nullptr;
+    bool matched = skippy_iter.next (&unsafe_to);
+    if (likely (matched))
+    {
+      first = &c->buffer->info[skippy_iter.idx];
+      unsafe_to = skippy_iter.idx + 1;
+
+      if (skippy_iter.may_skip (c->buffer->info[skippy_iter.idx]))
+      {
+	/* Can't use the fast path if eg. the next char is a default-ignorable
+	 * or other skippable. */
+        goto slow;
+      }
+    }
+    else
+      goto slow;
+
+    bool unsafe_to_concat = false;
+
+    for (unsigned int i = 0; i < num_rules; i++)
+    {
+      const auto &r = this+rule.arrayZ[i];
+
+      const auto &input = r.inputZ;
+
+      if (r.inputCount <= 1 ||
+	  (!lookup_context.funcs.match ||
+	   lookup_context.funcs.match (*first, input.arrayZ[0], lookup_context.match_data)))
+      {
+	if (r.apply (c, lookup_context))
+	{
+	  if (unsafe_to_concat)
+	    c->buffer->unsafe_to_concat (c->buffer->idx, unsafe_to);
+	  return_trace (true);
+	}
+      }
+      else
+        unsafe_to_concat = true;
+    }
+    if (likely (unsafe_to_concat))
+      c->buffer->unsafe_to_concat (c->buffer->idx, unsafe_to);
+
+    return_trace (false);
   }
 
   bool subset (hb_subset_context_t *c,
@@ -2516,11 +2610,7 @@ struct ContextFormat2_5
     if (cached && c->buffer->cur().syllable() < 255)
       index = c->buffer->cur().syllable ();
     else
-    {
       index = class_def.get_class (c->buffer->cur().codepoint);
-      if (cached && index < 255)
-	c->buffer->cur().syllable() = index;
-    }
     const RuleSet &rule_set = this+ruleSet[index];
     return_trace (rule_set.apply (c, lookup_context));
   }
@@ -2962,6 +3052,9 @@ static inline bool chain_context_apply_lookup (hb_ot_apply_context_t *c,
 template <typename Types>
 struct ChainRule
 {
+  template <typename T>
+  friend struct ChainRuleSet;
+
   bool intersects (const hb_set_t *glyphs, ChainContextClosureLookupContext &lookup_context) const
   {
     const auto &input = StructAfter<decltype (inputX)> (backtrack);
@@ -3211,13 +3304,80 @@ struct ChainRuleSet
 	      const ChainContextApplyLookupContext &lookup_context) const
   {
     TRACE_APPLY (this);
-    return_trace (
-    + hb_iter (rule)
-    | hb_map (hb_add (this))
-    | hb_map ([&] (const ChainRule &_) { return _.apply (c, lookup_context); })
-    | hb_any
-    )
-    ;
+
+    unsigned num_rules = rule.len;
+
+#ifndef HB_NO_OT_RULESETS_FAST_PATH
+    if (HB_OPTIMIZE_SIZE_VAL || num_rules <= 4)
+#endif
+    {
+    slow:
+      return_trace (
+      + hb_iter (rule)
+      | hb_map (hb_add (this))
+      | hb_map ([&] (const ChainRule &_) { return _.apply (c, lookup_context); })
+      | hb_any
+      )
+      ;
+    }
+
+    /* This version is optimized for speed by matching the first component
+     * of the rule here, instead of calling into the matching code.
+     *
+     * Replicated from LigatureSet::apply(). */
+
+    hb_ot_apply_context_t::skipping_iterator_t &skippy_iter = c->iter_input;
+    skippy_iter.reset (c->buffer->idx, 1);
+    skippy_iter.set_match_func (match_always, nullptr);
+    skippy_iter.set_glyph_data ((HBUINT16 *) nullptr);
+    unsigned unsafe_to;
+    hb_glyph_info_t *first = nullptr;
+    bool matched = skippy_iter.next (&unsafe_to);
+    if (likely (matched))
+    {
+      first = &c->buffer->info[skippy_iter.idx];
+      unsafe_to = skippy_iter.idx + 1;
+
+      if (skippy_iter.may_skip (c->buffer->info[skippy_iter.idx]))
+      {
+	/* Can't use the fast path if eg. the next char is a default-ignorable
+	 * or other skippable. */
+        goto slow;
+      }
+    }
+    else
+      goto slow;
+
+    bool unsafe_to_concat = false;
+
+    for (unsigned int i = 0; i < num_rules; i++)
+    {
+      const auto &r = this+rule.arrayZ[i];
+
+      const auto &input = StructAfter<decltype (r.inputX)> (r.backtrack);
+      const auto &lookahead = StructAfter<decltype (r.lookaheadX)> (input);
+
+      if (input.lenP1 > 1 ?
+	   (!lookup_context.funcs.match[1] ||
+	    lookup_context.funcs.match[1] (*first, input.arrayZ[0], lookup_context.match_data[1]))
+	  :
+	   (!lookahead.len || !lookup_context.funcs.match[2] ||
+	    lookup_context.funcs.match[2] (*first, lookahead.arrayZ[0], lookup_context.match_data[2])))
+      {
+	if (r.apply (c, lookup_context))
+	{
+	  if (unsafe_to_concat)
+	    c->buffer->unsafe_to_concat (c->buffer->idx, unsafe_to);
+	  return_trace (true);
+	}
+      }
+      else
+        unsafe_to_concat = true;
+    }
+    if (likely (unsafe_to_concat))
+      c->buffer->unsafe_to_concat (c->buffer->idx, unsafe_to);
+
+    return_trace (false);
   }
 
   bool subset (hb_subset_context_t *c,
@@ -3616,26 +3776,22 @@ struct ChainContextFormat2_5
     const ClassDef &input_class_def = this+inputClassDef;
     const ClassDef &lookahead_class_def = this+lookaheadClassDef;
 
-    /* For ChainContextFormat2_5 we cache the LookaheadClassDef instead of InputClassDef.
-     * The reason is that most heavy fonts want to identify a glyph in context and apply
-     * a lookup to it. In this scenario, the length of the input sequence is one, whereas
-     * the lookahead / backtrack are typically longer.  The one glyph in input sequence is
-     * looked-up below and no input glyph is looked up in individual rules, whereas the
-     * lookahead and backtrack glyphs are tried.  Since we match lookahead before backtrack,
-     * we should cache lookahead.  This decisions showed a 20% improvement in shaping of
-     * the Gulzar font.
-     */
-
+    /* match_class_caches1 is slightly faster. Use it for lookahead,
+     * which is typically longer. */
     struct ChainContextApplyLookupContext lookup_context = {
-      {{cached && &backtrack_class_def == &lookahead_class_def ? match_class_cached : match_class,
-        cached && &input_class_def == &lookahead_class_def ? match_class_cached : match_class,
-        cached ? match_class_cached : match_class}},
+      {{cached && &backtrack_class_def == &lookahead_class_def ? match_class_cached1 : match_class,
+        cached ? match_class_cached2 : match_class,
+        cached ? match_class_cached1 : match_class}},
       {&backtrack_class_def,
        &input_class_def,
        &lookahead_class_def}
     };
 
-    index = input_class_def.get_class (c->buffer->cur().codepoint);
+    // Note: Corresponds to match_class_cached2
+    if (cached && ((c->buffer->cur().syllable() & 0xF0) >> 4) < 15)
+      index = (c->buffer->cur().syllable () & 0xF0) >> 4;
+    else
+      index = input_class_def.get_class (c->buffer->cur().codepoint);
     const ChainRuleSet &rule_set = this+ruleSet[index];
     return_trace (rule_set.apply (c, lookup_context));
   }
