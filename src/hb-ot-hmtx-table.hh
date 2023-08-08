@@ -50,6 +50,9 @@ _glyf_get_leading_bearing_with_var_unscaled (hb_font_t *font, hb_codepoint_t gly
 HB_INTERNAL unsigned
 _glyf_get_advance_with_var_unscaled (hb_font_t *font, hb_codepoint_t glyph, bool is_vertical);
 
+HB_INTERNAL bool
+_glyf_get_leading_bearing_without_var_unscaled (hb_face_t *face, hb_codepoint_t gid, bool is_vertical, int *lsb);
+
 
 namespace OT {
 
@@ -80,7 +83,7 @@ struct hmtxvmtx
   bool subset_update_header (hb_subset_context_t *c,
 			     unsigned int num_hmetrics,
 			     const hb_hashmap_t<hb_codepoint_t, hb_pair_t<unsigned, int>> *mtx_map,
-			     const hb_map_t *bounds_map) const
+			     const hb_vector_t<unsigned> &bounds_vec) const
   {
     hb_blob_t *src_blob = hb_sanitize_context_t ().reference_table<H> (c->plan->source, H::tableTag);
     hb_blob_t *dest_blob = hb_blob_copy_writable_or_fail (src_blob);
@@ -92,7 +95,7 @@ struct hmtxvmtx
 
     unsigned int length;
     H *table = (H *) hb_blob_get_data (dest_blob, &length);
-    table->numberOfLongMetrics = num_hmetrics;
+    c->serializer->check_assign (table->numberOfLongMetrics, num_hmetrics, HB_SERIALIZE_ERROR_INT_OVERFLOW);
 
 #ifndef HB_NO_VAR
     if (c->plan->normalized_coords)
@@ -111,6 +114,7 @@ struct hmtxvmtx
 	HB_ADD_MVAR_VAR (HB_OT_METRICS_TAG_VERTICAL_CARET_OFFSET,   caretOffset);
       }
 
+      bool empty = true;
       int min_lsb = 0x7FFF;
       int min_rsb = 0x7FFF;
       int max_extent = -0x7FFF;
@@ -122,9 +126,10 @@ struct hmtxvmtx
         int lsb = _.second.second;
         max_adv = hb_max (max_adv, adv);
 
-        if (bounds_map->has (gid))
+        if (bounds_vec[gid] != 0xFFFFFFFF)
         {
-          unsigned bound_width = bounds_map->get (gid);
+	  empty = false;
+          unsigned bound_width = bounds_vec[gid];
           int rsb = adv - lsb - bound_width;
           int extent = lsb + bound_width;
           min_lsb = hb_min (min_lsb, lsb);
@@ -134,7 +139,7 @@ struct hmtxvmtx
       }
 
       table->advanceMax = max_adv;
-      if (!bounds_map->is_empty ())
+      if (!empty)
       {
         table->minLeadingBearing = min_lsb;
         table->minTrailingBearing = min_rsb;
@@ -165,11 +170,18 @@ struct hmtxvmtx
 	lm.sb = _.second;
 	if (unlikely (!c->embed<LongMetric> (&lm))) return;
       }
-      else
+      else if (idx < 0x10000u)
       {
 	FWORD *sb = c->allocate_size<FWORD> (FWORD::static_size);
 	if (unlikely (!sb)) return;
 	*sb = _.second;
+      }
+      else
+      {
+        // TODO: This does not do tail optimization.
+	UFWORD *adv = c->allocate_size<UFWORD> (UFWORD::static_size);
+	if (unlikely (!adv)) return;
+	*adv = _.first;
       }
       idx++;
     }
@@ -189,7 +201,7 @@ struct hmtxvmtx
       /* Determine num_long_metrics to encode. */
       auto& plan = c->plan;
 
-      num_long_metrics = plan->num_output_glyphs ();
+      num_long_metrics = hb_min (plan->num_output_glyphs (), 0xFFFFu);
       unsigned int last_advance = get_new_gid_advance_unscaled (plan, mtx_map, num_long_metrics - 1, _mtx);
       while (num_long_metrics > 1 &&
 	     last_advance == get_new_gid_advance_unscaled (plan, mtx_map, num_long_metrics - 2, _mtx))
@@ -208,7 +220,8 @@ struct hmtxvmtx
 		  if (!c->plan->old_gid_for_new_gid (_, &old_gid))
 		    return hb_pair (0u, 0);
 		  int lsb = 0;
-		  (void) _mtx.get_leading_bearing_without_var_unscaled (old_gid, &lsb);
+		  if (!_mtx.get_leading_bearing_without_var_unscaled (old_gid, &lsb))
+		    (void) _glyf_get_leading_bearing_without_var_unscaled (c->plan->source, old_gid, !T::is_horizontal, &lsb);
 		  return hb_pair (_mtx.get_advance_without_var_unscaled (old_gid), +lsb);
 		}
 		return mtx_map->get (_);
@@ -222,7 +235,7 @@ struct hmtxvmtx
 
     // Amend header num hmetrics
     if (unlikely (!subset_update_header (c, num_long_metrics, mtx_map,
-                                         T::is_horizontal ? &c->plan->bounds_width_map : &c->plan->bounds_height_map)))
+                                         T::is_horizontal ? c->plan->bounds_width_vec : c->plan->bounds_height_vec)))
       return_trace (false);
 
     return_trace (true);
