@@ -360,7 +360,11 @@ struct FDArray : CFFIndex<COUNT>
 
     /* serialize INDEX data */
     hb_vector_t<unsigned> sizes;
+    if (it.is_random_access_iterator)
+      sizes.alloc (hb_len (it));
+
     c->push ();
+    char *data_base = c->head;
     + it
     | hb_map ([&] (const hb_pair_t<const DICTVAL&, const INFO&> &_)
     {
@@ -370,13 +374,14 @@ struct FDArray : CFFIndex<COUNT>
 	      })
     | hb_sink (sizes)
     ;
+    unsigned data_size = c->head - data_base;
     c->pop_pack (false);
 
     /* It just happens that the above is packed right after the header below.
      * Such a hack. */
 
     /* serialize INDEX header */
-    return_trace (CFFIndex<COUNT>::serialize_header (c, hb_iter (sizes)));
+    return_trace (CFFIndex<COUNT>::serialize_header (c, hb_iter (sizes), data_size));
   }
 };
 
