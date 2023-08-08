@@ -24,16 +24,17 @@ struct EntryExitRecord
     (src_base+exitAnchor).collect_variation_indices (c);
   }
 
-  EntryExitRecord* subset (hb_subset_context_t *c,
-                           const void *src_base) const
+  bool subset (hb_subset_context_t *c,
+	       const void *src_base) const
   {
     TRACE_SERIALIZE (this);
     auto *out = c->serializer->embed (this);
-    if (unlikely (!out)) return_trace (nullptr);
+    if (unlikely (!out)) return_trace (false);
 
-    out->entryAnchor.serialize_subset (c, entryAnchor, src_base);
-    out->exitAnchor.serialize_subset (c, exitAnchor, src_base);
-    return_trace (out);
+    bool ret = false;
+    ret |= out->entryAnchor.serialize_subset (c, entryAnchor, src_base);
+    ret |= out->exitAnchor.serialize_subset (c, exitAnchor, src_base);
+    return_trace (ret);
   }
 
   protected:
@@ -129,7 +130,7 @@ struct CursivePosFormat1
 	unlikely (!this_record.entryAnchor.sanitize (&c->sanitizer, this))) return_trace (false);
 
     hb_ot_apply_context_t::skipping_iterator_t &skippy_iter = c->iter_input;
-    skippy_iter.reset_fast (buffer->idx, 1);
+    skippy_iter.reset_fast (buffer->idx);
     unsigned unsafe_from;
     if (unlikely (!skippy_iter.prev (&unsafe_from)))
     {
