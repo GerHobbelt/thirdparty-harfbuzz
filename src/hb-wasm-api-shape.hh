@@ -22,8 +22,8 @@
  * PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  */
 
-#ifndef HB_WASM_API_FACE_HH
-#define HB_WASM_API_FACE_HH
+#ifndef HB_WASM_API_SHAPE_HH
+#define HB_WASM_API_SHAPE_HH
 
 #include "hb-wasm-api.hh"
 
@@ -31,35 +31,23 @@ namespace hb {
 namespace wasm {
 
 
-void
-face_reference_table (HB_WASM_EXEC_ENV_COMPOUND
-		      ptr_t(face_t) faceref,
-		      tag_t table_tag)
+bool_t
+shape_with (HB_WASM_EXEC_ENV
+	    ptr_t(font_t) fontref,
+	    ptr_t(buffer_t) bufferref,
+	    const char *shaper)
 {
-  HB_RETURN_STRUCT (blob_t, ret);
-  HB_REF2OBJ (face);
+  HB_REF2OBJ (font);
+  HB_REF2OBJ (buffer);
 
-  hb_blob_t *blob = hb_face_reference_table (face, table_tag);
+  if (0 == strcmp (shaper, "wasm"))
+    return false;
 
-  unsigned length;
-  const char *data = hb_blob_get_data (blob, &length);
-
-  ret.length = length;
-  ret.data = wasm_runtime_module_dup_data (module_inst, data, length);
-
-  hb_blob_destroy (blob);
-}
-
-unsigned
-face_get_upem (HB_WASM_EXEC_ENV
-	       ptr_t(face_t) faceref)
-{
-  HB_REF2OBJ (face);
-
-  return hb_face_get_upem (face);
+  const char * shaper_list[] = {shaper, nullptr};
+  return hb_shape_full (font, buffer, nullptr, 0, shaper_list);
 }
 
 
 }}
 
-#endif /* HB_WASM_API_FACE_HH */
+#endif /* HB_WASM_API_SHAPE_HH */

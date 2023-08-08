@@ -2,10 +2,11 @@
 
 #include <hb-wasm-api.h>
 
-void free (void*);
-
-void debugprint1 (char *s, int32_t);
-void debugprint2 (char *s, int32_t, int32_t);
+extern "C" {
+void debugprint (const char *s);
+void debugprint1 (const char *s, int32_t);
+void debugprint2 (const char *s, int32_t, int32_t);
+}
 
 bool_t
 shape (font_t *font, buffer_t *buffer)
@@ -23,9 +24,20 @@ shape (font_t *font, buffer_t *buffer)
   debugprint1 ("buffer length", contents.length);
 
   for (unsigned i = 0; i < contents.length; i++)
-    debugprint2 ("Codepoint", i, contents.info[i].codepoint);
+  {
+    char name[64];
+
+    font_glyph_to_string (font, contents.info[i].codepoint, name, sizeof (name));
+
+    debugprint (name);
+
+    contents.info[i].codepoint = font_get_glyph (font, contents.info[i].codepoint, 0);
+    contents.pos[i].x_advance = font_get_glyph_h_advance (font, contents.info[i].codepoint);
+  }
+
+  bool_t ret = buffer_set_contents (buffer, &contents);
 
   buffer_contents_free (&contents);
 
-  return 1;
+  return ret;
 }

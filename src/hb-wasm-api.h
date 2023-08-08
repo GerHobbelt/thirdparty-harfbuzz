@@ -69,11 +69,25 @@ HB_WASM_BEGIN_DECLS
 #define ptr_t(type_t) type_t *
 #endif
 
-typedef uint32_t hb_codepoint_t;
-typedef int32_t hb_position_t;
-typedef uint32_t hb_mask_t;
+typedef uint32_t codepoint_t;
+typedef int32_t position_t;
+typedef uint32_t mask_t;
 typedef uint32_t tag_t;
 #define TAG(c1,c2,c3,c4) ((tag_t)((((uint32_t)(c1)&0xFF)<<24)|(((uint32_t)(c2)&0xFF)<<16)|(((uint32_t)(c3)&0xFF)<<8)|((uint32_t)(c4)&0xFF)))
+
+typedef enum {
+  DIRECTION_INVALID = 0,
+  DIRECTION_LTR = 4,
+  DIRECTION_RTL,
+  DIRECTION_TTB,
+  DIRECTION_BTT
+} direction_t;
+#define DIRECTION_IS_VALID(dir)		((((unsigned int) (dir)) & ~3U) == 4)
+#define DIRECTION_IS_HORIZONTAL(dir)	((((unsigned int) (dir)) & ~1U) == 4)
+#define DIRECTION_IS_VERTICAL(dir)	((((unsigned int) (dir)) & ~1U) == 6)
+#define DIRECTION_IS_FORWARD(dir)	((((unsigned int) (dir)) & ~2U) == 4)
+#define DIRECTION_IS_BACKWARD(dir)	((((unsigned int) (dir)) & ~2U) == 5)
+#define DIRECTION_REVERSE(dir)		((direction_t) (((unsigned int) (dir)) ^ 1))
 
 
 /* blob */
@@ -101,10 +115,10 @@ typedef struct
 
 typedef struct
 {
-  hb_position_t x_advance;
-  hb_position_t y_advance;
-  hb_position_t x_offset;
-  hb_position_t y_offset;
+  position_t x_advance;
+  position_t y_advance;
+  position_t x_offset;
+  position_t y_offset;
   uint32_t var;
 } glyph_position_t;
 
@@ -115,6 +129,10 @@ typedef struct
   ptr_t(glyph_position_t) pos;
 } buffer_contents_t;
 
+HB_WASM_API (void, buffer_contents_realloc) (HB_WASM_EXEC_ENV
+					     ptr_t(buffer_contents_t),
+					     uint32_t size);
+
 HB_WASM_API (void, buffer_contents_free) (HB_WASM_EXEC_ENV
 					  ptr_t(buffer_contents_t));
 
@@ -123,6 +141,18 @@ typedef struct buffer_t buffer_t;
 HB_WASM_API_COMPOUND (buffer_contents_t, buffer_copy_contents) (HB_WASM_EXEC_ENV_COMPOUND
 								ptr_t(buffer_t));
 
+HB_WASM_API (bool_t, buffer_set_contents) (HB_WASM_EXEC_ENV
+					   ptr_t(buffer_t),
+					   ptr_t(const buffer_contents_t));
+
+HB_WASM_API (direction_t, buffer_get_direction) (HB_WASM_EXEC_ENV
+						 ptr_t(buffer_t));
+
+HB_WASM_API (void, buffer_reverse) (HB_WASM_EXEC_ENV
+				    ptr_t(buffer_t));
+
+HB_WASM_API (void, buffer_reverse_clusters) (HB_WASM_EXEC_ENV
+					     ptr_t(buffer_t));
 
 /* face */
 
@@ -132,6 +162,9 @@ HB_WASM_API_COMPOUND (blob_t, face_reference_table) (HB_WASM_EXEC_ENV_COMPOUND
 						     ptr_t(face_t),
 						     tag_t table_tag);
 
+HB_WASM_API (unsigned, face_get_upem) (HB_WASM_EXEC_ENV
+				       ptr_t(face_t));
+
 
 /* font */
 
@@ -139,6 +172,37 @@ typedef struct font_t font_t;
 
 HB_WASM_API (ptr_t(face_t), font_get_face) (HB_WASM_EXEC_ENV
 					    ptr_t(font_t));
+
+HB_WASM_API (void, font_get_scale) (HB_WASM_EXEC_ENV
+				    ptr_t(font_t),
+				    ptr_t(int32_t) x_scale,
+				    ptr_t(int32_t) y_scale);
+
+HB_WASM_API (codepoint_t, font_get_glyph) (HB_WASM_EXEC_ENV
+					      ptr_t(font_t),
+					      codepoint_t unicode,
+					      codepoint_t variation_selector);
+
+HB_WASM_API (position_t, font_get_glyph_h_advance) (HB_WASM_EXEC_ENV
+						    ptr_t(font_t),
+						    codepoint_t glyph);
+
+HB_WASM_API (position_t, font_get_glyph_v_advance) (HB_WASM_EXEC_ENV
+						    ptr_t(font_t),
+						    codepoint_t glyph);
+
+HB_WASM_API (void, font_glyph_to_string) (HB_WASM_EXEC_ENV
+					  ptr_t(font_t),
+					  codepoint_t glyph,
+					  char *s, uint32_t size);
+
+
+/* shape */
+
+HB_WASM_INTERFACE (bool_t, shape_with) (HB_WASM_EXEC_ENV
+				        ptr_t(font_t),
+				        ptr_t(buffer_t),
+					const char *shaper);
 
 
 /* shape interface */

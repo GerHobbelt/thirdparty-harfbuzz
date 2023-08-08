@@ -31,6 +31,7 @@
 #include "hb-wasm-api-buffer.hh"
 #include "hb-wasm-api-face.hh"
 #include "hb-wasm-api-font.hh"
+#include "hb-wasm-api-shape.hh"
 
 
 #undef module_inst
