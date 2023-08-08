@@ -61,7 +61,7 @@ struct graph_t
       )
     )
 
-    bool parents_in_error () const
+    bool in_error () const
     {
       return parents.in_error ();
     }
@@ -207,7 +207,8 @@ struct graph_t
       }
       else if (single_parent != (unsigned) -1)
       {
-	parents.set (single_parent, 1);
+	if (!parents.set (single_parent, 1))
+	  return;
 	single_parent = (unsigned) -1;
       }
 
@@ -568,7 +569,7 @@ struct graph_t
     check_success (!sorted_graph.in_error ());
 
     remap_all_obj_indices (id_map, &sorted_graph);
-    hb_swap (vertices_, sorted_graph);
+    vertices_ = std::move (sorted_graph);
 
     if (!check_success (new_id == -1))
       print_orphaned_nodes ();
@@ -1274,7 +1275,7 @@ struct graph_t
     for (unsigned i = 0; i < count; i++)
       // parents arrays must be accurate or downstream operations like cycle detection
       // and sorting won't work correctly.
-      check_success (!vertices_.arrayZ[i].parents_in_error ());
+      check_success (!vertices_.arrayZ[i].in_error ());
 
     parents_invalid = false;
   }
