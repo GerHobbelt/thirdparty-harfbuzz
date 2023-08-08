@@ -136,6 +136,25 @@ HB_WASM_API (bool_t, font_copy_glyph_outline) (HB_WASM_EXEC_ENV
     return false;
   }
 
+  // TODO Check two buffers separately
+  if (hb_outline.points.length <= outline->n_points &&
+      hb_outline.contours.length <= outline->n_contours)
+  {
+    glyph_outline_point_t *points = HB_ARRAY_APP2NATIVE (glyph_outline_point_t, outline->points, hb_outline.points.length);
+    uint32_t *contours = HB_ARRAY_APP2NATIVE (uint32_t, outline->contours, hb_outline.contours.length);
+
+    if (unlikely (!points || !contours))
+    {
+      outline->n_points = outline->n_contours = 0;
+      return false;
+    }
+
+    memcpy (points, hb_outline.points.arrayZ, hb_outline.points.get_size ());
+    memcpy (contours, hb_outline.contours.arrayZ, hb_outline.contours.get_size ());
+
+    return true;
+  }
+
   outline->n_points = hb_outline.points.length;
   outline->points = wasm_runtime_module_dup_data (module_inst,
 						  (const char *) hb_outline.points.arrayZ,
@@ -153,6 +172,22 @@ HB_WASM_API (bool_t, font_copy_glyph_outline) (HB_WASM_EXEC_ENV
   }
 
   return true;
+}
+
+HB_WASM_API (void, glyph_outline_free) (HB_WASM_EXEC_ENV
+					ptr_d(glyph_outline_t, outline))
+{
+  HB_PTR_PARAM (glyph_outline_t, outline);
+  if (unlikely (!outline))
+    return;
+
+  module_free (outline->points);
+  module_free (outline->contours);
+
+  outline->n_points = 0;
+  outline->points = nullref;
+  outline->n_contours = 0;
+  outline->contours = nullref;
 }
 
 

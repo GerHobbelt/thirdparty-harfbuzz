@@ -62,6 +62,11 @@ init_wasm ()
   RuntimeInitArgs init_args;
   memset (&init_args, 0, sizeof (RuntimeInitArgs));
 
+  if (wasm_runtime_is_running_mode_supported (Mode_LLVM_JIT))
+    init_args.running_mode = Mode_LLVM_JIT;
+  else if (wasm_runtime_is_running_mode_supported (Mode_Fast_JIT))
+    init_args.running_mode = Mode_Fast_JIT;
+
   init_args.mem_alloc_type = Alloc_With_Allocator;
   init_args.mem_alloc_option.allocator.malloc_func = (void *) hb_malloc;
   init_args.mem_alloc_option.allocator.realloc_func = (void *) hb_realloc;
@@ -348,7 +353,10 @@ retry:
     DEBUG_MSG (WASM, module_inst, "Calling shape() failed: %s",
 	       wasm_runtime_get_exception (module_inst));
     if (retried)
+    {
+      DEBUG_MSG (WASM, font, "Giving up...");
       goto fail;
+    }
     buffer->successful = true;
     retried = true;
     release_shape_plan (face_data, plan);
