@@ -330,7 +330,7 @@ struct Charset0
   {
     mapping->resize (num_glyphs, false);
     for (hb_codepoint_t gid = 1; gid < num_glyphs; gid++)
-      mapping->arrayZ[gid] = {sids[gid - 1], gid + 1};
+      mapping->arrayZ[gid] = {sids[gid - 1], gid};
   }
 
   hb_codepoint_t get_glyph (hb_codepoint_t sid, unsigned int num_glyphs) const
@@ -436,7 +436,7 @@ struct Charset1_2 {
       unsigned count = ranges[i].nLeft + 1;
       unsigned last = gid + count;
       for (unsigned j = 0; j < count; j++)
-	mapping->arrayZ[gid++] = {sid++, last};
+	mapping->arrayZ[gid++] = {sid++, last - 1};
 
       if (gid >= num_glyphs)
         break;
@@ -525,29 +525,35 @@ struct Charset
 
     case 1:
     {
-      Charset1 *fmt1 = c->allocate_size<Charset1> (Charset1::min_size + Charset1_Range::static_size * sid_ranges.length, false);
+      Charset1 *fmt1 = c->allocate_size<Charset1> (Charset1::get_size_for_ranges (sid_ranges.length), false);
       if (unlikely (!fmt1)) return_trace (false);
+      hb_codepoint_t all_glyphs = 0;
       for (unsigned int i = 0; i < sid_ranges.length; i++)
       {
-	if (unlikely (!(sid_ranges.arrayZ[i].glyph <= 0xFF)))
-	  return_trace (false);
-	fmt1->ranges[i].first = sid_ranges.arrayZ[i].code;
-	fmt1->ranges[i].nLeft = sid_ranges.arrayZ[i].glyph;
+        auto &_ = sid_ranges.arrayZ[i];
+        all_glyphs |= _.glyph;
+	fmt1->ranges[i].first = _.code;
+	fmt1->ranges[i].nLeft = _.glyph;
       }
+      if (unlikely (!(all_glyphs <= 0xFF)))
+	return_trace (false);
     }
     break;
 
     case 2:
     {
-      Charset2 *fmt2 = c->allocate_size<Charset2> (Charset2::min_size + Charset2_Range::static_size * sid_ranges.length, false);
+      Charset2 *fmt2 = c->allocate_size<Charset2> (Charset2::get_size_for_ranges (sid_ranges.length), false);
       if (unlikely (!fmt2)) return_trace (false);
+      hb_codepoint_t all_glyphs = 0;
       for (unsigned int i = 0; i < sid_ranges.length; i++)
       {
-	if (unlikely (!(sid_ranges.arrayZ[i].glyph <= 0xFFFF)))
-	  return_trace (false);
-	fmt2->ranges[i].first = sid_ranges.arrayZ[i].code;
-	fmt2->ranges[i].nLeft = sid_ranges.arrayZ[i].glyph;
+        auto &_ = sid_ranges.arrayZ[i];
+        all_glyphs |= _.glyph;
+	fmt2->ranges[i].first = _.code;
+	fmt2->ranges[i].nLeft = _.glyph;
       }
+      if (unlikely (!(all_glyphs <= 0xFFFF)))
+	return_trace (false);
     }
     break;
 

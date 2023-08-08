@@ -294,16 +294,17 @@ struct range_list_t : hb_vector_t<code_pair_t>
   /* replace the first glyph ID in the "glyph" field each range with a nLeft value */
   bool complete (unsigned int last_glyph)
   {
-    bool two_byte = false;
+    hb_codepoint_t all_glyphs = 0;
     unsigned count = this->length;
     for (unsigned int i = count; i; i--)
     {
       code_pair_t &pair = arrayZ[i - 1];
       unsigned int nLeft = last_glyph - pair.glyph - 1;
-      two_byte |= nLeft >= 0x100;
+      all_glyphs |= nLeft;
       last_glyph = pair.glyph;
       pair.glyph = nLeft;
     }
+    bool two_byte = all_glyphs >= 0x100;
     return two_byte;
   }
 };
@@ -503,7 +504,6 @@ struct cff1_subset_plan
 
     code_pair_t glyph_to_sid_cache {0, HB_CODEPOINT_INVALID};
 
-    unsigned int glyph;
     unsigned num_glyphs = plan->num_output_glyphs ();
 
     if (unlikely (!subset_charset_ranges.alloc (hb_min (num_glyphs,
@@ -530,7 +530,7 @@ struct cff1_subset_plan
     bool skip = !not_is_cid && glyph_to_sid_map;
     if (not_is_cid)
       sidmap.alloc (num_glyphs);
-    for (glyph = 1; glyph < num_glyphs; glyph++)
+    for (hb_codepoint_t glyph = 1; glyph < num_glyphs; glyph++)
     {
       hb_codepoint_t old_glyph;
       if (glyph == _.first)
@@ -556,7 +556,7 @@ struct cff1_subset_plan
 
 	if (glyph == old_glyph && skip)
 	{
-	  glyph = hb_min (_.first - 1, glyph_to_sid_map->arrayZ[old_glyph].glyph - 1);
+	  glyph = hb_min (_.first - 1, glyph_to_sid_map->arrayZ[old_glyph].glyph);
 	  sid += glyph - old_glyph;
 	}
       }
@@ -573,7 +573,7 @@ struct cff1_subset_plan
       }
     }
 
-    bool two_byte = subset_charset_ranges.complete (glyph);
+    bool two_byte = subset_charset_ranges.complete (num_glyphs);
 
     size0 = Charset0::get_size (plan->num_output_glyphs ());
     if (!two_byte)
@@ -831,7 +831,7 @@ OT::cff1::accelerator_subset_t::serialize (hb_serialize_context_t *c,
        return false;
 
     auto *cs = c->start_embed<CFF1CharStrings> ();
-    if (likely (cs->serialize (c, plan.subset_charstrings, data_size)))
+    if (likely (cs->serialize (c, plan.subset_charstrings, &data_size)))
       plan.info.char_strings_link = c->pop_pack (false);
     else
     {
@@ -960,7 +960,7 @@ OT::cff1::accelerator_subset_t::serialize (hb_serialize_context_t *c,
     }
     /* serialize INDEX header for above */
     auto *dest = c->start_embed<CFF1Index> ();
-    return dest->serialize_header (c, hb_iter (hb_array_t<unsigned> (&top_size, 1)));
+    return dest->serialize_header (c, hb_iter (&top_size, 1), top_size);
   }
 }
 
