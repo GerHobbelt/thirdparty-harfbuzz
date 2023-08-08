@@ -37,6 +37,7 @@ struct path_builder_t
      * https://stackoverflow.com/a/20772557
      *
      * Cubic support added. */
+  __attribute__((always_inline))
   void consume_point (const contour_point_t &point)
   {
     bool is_on_curve = point.flag & glyf_impl::SimpleGlyph::FLAG_ON_CURVE;
@@ -46,7 +47,7 @@ struct path_builder_t
     bool is_cubic = !is_on_curve && (point.flag & glyf_impl::SimpleGlyph::FLAG_CUBIC);
 #endif
     optional_point_t p (font->em_fscalef_x (point.x), font->em_fscalef_y (point.y));
-    if (!first_oncurve)
+    if (unlikely (!first_oncurve))
     {
       if (is_on_curve)
       {
@@ -123,7 +124,7 @@ struct path_builder_t
       }
     }
 
-    if (point.is_end_point)
+    if (unlikely (point.is_end_point))
     {
       if (first_offcurve && last_offcurve)
       {

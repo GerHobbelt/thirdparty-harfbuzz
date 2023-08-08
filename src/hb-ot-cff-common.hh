@@ -57,6 +57,16 @@ using str_buff_t = hb_vector_t<unsigned char>;
 using str_buff_vec_t = hb_vector_t<str_buff_t>;
 using glyph_to_sid_map_t = hb_vector_t<code_pair_t>;
 
+struct length_f_t
+{
+  template <typename Iterable,
+	    hb_requires (hb_is_iterable (Iterable))>
+  unsigned operator () (const Iterable &_) const { return hb_len (hb_iter (_)); }
+
+  unsigned operator () (unsigned _) const { return _; }
+}
+HB_FUNCOBJ (length_f);
+
 /* CFF INDEX */
 template <typename COUNT>
 struct CFFIndex
@@ -96,15 +106,6 @@ struct CFFIndex
     }
     return_trace (true);
   }
-
-  HB_INTERNAL static struct {
-    template <typename Iterable,
-	      hb_requires (hb_is_iterable (Iterable))>
-    unsigned operator () (const Iterable &_) { return hb_len (hb_iter (_)); }
-
-    unsigned operator () (unsigned _) { return _; }
-  }
-  length_f;
 
   template <typename Iterator,
 	    hb_requires (hb_is_iterator (Iterator))>
@@ -198,9 +199,7 @@ struct CFFIndex
     if (!it)
     {
       if (data_size) *data_size = 0;
-      // The following should return min_size IMO. But that crashes a few
-      // tests. I have not investigated why.
-      return 0; //min_size;
+      return min_size;
     }
 
     unsigned total = 0;
@@ -489,7 +488,7 @@ struct FDSelect3_4
   {
     auto *range = hb_bsearch (glyph, &ranges[0], nRanges () - 1, sizeof (ranges[0]), _cmp_range);
     unsigned fd = range ? range->fd : ranges[nRanges () - 1].fd;
-    hb_codepoint_t end = range ? range[1].first : 0;
+    hb_codepoint_t end = range ? range[1].first : ranges[nRanges () - 1].first;
     return {fd, end};
   }
 
@@ -543,13 +542,13 @@ struct FDSelect
   /* Returns pair of fd and one after last glyph in range. */
   hb_pair_t<unsigned, hb_codepoint_t> get_fd_range (hb_codepoint_t glyph) const
   {
-    if (this == &Null (FDSelect)) return {0, 0};
+    if (this == &Null (FDSelect)) return {0, 1};
 
     switch (format)
     {
     case 0: return u.format0.get_fd_range (glyph);
     case 3: return u.format3.get_fd_range (glyph);
-    default:return {0, 0};
+    default:return {0, 1};
     }
   }
 
