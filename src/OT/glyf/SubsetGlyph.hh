@@ -22,9 +22,16 @@ struct SubsetGlyph
 
   bool serialize (hb_serialize_context_t *c,
 		  bool use_short_loca,
-		  const hb_subset_plan_t *plan)
+		  const hb_subset_plan_t *plan) const
   {
     TRACE_SERIALIZE (this);
+
+    if (length () == 0)
+    {
+      /* Fast path for retain-gid holes. */
+      DEBUG_MSG (SUBSET, nullptr, "serialize empty glyph");
+      return true;
+    }
 
     hb_bytes_t dest_glyph = dest_start.copy (c);
     hb_bytes_t end_copy = dest_end.copy (c);
