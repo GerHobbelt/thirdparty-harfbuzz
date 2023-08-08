@@ -261,6 +261,7 @@ struct hb_serialize_context_t
 
   /* To be called around main operation. */
   template <typename Type>
+  __attribute__((returns_nonnull))
   Type *start_serialize ()
   {
     DEBUG_MSG_LEVEL (SERIALIZE, this->start, 0, +1,
@@ -303,6 +304,7 @@ struct hb_serialize_context_t
   }
 
   template <typename Type = void>
+  __attribute__((returns_nonnull))
   Type *push ()
   {
     if (unlikely (in_error ())) return start_embed<Type> ();
@@ -567,13 +569,15 @@ struct hb_serialize_context_t
   {
     unsigned int l = length () % alignment;
     if (l)
-      allocate_size<void> (alignment - l);
+      (void) allocate_size<void> (alignment - l);
   }
 
   template <typename Type = void>
+  __attribute__((returns_nonnull))
   Type *start_embed (const Type *obj HB_UNUSED = nullptr) const
   { return reinterpret_cast<Type *> (this->head); }
   template <typename Type>
+  __attribute__((returns_nonnull))
   Type *start_embed (const Type &obj) const
   { return start_embed (std::addressof (obj)); }
 
@@ -601,6 +605,7 @@ struct hb_serialize_context_t
   }
 
   template <typename Type>
+  HB_NODISCARD
   Type *allocate_size (size_t size, bool clear = true)
   {
     if (unlikely (in_error ())) return nullptr;
@@ -622,6 +627,7 @@ struct hb_serialize_context_t
   { return this->allocate_size<Type> (Type::min_size); }
 
   template <typename Type>
+  HB_NODISCARD
   Type *embed (const Type *obj)
   {
     unsigned int size = obj->get_size ();
@@ -631,6 +637,7 @@ struct hb_serialize_context_t
     return ret;
   }
   template <typename Type>
+  HB_NODISCARD
   Type *embed (const Type &obj)
   { return embed (std::addressof (obj)); }
   char *embed (const char *obj, unsigned size)
