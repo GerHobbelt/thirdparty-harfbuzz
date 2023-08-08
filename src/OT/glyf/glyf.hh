@@ -89,24 +89,23 @@ struct glyf
     if (c->plan->normalized_coords)
     {
       font = _create_font_for_instancing (c->plan);
-      if (unlikely (!font)) return false;
+      if (unlikely (!font))
+	return_trace (false);
     }
+
+    hb_vector_t<unsigned> padded_offsets;
+    if (unlikely (!padded_offsets.alloc (c->plan->new_to_old_gid_list.length, true)))
+      return_trace (false);
 
     hb_vector_t<glyf_impl::SubsetGlyph> glyphs;
     if (!_populate_subset_glyphs (c->plan, font, glyphs))
     {
       hb_font_destroy (font);
-      return false;
+      return_trace (false);
     }
 
     if (font)
       hb_font_destroy (font);
-
-    // Calculate glyph sizes for `loca` table
-
-    hb_vector_t<unsigned> padded_offsets;
-    if (unlikely (!padded_offsets.alloc (glyphs.length, true)))
-      return false;
 
     unsigned max_offset = 0;
     for (auto &g : glyphs)
@@ -127,17 +126,16 @@ struct glyf
 	padded_offsets.push (g.length ());
     }
 
+    glyf *glyf_prime = c->serializer->start_embed <glyf> ();
+    bool result = glyf_prime &&
+		  glyf_prime->serialize (c->serializer, hb_iter (glyphs), use_short_loca, c->plan);
+    if (c->plan->normalized_coords && !c->plan->pinned_at_default)
+      _free_compiled_subset_glyphs (glyphs);
+
     if (unlikely (!c->serializer->check_success (glyf_impl::_add_loca_and_head (c,
 						 padded_offsets.iter (),
 						 use_short_loca))))
-      return false;
-
-    glyf *glyf_prime = c->serializer->start_embed <glyf> ();
-    if (unlikely (!glyf_prime)) return_trace (false);
-
-    bool result = glyf_prime->serialize (c->serializer, glyphs, use_short_loca, c->plan);
-    if (c->plan->normalized_coords && !c->plan->pinned_at_default)
-      _free_compiled_subset_glyphs (glyphs);
+      return_trace (false);
 
     return result;
   }
@@ -152,8 +150,8 @@ struct glyf
 
   void _free_compiled_subset_glyphs (hb_vector_t<glyf_impl::SubsetGlyph> &glyphs) const
   {
-    for (unsigned i = 0; i < glyphs.length; i++)
-      glyphs[i].free_compiled_bytes ();
+    for (auto &g : glyphs)
+      g.free_compiled_bytes ();
   }
 
   protected:
@@ -431,7 +429,7 @@ glyf::_populate_subset_glyphs (const hb_subset_plan_t   *plan,
 			       hb_vector_t<glyf_impl::SubsetGlyph>& glyphs /* OUT */) const
 {
   OT::glyf_accelerator_t glyf (plan->source);
-  if (!glyphs.alloc (plan->glyph_map->get_population (), true)) return false;
+  if (!glyphs.alloc (plan->new_to_old_gid_list.length, true)) return false;
 
   for (const auto &pair : plan->new_to_old_gid_list)
   {
