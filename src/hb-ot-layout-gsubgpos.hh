@@ -1941,12 +1941,13 @@ static inline bool context_would_apply_lookup (hb_would_apply_context_t *c,
 }
 
 template <typename HBUINT>
-static inline bool context_apply_lookup (hb_ot_apply_context_t *c,
-					 unsigned int inputCount, /* Including the first glyph (not matched) */
-					 const HBUINT input[], /* Array of input values--start with second glyph */
-					 unsigned int lookupCount,
-					 const LookupRecord lookupRecord[],
-					 const ContextApplyLookupContext &lookup_context)
+HB_ALWAYS_INLINE
+static bool context_apply_lookup (hb_ot_apply_context_t *c,
+				  unsigned int inputCount, /* Including the first glyph (not matched) */
+				  const HBUINT input[], /* Array of input values--start with second glyph */
+				  unsigned int lookupCount,
+				  const LookupRecord lookupRecord[],
+				  const ContextApplyLookupContext &lookup_context)
 {
   unsigned match_end = 0;
   unsigned match_positions[HB_MAX_CONTEXT_LENGTH];
@@ -2204,7 +2205,18 @@ struct RuleSet
       }
     }
     else
-      goto slow;
+    {
+      /* Failed to match a next glyph. Only try applying rules that have
+       * no further input. */
+      return_trace (
+      + hb_iter (rule)
+      | hb_map (hb_add (this))
+      | hb_filter ([&] (const Rule &_) { return _.inputCount <= 1; })
+      | hb_map ([&] (const Rule &_) { return _.apply (c, lookup_context); })
+      | hb_any
+      )
+      ;
+    }
 
     bool unsafe_to_concat = false;
 
@@ -3004,16 +3016,17 @@ static inline bool chain_context_would_apply_lookup (hb_would_apply_context_t *c
 }
 
 template <typename HBUINT>
-static inline bool chain_context_apply_lookup (hb_ot_apply_context_t *c,
-					       unsigned int backtrackCount,
-					       const HBUINT backtrack[],
-					       unsigned int inputCount, /* Including the first glyph (not matched) */
-					       const HBUINT input[], /* Array of input values--start with second glyph */
-					       unsigned int lookaheadCount,
-					       const HBUINT lookahead[],
-					       unsigned int lookupCount,
-					       const LookupRecord lookupRecord[],
-					       const ChainContextApplyLookupContext &lookup_context)
+HB_ALWAYS_INLINE
+static bool chain_context_apply_lookup (hb_ot_apply_context_t *c,
+					unsigned int backtrackCount,
+					const HBUINT backtrack[],
+					unsigned int inputCount, /* Including the first glyph (not matched) */
+					const HBUINT input[], /* Array of input values--start with second glyph */
+					unsigned int lookaheadCount,
+					const HBUINT lookahead[],
+					unsigned int lookupCount,
+					const LookupRecord lookupRecord[],
+					const ChainContextApplyLookupContext &lookup_context)
 {
   unsigned end_index = c->buffer->idx;
   unsigned match_end = 0;
@@ -3346,7 +3359,18 @@ struct ChainRuleSet
       }
     }
     else
-      goto slow;
+    {
+      /* Failed to match a next glyph. Only try applying rules that have
+       * no further input and lookahead. */
+      return_trace (
+      + hb_iter (rule)
+      | hb_map (hb_add (this))
+      | hb_filter ([&] (const ChainRule &_) { return _.inputX.lenP1 <= 1 && _.lookaheadX.len == 0; })
+      | hb_map ([&] (const ChainRule &_) { return _.apply (c, lookup_context); })
+      | hb_any
+      )
+      ;
+    }
 
     bool unsafe_to_concat = false;
 
