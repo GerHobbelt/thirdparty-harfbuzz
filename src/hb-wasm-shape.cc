@@ -30,8 +30,67 @@
 
 #ifdef HAVE_WASM
 
+/* Compile wasm-micro-runtime with:
+ *
+ * $ cmake -DWAMR_BUILD_MULTI_MODULE=1 -DWAMR_BUILD_REF_TYPES=1 -DWAMR_BUILD_FAST_JIT=1
+ * $ make
+ *
+ * If you manage to build a wasm shared module successfully and want to use it,
+ * do the following:
+ *
+ *   - Add -DWAMR_BUILD_MULTI_MODULE=1 to your cmake build for wasm-micro-runtime,
+ *
+ *   - Remove the #define HB_WASM_NO_MODULES line below,
+ *
+ *   - Install your shared module with name ending in .wasm in
+ *     $(prefix)/$(libdir)/harfbuzz/wasm/
+ *
+ *   - Build your font's wasm code importing the shared modules with the desired
+ *     name. This can be done eg.: __attribute__((import_module("graphite2")))
+ *     before each symbol in the the shared-module's headers.
+ *
+ *   - Try shaping your font and hope for the best...
+ *
+ * I haven't been able to get this to work since emcc's support for shared libraries
+ * requires support from the host that seems to be missing from wasm-micro-runtime?
+ */
+
 #include "hb-wasm-api.hh"
 #include "hb-wasm-api-list.hh"
+
+#define HB_WASM_NO_MODULES
+
+static bool HB_UNUSED
+_hb_wasm_module_reader (const char *module_name,
+		       uint8_t **p_buffer, uint32_t *p_size)
+{
+  char path[sizeof (HB_WASM_MODULE_DIR) + 64] = HB_WASM_MODULE_DIR "/";
+  strncat (path, module_name, sizeof (path) - sizeof (HB_WASM_MODULE_DIR) - 16);
+  strncat (path, ".wasm", 6);
+
+  auto *blob = hb_blob_create_from_file (path);
+
+  unsigned length;
+  auto *data = hb_blob_get_data (blob, &length);
+
+  *p_buffer = (uint8_t *) hb_malloc (length);
+
+  if (length && !p_buffer)
+    return false;
+
+  memcpy (*p_buffer, data, length);
+  *p_size = length;
+
+  hb_blob_destroy (blob);
+
+  return true;
+}
+
+static void HB_UNUSED
+_hb_wasm_module_destroyer (uint8_t *buffer, uint32_t size)
+{
+  hb_free (buffer);
+}
 
 
 /*
@@ -55,17 +114,25 @@ struct hb_wasm_face_data_t {
 static bool
 _hb_wasm_init ()
 {
+  /* XXX
+   *
+   * Umm. Make this threadsafe. How?!
+   * It's clunky that we can't allocate a static mutex.
+   * So we have to first allocate one on the heap atomically...
+   *
+   * Do we also need to lock around module creation?
+   *
+   * Also, wasm-micro-runtime uses a singleton instance. So if
+   * another library or client uses it, all bets are off. :-(
+   * If nothing else, around HB_REF2OBJ().
+   */
+
   static bool initialized;
   if (initialized)
     return true;
 
   RuntimeInitArgs init_args;
   memset (&init_args, 0, sizeof (RuntimeInitArgs));
-
-  if (wasm_runtime_is_running_mode_supported (Mode_LLVM_JIT))
-    init_args.running_mode = Mode_LLVM_JIT;
-  else if (wasm_runtime_is_running_mode_supported (Mode_Fast_JIT))
-    init_args.running_mode = Mode_Fast_JIT;
 
   init_args.mem_alloc_type = Alloc_With_Allocator;
   init_args.mem_alloc_option.allocator.malloc_func = (void *) hb_malloc;
@@ -83,6 +150,11 @@ _hb_wasm_init ()
     return false;
   }
 
+#ifndef HB_WASM_NO_MODULES
+  wasm_runtime_set_module_reader (_hb_wasm_module_reader,
+				  _hb_wasm_module_destroyer);
+#endif
+
   initialized = true;
   return true;
 }
@@ -90,6 +162,7 @@ _hb_wasm_init ()
 hb_wasm_face_data_t *
 _hb_wasm_shaper_face_data_create (hb_face_t *face)
 {
+  char error[128];
   hb_wasm_face_data_t *data = nullptr;
   hb_blob_t *wasm_blob = nullptr;
   wasm_module_t wasm_module = nullptr;
@@ -103,10 +176,10 @@ _hb_wasm_shaper_face_data_create (hb_face_t *face)
     goto fail;
 
   wasm_module = wasm_runtime_load ((uint8_t *) hb_blob_get_data_writable (wasm_blob, nullptr),
-				   length, nullptr, 0);
+				   length, error, sizeof (error));
   if (unlikely (!wasm_module))
   {
-    DEBUG_MSG (WASM, nullptr, "Load wasm module failed.");
+    DEBUG_MSG (WASM, nullptr, "Load wasm module failed: %s", error);
     goto fail;
   }
 
@@ -131,6 +204,8 @@ static hb_wasm_shape_plan_t *
 acquire_shape_plan (hb_face_t *face,
 		    const hb_wasm_face_data_t *face_data)
 {
+  char error[128];
+
   /* Fetch cached one if available. */
   hb_wasm_shape_plan_t *plan = face_data->plan.get_acquire ();
   if (likely (plan && face_data->plan.cmpexch (plan, nullptr)))
@@ -144,12 +219,12 @@ acquire_shape_plan (hb_face_t *face,
 
   constexpr uint32_t stack_size = 32 * 1024, heap_size = 2 * 1024 * 1024;
 
-  module_inst = plan->module_inst = wasm_runtime_instantiate(face_data->wasm_module,
-							     stack_size, heap_size,
-							     nullptr, 0);
+  module_inst = plan->module_inst = wasm_runtime_instantiate (face_data->wasm_module,
+							      stack_size, heap_size,
+							      error, sizeof (error));
   if (unlikely (!module_inst))
   {
-    DEBUG_MSG (WASM, face_data, "Create wasm module instance failed.");
+    DEBUG_MSG (WASM, face_data, "Create wasm module instance failed: %s", error);
     goto fail;
   }
 
@@ -307,7 +382,6 @@ retry:
   auto *module_inst = plan->module_inst;
   auto *exec_env = plan->exec_env;
 
-  // cmake -DWAMR_BUILD_REF_TYPES=1 for these to work
   HB_OBJ2REF (font);
   HB_OBJ2REF (buffer);
   if (unlikely (!fontref || !bufferref))
