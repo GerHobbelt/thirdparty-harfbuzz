@@ -99,6 +99,7 @@ struct hb_bit_page_t
 
   bool is_empty () const
   {
+    if (has_population ()) return !population;
     return
     + hb_iter (v)
     | hb_none
@@ -122,12 +123,12 @@ struct hb_bit_page_t
       *la |= (mask (b) << 1) - mask(a);
     else
     {
-      *la |= ~(mask (a) - 1);
+      *la |= ~(mask (a) - 1llu);
       la++;
 
       hb_memset (la, 0xff, (char *) lb - (char *) la);
 
-      *lb |= ((mask (b) << 1) - 1);
+      *lb |= ((mask (b) << 1) - 1llu);
     }
     dirty ();
   }
@@ -136,7 +137,7 @@ struct hb_bit_page_t
     elt_t *la = &elt (a);
     elt_t *lb = &elt (b);
     if (la == lb)
-      *la &= ~((mask (b) << 1) - mask(a));
+      *la &= ~((mask (b) << 1llu) - mask(a));
     else
     {
       *la &= mask (a) - 1;
@@ -144,7 +145,7 @@ struct hb_bit_page_t
 
       hb_memset (la, 0, (char *) lb - (char *) la);
 
-      *lb &= ~((mask (b) << 1) - 1);
+      *lb &= ~((mask (b) << 1) - 1llu);
     }
     dirty ();
   }
@@ -226,6 +227,10 @@ struct hb_bit_page_t
   }
   bool is_subset (const hb_bit_page_t &larger_page) const
   {
+    if (has_population () && larger_page.has_population () &&
+	population > larger_page.population)
+      return false;
+
     for (unsigned i = 0; i < len (); i++)
       if (~larger_page.v[i] & v[i])
 	return false;
@@ -339,7 +344,6 @@ struct hb_bit_page_t
   mutable unsigned population;
   vector_t v;
 };
-//static_assert (hb_bit_page_t::PAGE_BITS == sizeof (hb_bit_page_t) * 8, "");
 
 
 #endif /* HB_BIT_PAGE_HH */
