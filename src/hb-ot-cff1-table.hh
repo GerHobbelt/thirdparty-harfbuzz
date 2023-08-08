@@ -110,6 +110,7 @@ struct Encoding1 {
 
   hb_codepoint_t get_code (hb_codepoint_t glyph) const
   {
+    /* TODO: Add cache like get_sid. */
     assert (glyph > 0);
     glyph--;
     for (unsigned int i = 0; i < nRanges (); i++)
@@ -329,10 +330,11 @@ struct Charset0
       return sids[glyph - 1];
   }
 
-  void collect_glyph_to_sid_map (hb_map_t *mapping, unsigned int num_glyphs) const
+  void collect_glyph_to_sid_map (hb_vector_t<uint16_t> *mapping, unsigned int num_glyphs) const
   {
+    mapping->resize (num_glyphs, false);
     for (hb_codepoint_t gid = 1; gid < num_glyphs; gid++)
-      mapping->set (gid, sids[gid - 1]);
+      mapping->arrayZ[gid] = sids[gid - 1];
   }
 
   hb_codepoint_t get_glyph (hb_codepoint_t sid, unsigned int num_glyphs) const
@@ -390,21 +392,42 @@ struct Charset1_2 {
     return_trace (true);
   }
 
-  hb_codepoint_t get_sid (hb_codepoint_t glyph, unsigned num_glyphs) const
+  hb_codepoint_t get_sid (hb_codepoint_t glyph, unsigned num_glyphs,
+			  code_pair_t *cache = nullptr) const
   {
     if (unlikely (glyph >= num_glyphs)) return 0;
-    if (unlikely (glyph == 0)) return 0;
-    glyph--;
-    for (unsigned int i = 0;; i++)
+    unsigned i;
+    hb_codepoint_t start_glyph;
+    if (cache && likely (cache->glyph <= glyph))
     {
-      if (glyph <= ranges[i].nLeft)
-	return (hb_codepoint_t) ranges[i].first + glyph;
-      glyph -= (ranges[i].nLeft + 1);
+      i = cache->code;
+      start_glyph = cache->glyph;
+    }
+    else
+    {
+      if (unlikely (glyph == 0)) return 0;
+      i = 0;
+      start_glyph = 1;
+    }
+    glyph -= start_glyph;
+    for (;; i++)
+    {
+      unsigned count = ranges[i].nLeft;
+      if (glyph <= count)
+      {
+        if (cache)
+	  *cache = {i, start_glyph};
+	return ranges[i].first + glyph;
+      }
+      count++;
+      start_glyph += count;
+      glyph -= count;
     }
   }
 
-  void collect_glyph_to_sid_map (hb_map_t *mapping, unsigned int num_glyphs) const
+  void collect_glyph_to_sid_map (hb_vector_t<uint16_t> *mapping, unsigned int num_glyphs) const
   {
+    mapping->resize (num_glyphs, false);
     hb_codepoint_t gid = 1;
     if (gid >= num_glyphs)
       return;
@@ -413,7 +436,7 @@ struct Charset1_2 {
       hb_codepoint_t sid = ranges[i].first;
       unsigned count = ranges[i].nLeft + 1;
       for (unsigned j = 0; j < count; j++)
-	mapping->set (gid++, sid++);
+	mapping->arrayZ[gid++] = sid++;
 
       if (gid >= num_glyphs)
         break;
@@ -547,18 +570,19 @@ struct Charset
     }
   }
 
-  hb_codepoint_t get_sid (hb_codepoint_t glyph, unsigned int num_glyphs) const
+  hb_codepoint_t get_sid (hb_codepoint_t glyph, unsigned int num_glyphs,
+			  code_pair_t *cache = nullptr) const
   {
     switch (format)
     {
     case 0: return u.format0.get_sid (glyph, num_glyphs);
-    case 1: return u.format1.get_sid (glyph, num_glyphs);
-    case 2: return u.format2.get_sid (glyph, num_glyphs);
+    case 1: return u.format1.get_sid (glyph, num_glyphs, cache);
+    case 2: return u.format2.get_sid (glyph, num_glyphs, cache);
     default:return 0;
     }
   }
 
-  void collect_glyph_to_sid_map (hb_map_t *mapping, unsigned int num_glyphs) const
+  void collect_glyph_to_sid_map (hb_vector_t<uint16_t> *mapping, unsigned int num_glyphs) const
   {
     switch (format)
     {
@@ -1205,13 +1229,14 @@ struct cff1
 
     bool is_predef_encoding () const { return topDict.EncodingOffset <= ExpertEncoding; }
 
-    hb_codepoint_t glyph_to_code (hb_codepoint_t glyph) const
+    hb_codepoint_t glyph_to_code (hb_codepoint_t glyph,
+				  code_pair_t *glyph_to_sid_cache = nullptr) const
     {
       if (encoding != &Null (Encoding))
 	return encoding->get_code (glyph);
       else
       {
-	hb_codepoint_t sid = glyph_to_sid (glyph);
+	hb_codepoint_t sid = glyph_to_sid (glyph, glyph_to_sid_cache);
 	if (sid == 0) return 0;
 	hb_codepoint_t code = 0;
 	switch (topDict.EncodingOffset)
@@ -1229,12 +1254,14 @@ struct cff1
       }
     }
 
-    hb_map_t *create_glyph_to_sid_map () const
+    hb_vector_t<uint16_t> *create_glyph_to_sid_map () const
     {
       if (charset != &Null (Charset))
       {
-	hb_map_t *mapping = hb_map_create ();
-	mapping->set (0, 0);
+	auto *mapping = (hb_vector_t<uint16_t> *) hb_malloc (sizeof (hb_vector_t<uint16_t>));
+	if (unlikely (!mapping)) return nullptr;
+	mapping = new (mapping) hb_vector_t<uint16_t> ();
+	mapping->push (0);
 	charset->collect_glyph_to_sid_map (mapping, num_glyphs);
 	return mapping;
       }
@@ -1242,10 +1269,11 @@ struct cff1
 	return nullptr;
     }
 
-    hb_codepoint_t glyph_to_sid (hb_codepoint_t glyph) const
+    hb_codepoint_t glyph_to_sid (hb_codepoint_t glyph,
+				 code_pair_t *cache = nullptr) const
     {
       if (charset != &Null (Charset))
-	return charset->get_sid (glyph, num_glyphs);
+	return charset->get_sid (glyph, num_glyphs, cache);
       else
       {
 	hb_codepoint_t sid = 0;
@@ -1388,9 +1416,10 @@ struct cff1
 	  /* TODO */
 
 	  /* fill glyph names */
+	  code_pair_t glyph_to_sid_cache {0, HB_CODEPOINT_INVALID};
 	  for (hb_codepoint_t gid = 0; gid < num_glyphs; gid++)
 	  {
-	    hb_codepoint_t	sid = glyph_to_sid (gid);
+	    hb_codepoint_t	sid = glyph_to_sid (gid, &glyph_to_sid_cache);
 	    gname_t	gname;
 	    gname.sid = sid;
 	    if (sid < cff1_std_strings_length)

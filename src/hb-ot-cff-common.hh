@@ -62,16 +62,6 @@ struct CFFIndex
   unsigned int offset_array_size () const
   { return offSize * (count + 1); }
 
-  CFFIndex *copy (hb_serialize_context_t *c) const
-  {
-    TRACE_SERIALIZE (this);
-    unsigned int size = get_size ();
-    CFFIndex *out = c->allocate_size<CFFIndex> (size, false);
-    if (likely (out))
-      hb_memcpy (out, this, size);
-    return_trace (out);
-  }
-
   template <typename Iterable,
 	    hb_requires (hb_is_iterable (Iterable))>
   bool serialize (hb_serialize_context_t *c,
@@ -87,7 +77,7 @@ struct CFFIndex
       {
 	unsigned char *ret = c->allocate_size<unsigned char> (1, false);
 	if (unlikely (!ret)) return_trace (false);
-	*ret = *it;
+	*ret = *it.arrayZ;
 	continue;
       }
       it.copy (c);
