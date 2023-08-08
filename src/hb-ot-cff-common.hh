@@ -48,7 +48,7 @@ static inline const Type& StructAtOffsetOrNull (const void *P, unsigned int offs
 
 struct code_pair_t
 {
-  hb_codepoint_t code;
+  unsigned code;
   hb_codepoint_t glyph;
 };
 
@@ -81,7 +81,17 @@ struct CFFIndex
     auto it = hb_iter (iterable);
     serialize_header(c, + it | hb_map (hb_iter) | hb_map (hb_len));
     for (const auto &_ : +it)
-      hb_iter (_).copy (c);
+    {
+      auto it = hb_iter (_);
+      if (hb_len (it) == 1)
+      {
+	unsigned char *ret = c->allocate_size<unsigned char> (1, false);
+	if (unlikely (!ret)) return_trace (false);
+	*ret = *it;
+	continue;
+      }
+      it.copy (c);
+    }
     return_trace (true);
   }
 

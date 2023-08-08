@@ -312,17 +312,18 @@ struct Encoding
 };
 
 /* Charset */
-struct Charset0 {
+struct Charset0
+{
   bool sanitize (hb_sanitize_context_t *c, unsigned int num_glyphs) const
   {
     TRACE_SANITIZE (this);
-    return_trace (c->check_struct (this) && sids[num_glyphs - 1].sanitize (c));
+    return_trace (sids.sanitize (c, num_glyphs - 1));
   }
 
   hb_codepoint_t get_sid (hb_codepoint_t glyph, unsigned num_glyphs) const
   {
     if (unlikely (glyph >= num_glyphs)) return 0;
-    if (glyph == 0)
+    if (unlikely (glyph == 0))
       return 0;
     else
       return sids[glyph - 1];
@@ -347,13 +348,13 @@ struct Charset0 {
     return 0;
   }
 
-  unsigned int get_size (unsigned int num_glyphs) const
+  static unsigned int get_size (unsigned int num_glyphs)
   {
     assert (num_glyphs > 0);
-    return HBUINT16::static_size * (num_glyphs - 1);
+    return UnsizedArrayOf<HBUINT16>::get_size (num_glyphs - 1);
   }
 
-  HBUINT16  sids[HB_VAR_ARRAY];
+  UnsizedArrayOf<HBUINT16> sids;
 
   DEFINE_SIZE_ARRAY(0, sids);
 };
@@ -392,7 +393,7 @@ struct Charset1_2 {
   hb_codepoint_t get_sid (hb_codepoint_t glyph, unsigned num_glyphs) const
   {
     if (unlikely (glyph >= num_glyphs)) return 0;
-    if (glyph == 0) return 0;
+    if (unlikely (glyph == 0)) return 0;
     glyph--;
     for (unsigned int i = 0;; i++)
     {
@@ -435,21 +436,26 @@ struct Charset1_2 {
 
   unsigned int get_size (unsigned int num_glyphs) const
   {
-    unsigned int size = HBUINT8::static_size;
-    int glyph = (int)num_glyphs;
+    int glyph = (int) num_glyphs;
+    unsigned num_ranges = 0;
 
     assert (glyph > 0);
     glyph--;
     for (unsigned int i = 0; glyph > 0; i++)
     {
       glyph -= (ranges[i].nLeft + 1);
-      size += Charset_Range<TYPE>::static_size;
+      num_ranges++;
     }
 
-    return size;
+    return get_size_for_ranges (num_ranges);
   }
 
-  Charset_Range<TYPE>   ranges[HB_VAR_ARRAY];
+  static unsigned int get_size_for_ranges (unsigned int num_ranges)
+  {
+    return UnsizedArrayOf<Charset_Range<TYPE> >::get_size (num_ranges);
+  }
+
+  UnsizedArrayOf<Charset_Range<TYPE>> ranges;
 
   DEFINE_SIZE_ARRAY (0, ranges);
 };
@@ -486,7 +492,7 @@ struct Charset
     {
     case 0:
     {
-      Charset0 *fmt0 = c->allocate_size<Charset0> (Charset0::min_size + HBUINT16::static_size * (num_glyphs - 1));
+      Charset0 *fmt0 = c->allocate_size<Charset0> (Charset0::get_size (num_glyphs));
       if (unlikely (!fmt0)) return_trace (false);
       unsigned int glyph = 0;
       for (unsigned int i = 0; i < sid_ranges.length; i++)

@@ -465,21 +465,15 @@ struct UnsizedArrayOf
   const Type& operator [] (int i_) const
   {
     unsigned int i = (unsigned int) i_;
-    const Type *p = &arrayZ[i];
-    if (unlikely ((const void *) p < (const void *) arrayZ)) return Null (Type); /* Overflowed. */
-    _hb_compiler_memory_r_barrier ();
-    return *p;
+    return arrayZ[i];
   }
   Type& operator [] (int i_)
   {
     unsigned int i = (unsigned int) i_;
-    Type *p = &arrayZ[i];
-    if (unlikely ((const void *) p < (const void *) arrayZ)) return Crap (Type); /* Overflowed. */
-    _hb_compiler_memory_r_barrier ();
-    return *p;
+    return arrayZ[i];
   }
 
-  unsigned int get_size (unsigned int len) const
+  static unsigned int get_size (unsigned int len)
   { return len * Type::static_size; }
 
   template <typename T> operator T * () { return arrayZ; }
