@@ -402,16 +402,6 @@ struct hb_ot_apply_context_t :
 {
   struct matcher_t
   {
-    matcher_t () :
-	     lookup_props (0),
-	     mask (-1),
-	     ignore_zwnj (false),
-	     ignore_zwj (false),
-	     per_syllable (false),
-	     syllable {0},
-	     match_func (nullptr),
-	     match_data (nullptr) {}
-
     typedef bool (*match_func_t) (hb_glyph_info_t &info, unsigned value, const void *data);
 
     void set_ignore_zwnj (bool ignore_zwnj_) { ignore_zwnj = ignore_zwnj_; }
@@ -470,14 +460,14 @@ struct hb_ot_apply_context_t :
     }
 
     protected:
-    unsigned int lookup_props;
-    hb_mask_t mask;
-    bool ignore_zwnj;
-    bool ignore_zwj;
-    bool per_syllable;
-    uint8_t syllable;
-    match_func_t match_func;
-    const void *match_data;
+    unsigned int lookup_props = 0;
+    hb_mask_t mask = -1;
+    bool ignore_zwnj = false;
+    bool ignore_zwj = false;
+    bool per_syllable = false;
+    uint8_t syllable = 0;
+    match_func_t match_func = nullptr;
+    const void *match_data = nullptr;
   };
 
   struct skipping_iterator_t
@@ -2180,18 +2170,18 @@ struct RuleSet
       ;
     }
 
-    /* This version is optimized for speed by matching the first component
-     * of the rule here, instead of calling into the matching code.
+    /* This version is optimized for speed by matching the first & second
+     * components of the rule here, instead of calling into the matching code.
      *
      * Replicated from LigatureSet::apply(). */
 
     hb_ot_apply_context_t::skipping_iterator_t &skippy_iter = c->iter_input;
-    skippy_iter.reset (c->buffer->idx, 1);
+    skippy_iter.reset (c->buffer->idx, 2);
     skippy_iter.set_match_func (match_always, nullptr);
     skippy_iter.set_glyph_data ((HBUINT16 *) nullptr);
-    unsigned unsafe_to;
-    hb_glyph_info_t *first = nullptr;
-    bool matched = skippy_iter.next (&unsafe_to);
+    unsigned unsafe_to = (unsigned) -1, unsafe_to1 = 0, unsafe_to2 = 0;
+    hb_glyph_info_t *first = nullptr, *second = nullptr;
+    bool matched = skippy_iter.next ();
     if (likely (matched))
     {
       first = &c->buffer->info[skippy_iter.idx];
@@ -2217,8 +2207,12 @@ struct RuleSet
       )
       ;
     }
-
-    bool unsafe_to_concat = false;
+    matched = skippy_iter.next ();
+    if (likely (matched && !skippy_iter.may_skip (c->buffer->info[skippy_iter.idx])))
+    {
+      second = &c->buffer->info[skippy_iter.idx];
+      unsafe_to2 = skippy_iter.idx + 1;
+    }
 
     for (unsigned int i = 0; i < num_rules; i++)
     {
@@ -2230,17 +2224,29 @@ struct RuleSet
 	  (!lookup_context.funcs.match ||
 	   lookup_context.funcs.match (*first, input.arrayZ[0], lookup_context.match_data)))
       {
-	if (r.apply (c, lookup_context))
+        if (!second ||
+	    (r.inputCount <= 2 ||
+	     (!lookup_context.funcs.match ||
+	      lookup_context.funcs.match (*second, input.arrayZ[1], lookup_context.match_data)))
+	   )
 	{
-	  if (unsafe_to_concat)
-	    c->buffer->unsafe_to_concat (c->buffer->idx, unsafe_to);
-	  return_trace (true);
+	  if (r.apply (c, lookup_context))
+	  {
+	    if (unsafe_to != (unsigned) -1)
+	      c->buffer->unsafe_to_concat (c->buffer->idx, unsafe_to);
+	    return_trace (true);
+	  }
 	}
+	else
+	  unsafe_to = unsafe_to2;
       }
       else
-        unsafe_to_concat = true;
+      {
+	if (unsafe_to == (unsigned) -1)
+	  unsafe_to = unsafe_to1;
+      }
     }
-    if (likely (unsafe_to_concat))
+    if (likely (unsafe_to != (unsigned) -1))
       c->buffer->unsafe_to_concat (c->buffer->idx, unsafe_to);
 
     return_trace (false);
@@ -3334,22 +3340,22 @@ struct ChainRuleSet
       ;
     }
 
-    /* This version is optimized for speed by matching the first component
-     * of the rule here, instead of calling into the matching code.
+    /* This version is optimized for speed by matching the first & second
+     * components of the rule here, instead of calling into the matching code.
      *
      * Replicated from LigatureSet::apply(). */
 
     hb_ot_apply_context_t::skipping_iterator_t &skippy_iter = c->iter_input;
-    skippy_iter.reset (c->buffer->idx, 1);
+    skippy_iter.reset (c->buffer->idx, 2);
     skippy_iter.set_match_func (match_always, nullptr);
     skippy_iter.set_glyph_data ((HBUINT16 *) nullptr);
-    unsigned unsafe_to;
-    hb_glyph_info_t *first = nullptr;
-    bool matched = skippy_iter.next (&unsafe_to);
+    unsigned unsafe_to = (unsigned) -1, unsafe_to1 = 0, unsafe_to2 = 0;
+    hb_glyph_info_t *first = nullptr, *second = nullptr;
+    bool matched = skippy_iter.next ();
     if (likely (matched))
     {
       first = &c->buffer->info[skippy_iter.idx];
-      unsafe_to = skippy_iter.idx + 1;
+      unsafe_to1 = skippy_iter.idx + 1;
 
       if (skippy_iter.may_skip (c->buffer->info[skippy_iter.idx]))
       {
@@ -3371,8 +3377,12 @@ struct ChainRuleSet
       )
       ;
     }
-
-    bool unsafe_to_concat = false;
+    matched = skippy_iter.next ();
+    if (likely (matched && !skippy_iter.may_skip (c->buffer->info[skippy_iter.idx])))
+     {
+      second = &c->buffer->info[skippy_iter.idx];
+      unsafe_to2 = skippy_iter.idx + 1;
+     }
 
     for (unsigned int i = 0; i < num_rules; i++)
     {
@@ -3388,17 +3398,31 @@ struct ChainRuleSet
 	   (!lookahead.len || !lookup_context.funcs.match[2] ||
 	    lookup_context.funcs.match[2] (*first, lookahead.arrayZ[0], lookup_context.match_data[2])))
       {
-	if (r.apply (c, lookup_context))
+        if (!second ||
+	    (input.lenP1 > 2 ?
+	     (!lookup_context.funcs.match[1] ||
+	      lookup_context.funcs.match[1] (*second, input.arrayZ[1], lookup_context.match_data[1]))
+	     :
+	     (lookahead.len <= 2 - input.lenP1 || !lookup_context.funcs.match[2] ||
+	      lookup_context.funcs.match[2] (*second, lookahead.arrayZ[2 - input.lenP1], lookup_context.match_data[2]))))
 	{
-	  if (unsafe_to_concat)
-	    c->buffer->unsafe_to_concat (c->buffer->idx, unsafe_to);
-	  return_trace (true);
+	  if (r.apply (c, lookup_context))
+	  {
+	    if (unsafe_to != (unsigned) -1)
+	      c->buffer->unsafe_to_concat (c->buffer->idx, unsafe_to);
+	    return_trace (true);
+	  }
 	}
+	else
+	  unsafe_to = unsafe_to2;
       }
       else
-        unsafe_to_concat = true;
+      {
+	if (unsafe_to == (unsigned) -1)
+	  unsafe_to = unsafe_to1;
+      }
     }
-    if (likely (unsafe_to_concat))
+    if (likely (unsafe_to != (unsigned) -1))
       c->buffer->unsafe_to_concat (c->buffer->idx, unsafe_to);
 
     return_trace (false);
