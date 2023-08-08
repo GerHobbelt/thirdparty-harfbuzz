@@ -50,13 +50,14 @@ struct contour_point_t
 	  y  = x * matrix[1] + y * matrix[3];
     x  = x_;
   }
+  HB_ALWAYS_INLINE
   void translate (const contour_point_t &p) { x += p.x; y += p.y; }
 
 
-  float x = 0.f;
-  float y = 0.f;
-  uint8_t flag = 0;
-  bool is_end_point = false;
+  float x;
+  float y;
+  uint8_t flag;
+  bool is_end_point;
 };
 
 struct contour_point_vector_t : hb_vector_t<contour_point_t>
