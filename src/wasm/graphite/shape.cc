@@ -4,19 +4,11 @@
 
 #include <graphite2/Segment.h>
 
-extern "C" {
-void *malloc(size_t size);
-void *realloc(void *ptr, size_t size);
-void free(void *ptr);
-void abort();
-void *memset(void *s, int c, size_t n);
-}
+#include <stdlib.h>
+#include <string.h>
 
 void debugprint1 (char *s, int32_t);
 void debugprint2 (char *s, int32_t, int32_t);
-
-__attribute__((visibility("default")))
-uint32_t heap_size = 2 * 1024 * 1024;
 
 static const void *copy_table (const void *data, unsigned int tag, size_t *len)
 {
@@ -92,8 +84,6 @@ shape (void *shape_plan,
   for (unsigned int i = 0; i < contents.length; ++i)
     chars[i] = contents.info[i].codepoint;
 
-  /* TODO ensure_native_direction. */
-
   seg = gr_make_seg (nullptr, grface,
 		     0, // https://github.com/harfbuzz/harfbuzz/issues/3439#issuecomment-1442650148
 		     nullptr,
@@ -122,7 +112,11 @@ shape (void *shape_plan,
   cluster_t *clusters = (cluster_t *) malloc (length * sizeof (cluster_t));
   uint32_t *gids = (uint32_t *) malloc (length * sizeof (uint32_t));
   if (!clusters || !gids)
+  {
+    free (clusters);
+    free (gids);
     return false;
+  }
 
   memset (clusters, 0, sizeof (clusters[0]) * length);
   codepoint_t *pg = gids;

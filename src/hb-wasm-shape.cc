@@ -53,7 +53,7 @@ struct hb_wasm_face_data_t {
 };
 
 static bool
-init_wasm ()
+_hb_wasm_init ()
 {
   static bool initialized;
   if (initialized)
@@ -71,8 +71,6 @@ init_wasm ()
   init_args.mem_alloc_option.allocator.malloc_func = (void *) hb_malloc;
   init_args.mem_alloc_option.allocator.realloc_func = (void *) hb_realloc;
   init_args.mem_alloc_option.allocator.free_func = (void *) hb_free;
-
-  init_args.mem_alloc_type = Alloc_With_System_Allocator;
 
   // Native symbols need below registration phase
   init_args.n_native_symbols = ARRAY_LENGTH (_hb_wasm_native_symbols);
@@ -101,7 +99,7 @@ _hb_wasm_shaper_face_data_create (hb_face_t *face)
   if (!length)
     goto fail;
 
-  if (!init_wasm ())
+  if (!_hb_wasm_init ())
     goto fail;
 
   wasm_module = wasm_runtime_load ((uint8_t *) hb_blob_get_data_writable (wasm_blob, nullptr),
@@ -133,18 +131,18 @@ static hb_wasm_shape_plan_t *
 acquire_shape_plan (hb_face_t *face,
 		    const hb_wasm_face_data_t *face_data)
 {
-  constexpr uint32_t stack_size = 32 * 1024, heap_size = 2 * 1024 * 1024;
-
-  wasm_module_inst_t module_inst = nullptr;
-  wasm_exec_env_t exec_env = nullptr;
-  wasm_function_inst_t func = nullptr;
-
   /* Fetch cached one if available. */
   hb_wasm_shape_plan_t *plan = face_data->plan.get_acquire ();
   if (likely (plan && face_data->plan.cmpexch (plan, nullptr)))
     return plan;
 
   plan = (hb_wasm_shape_plan_t *) hb_calloc (1, sizeof (hb_wasm_shape_plan_t));
+
+  wasm_module_inst_t module_inst = nullptr;
+  wasm_exec_env_t exec_env = nullptr;
+  wasm_function_inst_t func = nullptr;
+
+  constexpr uint32_t stack_size = 32 * 1024, heap_size = 2 * 1024 * 1024;
 
   module_inst = plan->module_inst = wasm_runtime_instantiate(face_data->wasm_module,
 							     stack_size, heap_size,
@@ -185,7 +183,7 @@ acquire_shape_plan (hb_face_t *face,
     if (unlikely (!ret))
     {
       DEBUG_MSG (WASM, module_inst, "Calling shape_plan_create() failed: %s",
-		 wasm_runtime_get_exception(module_inst));
+		 wasm_runtime_get_exception (module_inst));
       goto fail;
     }
     plan->wasm_shape_planptr = results[0].of.i32;
@@ -233,7 +231,7 @@ release_shape_plan (const hb_wasm_face_data_t *face_data,
       if (unlikely (!ret))
       {
 	DEBUG_MSG (WASM, module_inst, "Calling shape_plan_destroy() failed: %s",
-		   wasm_runtime_get_exception(module_inst));
+		   wasm_runtime_get_exception (module_inst));
       }
     }
   }
@@ -336,9 +334,9 @@ retry:
   arguments[2].kind = WASM_I32;
   arguments[2].of.i32 = bufferref;
   arguments[3].kind = WASM_I32;
-  arguments[3].of.i32 = wasm_runtime_module_dup_data (module_inst,
-						      (const char *) features,
-						      num_features * sizeof (features[0]));
+  arguments[3].of.i32 = num_features ? wasm_runtime_module_dup_data (module_inst,
+								     (const char *) features,
+								     num_features * sizeof (features[0])) : 0;
   arguments[4].kind = WASM_I32;
   arguments[4].of.i32 = num_features;
 
@@ -346,7 +344,8 @@ retry:
 				  ARRAY_LENGTH (results), results,
 				  ARRAY_LENGTH (arguments), arguments);
 
-  wasm_runtime_module_free (module_inst, arguments[2].of.i32);
+  if (num_features)
+    wasm_runtime_module_free (module_inst, arguments[2].of.i32);
 
   if (unlikely (!ret || !results[0].of.i32))
   {
@@ -360,6 +359,7 @@ retry:
     buffer->successful = true;
     retried = true;
     release_shape_plan (face_data, plan);
+    plan = nullptr;
     goto retry;
   }
 
