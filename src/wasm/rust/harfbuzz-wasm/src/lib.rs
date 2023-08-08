@@ -304,7 +304,9 @@ impl<T: BufferItem> Drop for Buffer<T> {
             position: positions[..].as_mut_ptr(),
         };
         unsafe {
-            buffer_set_contents(self._ptr, &c_contents);
+            if !buffer_set_contents(self._ptr, &c_contents) {
+                panic!("Couldn't set buffer contents");
+            }
         }
     }
 }
@@ -376,6 +378,7 @@ struct CBufferContents {
 /// representing glyph positioning. In Rust, this would
 /// require lots of zipping and unzipping, so we zip them
 /// together into a single structure for you.
+#[derive(Debug, Clone, Copy)]
 pub struct Glyph {
     /// The Unicode codepoint or glyph ID of the item
     pub codepoint: u32,

@@ -46,7 +46,8 @@ static void debugprint4 (HB_WASM_EXEC_ENV char *str, int32_t i1, int32_t i2, int
 #endif
 
 #define NATIVE_SYMBOL(signature, name) {#name, (void *) hb::wasm::name, signature, NULL}
-/* Note: the array must be static defined since runtime will keep it after registration
+/* Note: the array must be static defined since runtime will keep it after registration.
+ * Also not const, because it modifies it (sorts it).
  * https://github.com/bytecodealliance/wasm-micro-runtime/blob/main/doc/export_native_api.md
  *
  * TODO Allocate this lazily in _hb_wasm_init(). */
@@ -69,10 +70,12 @@ static NativeSymbol _hb_wasm_native_symbols[] =
   NATIVE_SYMBOL ("(i)",		buffer_reverse_clusters),
 
   /* face */
+  NATIVE_SYMBOL ("(ii)i",	face_create),
   NATIVE_SYMBOL ("(iii)i",	face_copy_table),
   NATIVE_SYMBOL ("(i)i",	face_get_upem),
 
   /* font */
+  NATIVE_SYMBOL ("(i)i",	font_create),
   NATIVE_SYMBOL ("(i)i",	font_get_face),
   NATIVE_SYMBOL ("(iii)",	font_get_scale),
   NATIVE_SYMBOL ("(iii)i",	font_get_glyph),
@@ -81,6 +84,8 @@ static NativeSymbol _hb_wasm_native_symbols[] =
   NATIVE_SYMBOL ("(iii)i",	font_get_glyph_extents),
   NATIVE_SYMBOL ("(ii$*)",	font_glyph_to_string),
   NATIVE_SYMBOL ("(iii)i",	font_copy_glyph_outline),
+  NATIVE_SYMBOL ("(ii)i",	font_copy_coords),
+  NATIVE_SYMBOL ("(ii)i",	font_set_coords),
 
   /* outline */
   NATIVE_SYMBOL ("(i)",		glyph_outline_free),

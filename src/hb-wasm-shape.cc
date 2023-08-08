@@ -58,8 +58,12 @@
 #include "hb-wasm-api.hh"
 #include "hb-wasm-api-list.hh"
 
+#ifndef HB_WASM_NO_MODULES
 #define HB_WASM_NO_MODULES
+#endif
 
+
+#ifndef HB_WASM_NO_MODULES
 static bool HB_UNUSED
 _hb_wasm_module_reader (const char *module_name,
 		       uint8_t **p_buffer, uint32_t *p_size)
@@ -91,7 +95,7 @@ _hb_wasm_module_destroyer (uint8_t *buffer, uint32_t size)
 {
   hb_free (buffer);
 }
-
+#endif
 
 /*
  * shaper face data
@@ -425,6 +429,11 @@ retry:
   {
     DEBUG_MSG (WASM, module_inst, "Calling shape() failed: %s",
 	       wasm_runtime_get_exception (module_inst));
+    if (!buffer->ensure_unicode ())
+    {
+      DEBUG_MSG (WASM, font, "Shape failed but buffer is not in Unicode; failing...");
+      goto fail;
+    }
     if (retried)
     {
       DEBUG_MSG (WASM, font, "Giving up...");

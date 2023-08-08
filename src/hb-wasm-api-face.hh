@@ -31,6 +31,24 @@ namespace hb {
 namespace wasm {
 
 
+HB_WASM_API (ptr_t(face_t), face_create) (HB_WASM_EXEC_ENV
+					  ptr_d(blob_t, blob),
+					  unsigned int index)
+{
+  HB_PTR_PARAM (blob_t, blob);
+  hb_blob_t *hb_blob = hb_blob_create(
+				      HB_ARRAY_APP2NATIVE (char, blob->data, blob->length),
+				      blob->length,
+				      HB_MEMORY_MODE_DUPLICATE,
+				      NULL,
+				      NULL);
+
+  hb_face_t *face = hb_face_create(hb_blob, index);
+
+  HB_OBJ2REF (face);
+  return faceref;
+}
+
 HB_WASM_API (bool_t, face_copy_table) (HB_WASM_EXEC_ENV
 				       ptr_d(face_t, face),
 				       tag_t table_tag,

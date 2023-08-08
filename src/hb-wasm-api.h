@@ -113,7 +113,6 @@ typedef struct
 HB_WASM_API (void, blob_free) (HB_WASM_EXEC_ENV
 			       ptr_d(blob_t, blob));
 
-
 /* buffer */
 
 typedef struct
@@ -175,6 +174,10 @@ HB_WASM_API (void, buffer_reverse_clusters) (HB_WASM_EXEC_ENV
 
 typedef struct face_t face_t;
 
+HB_WASM_API (ptr_t(face_t), face_create) (HB_WASM_EXEC_ENV
+					  ptr_d(blob_t, blob),
+					  unsigned int);
+
 HB_WASM_API (bool_t, face_copy_table) (HB_WASM_EXEC_ENV
 				       ptr_d(face_t, face),
 				       tag_t table_tag,
@@ -183,10 +186,12 @@ HB_WASM_API (bool_t, face_copy_table) (HB_WASM_EXEC_ENV
 HB_WASM_API (unsigned, face_get_upem) (HB_WASM_EXEC_ENV
 				       ptr_d(face_t, face));
 
-
 /* font */
 
 typedef struct font_t font_t;
+
+HB_WASM_API (ptr_t(font_t), font_create) (HB_WASM_EXEC_ENV
+					  ptr_d(face_t, face));
 
 HB_WASM_API (ptr_t(face_t), font_get_face) (HB_WASM_EXEC_ENV
 					    ptr_d(font_t, font));
@@ -227,6 +232,20 @@ HB_WASM_API (void, font_glyph_to_string) (HB_WASM_EXEC_ENV
 					  codepoint_t glyph,
 					  char *s, uint32_t size);
 
+
+typedef struct
+{
+  unsigned int length;
+  ptr_t(int) coords;
+} coords_t;
+
+HB_WASM_API (bool_t, font_copy_coords) (HB_WASM_EXEC_ENV
+					  ptr_d(font_t, font),
+					  ptr_d(coords_t, coords));
+
+HB_WASM_API (bool_t, font_set_coords) (HB_WASM_EXEC_ENV
+					  ptr_d(font_t, font),
+					  ptr_d(coords_t, coords));
 
 /* outline */
 
