@@ -749,10 +749,10 @@ struct graph_t
   {
     for (const auto& link : vertices_[node_idx].obj.all_links ())
     {
-      const uint32_t *v;
+      uint32_t *v;
       if (subgraph.has (link.objidx, &v))
       {
-        subgraph.set (link.objidx, *v + 1);
+        (*v)++;
         continue;
       }
       subgraph.set (link.objidx, 1);
@@ -762,16 +762,14 @@ struct graph_t
 
   void find_subgraph (unsigned node_idx, hb_set_t& subgraph)
   {
-    if (subgraph.has (node_idx)) return;
-    subgraph.add (node_idx);
+    if (!subgraph.test_and_add (node_idx)) return;
     for (const auto& link : vertices_[node_idx].obj.all_links ())
       find_subgraph (link.objidx, subgraph);
   }
 
   size_t find_subgraph_size (unsigned node_idx, hb_set_t& subgraph, unsigned max_depth = -1)
   {
-    if (subgraph.has (node_idx)) return 0;
-    subgraph.add (node_idx);
+    if (!subgraph.test_and_add (node_idx)) return 0;
 
     const auto& o = vertices_[node_idx].obj;
     size_t size = o.tail - o.head;
@@ -1159,8 +1157,7 @@ struct graph_t
     hb_set_t visited;
     for (unsigned p : vertices_[node_idx].parents)
     {
-      if (visited.has (p)) continue;
-      visited.add (p);
+      if (!visited.test_and_add (p)) continue;
 
       // Only real links can be wide
       for (const auto& l : vertices_[p].obj.real_links)
@@ -1273,15 +1270,15 @@ struct graph_t
       {
         if (visited[link.objidx]) continue;
 
-        const auto& child = vertices_[link.objidx].obj;
+        const auto& child = vertices_.arrayZ[link.objidx].obj;
         unsigned link_width = link.width ? link.width : 4; // treat virtual offsets as 32 bits wide
         int64_t child_weight = (child.tail - child.head) +
-                               ((int64_t) 1 << (link_width * 8)) * (vertices_[link.objidx].space + 1);
+                               ((int64_t) 1 << (link_width * 8)) * (vertices_.arrayZ[link.objidx].space + 1);
         int64_t child_distance = next_distance + child_weight;
 
-        if (child_distance < vertices_[link.objidx].distance)
+        if (child_distance < vertices_.arrayZ[link.objidx].distance)
         {
-          vertices_[link.objidx].distance = child_distance;
+          vertices_.arrayZ[link.objidx].distance = child_distance;
           queue.insert (child_distance, link.objidx);
         }
       }
@@ -1364,14 +1361,10 @@ struct graph_t
                              hb_set_t& connected)
   {
     if (unlikely (!check_success (!visited.in_error ()))) return;
-    if (visited.has (start_idx)) return;
-    visited.add (start_idx);
+    if (!visited.test_and_add (start_idx)) return;
 
-    if (targets.has (start_idx))
-    {
-      targets.del (start_idx);
+    if (targets.test_and_del (start_idx))
       connected.add (start_idx);
-    }
 
     const auto& v = vertices_[start_idx];
 

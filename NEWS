@@ -1,3 +1,14 @@
+Overview of changes leading to 8.0.1
+Wednesday, July 12, 2023
+====================================
+- Build fix on 32-bit ARM.
+
+- More speed optimizations:
+  - 60% speedup in retaingids subsetting SourceHanSans-VF.
+  - 38% speed up in subsetting (beyond-64k) mega-merged Noto.
+  - 16% speed up in retain-gid (used for IFT) subsetting of NotoSansCJKkr.
+
+
 Overview of changes leading to 8.0.0
 Sunday, July 9, 2023
 ====================================
@@ -10,7 +21,7 @@ Sunday, July 9, 2023
 
   For example fonts making use of the WASM shaper, see:
 
-    https://github.com/simoncozens/wasm-examples
+    https://github.com/harfbuzz/harfbuzz-wasm-examples
 
 - Improvements to Experimental features introduced in earlier releases:
   - Support for subsetting beyond-64k and VarComposites fonts.
