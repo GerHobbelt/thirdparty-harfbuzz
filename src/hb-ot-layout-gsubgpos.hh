@@ -430,6 +430,9 @@ struct hb_ot_apply_context_t :
       MATCH_MAYBE
     };
 
+#ifndef HB_OPTIMIZE_SIZE
+    HB_ALWAYS_INLINE
+#endif
     may_match_t may_match (hb_glyph_info_t &info,
 			   hb_codepoint_t glyph_data) const
     {
@@ -449,6 +452,9 @@ struct hb_ot_apply_context_t :
       SKIP_MAYBE
     };
 
+#ifndef HB_OPTIMIZE_SIZE
+    HB_ALWAYS_INLINE
+#endif
     may_skip_t may_skip (const hb_ot_apply_context_t *c,
 			 const hb_glyph_info_t       &info) const
     {
@@ -519,6 +525,9 @@ struct hb_ot_apply_context_t :
     }
 #endif
 
+#ifndef HB_OPTIMIZE_SIZE
+    HB_ALWAYS_INLINE
+#endif
     void reset (unsigned int start_index_,
 		unsigned int num_items_)
     {
@@ -528,6 +537,9 @@ struct hb_ot_apply_context_t :
       matcher.set_syllable (start_index_ == c->buffer->idx ? c->buffer->cur().syllable () : 0);
     }
 
+#ifndef HB_OPTIMIZE_SIZE
+    HB_ALWAYS_INLINE
+#endif
     void reset_fast (unsigned int start_index_,
 		     unsigned int num_items_)
     {
@@ -543,6 +555,9 @@ struct hb_ot_apply_context_t :
     }
 
     matcher_t::may_skip_t
+#ifndef HB_OPTIMIZE_SIZE
+    HB_ALWAYS_INLINE
+#endif
     may_skip (const hb_glyph_info_t &info) const
     { return matcher.may_skip (c, info); }
 
@@ -552,6 +567,9 @@ struct hb_ot_apply_context_t :
       SKIP
     };
 
+#ifndef HB_OPTIMIZE_SIZE
+    HB_ALWAYS_INLINE
+#endif
     match_t match (hb_glyph_info_t &info)
     {
       matcher_t::may_skip_t skip = matcher.may_skip (c, info);
@@ -570,6 +588,9 @@ struct hb_ot_apply_context_t :
       return SKIP;
   }
 
+#ifndef HB_OPTIMIZE_SIZE
+    HB_ALWAYS_INLINE
+#endif
     bool next (unsigned *unsafe_to = nullptr)
     {
       assert (num_items > 0);
@@ -814,6 +835,9 @@ struct hb_ot_apply_context_t :
     return true;
   }
 
+#ifndef HB_OPTIMIZE_SIZE
+  HB_ALWAYS_INLINE
+#endif
   bool check_glyph_property (const hb_glyph_info_t *info,
 			     unsigned int  match_props) const
   {
@@ -1219,14 +1243,17 @@ static inline bool would_match_input (hb_would_apply_context_t *c,
   return true;
 }
 template <typename HBUINT>
-static inline bool match_input (hb_ot_apply_context_t *c,
-				unsigned int count, /* Including the first glyph (not matched) */
-				const HBUINT input[], /* Array of input values--start with second glyph */
-				match_func_t match_func,
-				const void *match_data,
-				unsigned int *end_position,
-				unsigned int match_positions[HB_MAX_CONTEXT_LENGTH],
-				unsigned int *p_total_component_count = nullptr)
+#ifndef HB_OPTIMIZE_SIZE
+HB_ALWAYS_INLINE
+#endif
+static bool match_input (hb_ot_apply_context_t *c,
+			 unsigned int count, /* Including the first glyph (not matched) */
+			 const HBUINT input[], /* Array of input values--start with second glyph */
+			 match_func_t match_func,
+			 const void *match_data,
+			 unsigned int *end_position,
+			 unsigned int match_positions[HB_MAX_CONTEXT_LENGTH],
+			 unsigned int *p_total_component_count = nullptr)
 {
   TRACE_APPLY (nullptr);
 
@@ -1462,12 +1489,15 @@ static inline bool ligate_input (hb_ot_apply_context_t *c,
 }
 
 template <typename HBUINT>
-static inline bool match_backtrack (hb_ot_apply_context_t *c,
-				    unsigned int count,
-				    const HBUINT backtrack[],
-				    match_func_t match_func,
-				    const void *match_data,
-				    unsigned int *match_start)
+#ifndef HB_OPTIMIZE_SIZE
+HB_ALWAYS_INLINE
+#endif
+static bool match_backtrack (hb_ot_apply_context_t *c,
+			     unsigned int count,
+			     const HBUINT backtrack[],
+			     match_func_t match_func,
+			     const void *match_data,
+			     unsigned int *match_start)
 {
   TRACE_APPLY (nullptr);
 
@@ -1491,13 +1521,16 @@ static inline bool match_backtrack (hb_ot_apply_context_t *c,
 }
 
 template <typename HBUINT>
-static inline bool match_lookahead (hb_ot_apply_context_t *c,
-				    unsigned int count,
-				    const HBUINT lookahead[],
-				    match_func_t match_func,
-				    const void *match_data,
-				    unsigned int start_index,
-				    unsigned int *end_index)
+#ifndef HB_OPTIMIZE_SIZE
+HB_ALWAYS_INLINE
+#endif
+static bool match_lookahead (hb_ot_apply_context_t *c,
+			     unsigned int count,
+			     const HBUINT lookahead[],
+			     match_func_t match_func,
+			     const void *match_data,
+			     unsigned int start_index,
+			     unsigned int *end_index)
 {
   TRACE_APPLY (nullptr);
 
@@ -2698,14 +2731,14 @@ struct ContextFormat3
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    if (!c->check_struct (this)) return_trace (false);
+    if (unlikely (!c->check_struct (this))) return_trace (false);
     unsigned int count = glyphCount;
-    if (!count) return_trace (false); /* We want to access coverageZ[0] freely. */
-    if (!c->check_array (coverageZ.arrayZ, count)) return_trace (false);
+    if (unlikely (!count)) return_trace (false); /* We want to access coverageZ[0] freely. */
+    if (unlikely (!c->check_array (coverageZ.arrayZ, count))) return_trace (false);
     for (unsigned int i = 0; i < count; i++)
-      if (!coverageZ[i].sanitize (c, this)) return_trace (false);
+      if (unlikely (!coverageZ[i].sanitize (c, this))) return_trace (false);
     const LookupRecord *lookupRecord = &StructAfter<LookupRecord> (coverageZ.as_array (glyphCount));
-    return_trace (c->check_array (lookupRecord, lookupCount));
+    return_trace (likely (c->check_array (lookupRecord, lookupCount)));
   }
 
   protected:
@@ -3086,13 +3119,14 @@ struct ChainRule
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    if (!backtrack.len.sanitize (c)) return_trace (false);
+    /* Hyper-optimized sanitized because this is really hot. */
+    if (unlikely (!backtrack.len.sanitize (c))) return_trace (false);
     const auto &input = StructAfter<decltype (inputX)> (backtrack);
-    if (!input.lenP1.sanitize (c)) return_trace (false);
+    if (unlikely (!input.lenP1.sanitize (c))) return_trace (false);
     const auto &lookahead = StructAfter<decltype (lookaheadX)> (input);
-    if (!lookahead.len.sanitize (c)) return_trace (false);
+    if (unlikely (!lookahead.len.sanitize (c))) return_trace (false);
     const auto &lookup = StructAfter<decltype (lookupX)> (lookahead);
-    return_trace (lookup.sanitize (c));
+    return_trace (likely (lookup.sanitize (c)));
   }
 
   protected:
@@ -3887,14 +3921,14 @@ struct ChainContextFormat3
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    if (!backtrack.sanitize (c, this)) return_trace (false);
+    if (unlikely (!backtrack.sanitize (c, this))) return_trace (false);
     const auto &input = StructAfter<decltype (inputX)> (backtrack);
-    if (!input.sanitize (c, this)) return_trace (false);
-    if (!input.len) return_trace (false); /* To be consistent with Context. */
+    if (unlikely (!input.sanitize (c, this))) return_trace (false);
+    if (unlikely (!input.len)) return_trace (false); /* To be consistent with Context. */
     const auto &lookahead = StructAfter<decltype (lookaheadX)> (input);
-    if (!lookahead.sanitize (c, this)) return_trace (false);
+    if (unlikely (!lookahead.sanitize (c, this))) return_trace (false);
     const auto &lookup = StructAfter<decltype (lookupX)> (lookahead);
-    return_trace (lookup.sanitize (c));
+    return_trace (likely (lookup.sanitize (c)));
   }
 
   protected:
