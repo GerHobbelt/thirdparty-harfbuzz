@@ -86,7 +86,7 @@ struct hb_vector_t
   ~hb_vector_t () { fini (); }
 
   public:
-  int allocated = 0; /* == -1 means allocation failed. */
+  int allocated = 0; /* < 0 means allocation failed. */
   unsigned int length = 0;
   public:
   Type *arrayZ = nullptr;
@@ -116,11 +116,7 @@ struct hb_vector_t
   void reset ()
   {
     if (unlikely (in_error ()))
-      /* Big Hack! We don't know the true allocated size before
-       * an allocation failure happened. But we know it was at
-       * least as big as length. Restore it to that and continue
-       * as if error did not happen. */
-      allocated = length;
+      reset_error ();
     resize (0);
   }
 
@@ -245,6 +241,16 @@ struct hb_vector_t
   }
 
   bool in_error () const { return allocated < 0; }
+  void set_error ()
+  {
+    assert (allocated >= 0);
+    allocated = -allocated - 1;
+  }
+  void reset_error ()
+  {
+    assert (allocated < 0);
+    allocated = -(allocated + 1);
+  }
 
   template <typename T = Type,
 	    hb_enable_if (hb_is_trivially_copy_assignable(T))>
@@ -396,7 +402,7 @@ struct hb_vector_t
 
     if (unlikely (overflows))
     {
-      allocated = -1;
+      set_error ();
       return false;
     }
 
@@ -407,7 +413,7 @@ struct hb_vector_t
       if (new_allocated <= (unsigned) allocated)
         return true; // shrinking failed; it's okay; happens in our fuzzer
 
-      allocated = -1;
+      set_error ();
       return false;
     }
 
