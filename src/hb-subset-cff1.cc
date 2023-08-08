@@ -402,7 +402,7 @@ struct cff_subset_plan {
   {
     const Encoding *encoding = acc.encoding;
     unsigned int  size0, size1;
-    hb_codepoint_t  code, last_code = CFF_UNDEF_CODE;
+    unsigned code, last_code = CFF_UNDEF_CODE - 1;
     hb_vector_t<hb_codepoint_t> supp_codes;
 
     if (unlikely (!subset_enc_code_ranges.resize (0)))
@@ -417,13 +417,14 @@ struct cff_subset_plan {
     unsigned int glyph;
     auto it = hb_iter (plan->new_to_old_gid_list);
     if (it->first == 0) it++;
+    auto _ = *it;
     for (glyph = 1; glyph < num_glyphs; glyph++)
     {
       hb_codepoint_t old_glyph;
-      if (glyph == it->first)
+      if (glyph == _.first)
       {
-	old_glyph = it->second;
-	it++;
+	old_glyph = _.second;
+	_ = *++it;
       }
       else
       {
@@ -437,7 +438,7 @@ struct cff_subset_plan {
 	break;
       }
 
-      if ((last_code == CFF_UNDEF_CODE) || (code != last_code + 1))
+      if (code != last_code + 1)
       {
 	code_pair_t pair = { code, glyph };
 	subset_enc_code_ranges.push (pair);
@@ -472,7 +473,7 @@ struct cff_subset_plan {
   void plan_subset_charset (const OT::cff1::accelerator_subset_t &acc, hb_subset_plan_t *plan)
   {
     unsigned int  size0, size_ranges;
-    hb_codepoint_t  sid, last_sid = CFF_UNDEF_CODE;
+    unsigned sid, last_sid = CFF_UNDEF_CODE - 1;
 
     if (unlikely (!subset_charset_ranges.resize (0)))
     {
@@ -496,13 +497,15 @@ struct cff_subset_plan {
     unsigned num_glyphs = plan->num_output_glyphs ();
     auto it = hb_iter (plan->new_to_old_gid_list);
     if (it->first == 0) it++;
+    auto _ = *it;
+    bool not_is_cid = !acc.is_CID ();
     for (glyph = 1; glyph < num_glyphs; glyph++)
     {
       hb_codepoint_t old_glyph;
-      if (glyph == it->first)
+      if (glyph == _.first)
       {
-	old_glyph = it->second;
-	it++;
+	old_glyph = _.second;
+	_ = *++it;
       }
       else
       {
@@ -511,10 +514,10 @@ struct cff_subset_plan {
       }
       sid = glyph_to_sid_map ? glyph_to_sid_map->get (old_glyph) : acc.glyph_to_sid (old_glyph);
 
-      if (!acc.is_CID ())
+      if (not_is_cid)
 	sid = sidmap.add (sid);
 
-      if ((last_sid == CFF_UNDEF_CODE) || (sid != last_sid + 1))
+      if (sid != last_sid + 1)
       {
 	code_pair_t pair = { sid, glyph };
 	subset_charset_ranges.push (pair);
@@ -579,19 +582,18 @@ struct cff_subset_plan {
     drop_hints = plan->flags & HB_SUBSET_FLAGS_NO_HINTING;
     desubroutinize = plan->flags & HB_SUBSET_FLAGS_DESUBROUTINIZE;
 
-    /* check whether the subset renumbers any glyph IDs */
-    gid_renum = false;
-    for (hb_codepoint_t new_glyph = 0; new_glyph < num_glyphs; new_glyph++)
-    {
-      if (!plan->old_gid_for_new_gid(new_glyph, &old_glyph))
-	continue;
-      if (new_glyph != old_glyph) {
-	gid_renum = true;
-	break;
+    subset_charset = !acc.is_predef_charset ();
+    if (!subset_charset)
+      /* check whether the subset renumbers any glyph IDs */
+      for (const auto &_ : plan->new_to_old_gid_list)
+      {
+	if (_.first != _.second)
+	{
+	  subset_charset = true;
+	  break;
+	}
       }
-    }
 
-    subset_charset = gid_renum || !acc.is_predef_charset ();
     subset_encoding = !acc.is_CID() && !acc.is_predef_encoding ();
 
     /* top dict INDEX */
