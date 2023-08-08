@@ -217,7 +217,7 @@ struct hb_hashmap_t
     unsigned step = 0;
     while (items[i].is_used ())
     {
-      if ((hb_is_same (K, hb_codepoint_t) || items[i].hash == hash) &&
+      if ((std::is_integral<K>::value || items[i].hash == hash) &&
 	  items[i] == key)
         break;
       if (items[i].is_tombstone () && tombstone == (unsigned) -1)
@@ -299,7 +299,7 @@ struct hb_hashmap_t
     unsigned step = 0;
     while (items[i].is_used ())
     {
-      if ((hb_is_same (K, hb_codepoint_t) || items[i].hash == hash) &&
+      if ((std::is_integral<K>::value || items[i].hash == hash) &&
 	  items[i] == key)
       {
 	if (items[i].is_real ())
