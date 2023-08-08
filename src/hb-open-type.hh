@@ -312,6 +312,8 @@ struct _hb_has_null<Type, true>
 template <typename Type, typename OffsetType, bool has_null=true>
 struct OffsetTo : Offset<OffsetType, has_null>
 {
+  using target_t = Type;
+
   // Make sure Type is not unbounded; works only for types that are fully defined at OffsetTo time.
   static_assert (has_null == false ||
 		 (hb_has_null_size (Type) || !hb_has_min_size (Type)), "");
@@ -712,6 +714,29 @@ struct ArrayOf
     return_trace (out);
   }
 
+  /* Special-case ArrayOf Offset16To structs with a maximum size. */
+  template <typename T = Type,
+	    typename Base = void,
+	    hb_enable_if (hb_has_max_size (typename T::target_t) &&
+			  sizeof (T) == 2)>
+  bool sanitize (hb_sanitize_context_t *c, const Base *base) const
+  {
+    TRACE_SANITIZE (this);
+
+    if (unlikely (!sanitize_shallow (c))) return_trace (false);
+
+    unsigned max_len = 65536 + Type::target_t::max_size;
+
+    if (unlikely (c->check_range_fast (base, max_len)))
+      return_trace (true);
+
+    unsigned int count = len;
+    for (unsigned int i = 0; i < count; i++)
+      if (unlikely (!c->dispatch (arrayZ[i], base)))
+	return_trace (false);
+    return_trace (true);
+  }
+
   template <typename ...Ts>
   bool sanitize (hb_sanitize_context_t *c, Ts&&... ds) const
   {
@@ -789,7 +814,7 @@ template <typename Type>
 using List16OfOffset16To = List16OfOffsetTo<Type, HBUINT16>;
 
 /* An array starting at second element. */
-template <typename Type, typename LenType=HBUINT16>
+template <typename Type, typename LenType>
 struct HeadlessArrayOf
 {
   static constexpr unsigned item_size = Type::static_size;
@@ -879,6 +904,7 @@ struct HeadlessArrayOf
   public:
   DEFINE_SIZE_ARRAY (sizeof (LenType), arrayZ);
 };
+template <typename Type> using HeadlessArray16Of = HeadlessArrayOf<Type, HBUINT16>;
 
 /* An array storing length-1. */
 template <typename Type, typename LenType=HBUINT16>

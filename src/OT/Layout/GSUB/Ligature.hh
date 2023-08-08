@@ -13,17 +13,20 @@ struct Ligature
   public:
   typename Types::HBGlyphID
 		ligGlyph;               /* GlyphID of ligature to substitute */
-  HeadlessArrayOf<typename Types::HBGlyphID>
+  HeadlessArray16Of<typename Types::HBGlyphID>
 		component;              /* Array of component GlyphIDs--start
                                          * with the second  component--ordered
                                          * in writing direction */
   public:
   DEFINE_SIZE_ARRAY (Types::size + 2, component);
+  DEFINE_SIZE_MAX (Types::size + 2 + HB_MAX_CONTEXT_LENGTH * Types::HBGlyphID::static_size);
 
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    return_trace (ligGlyph.sanitize (c) && component.sanitize (c));
+    return_trace (ligGlyph.sanitize (c) &&
+		  component.sanitize (c) &&
+		  component.lenP1 <= HB_MAX_CONTEXT_LENGTH);
   }
 
   bool intersects (const hb_set_t *glyphs) const

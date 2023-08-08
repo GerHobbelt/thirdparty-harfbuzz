@@ -282,6 +282,9 @@ struct hb_sanitize_context_t :
 
     return likely (ok);
   }
+#ifndef HB_OPTIMIZE_SIZE
+  HB_ALWAYS_INLINE
+#endif
   bool check_range_fast (const void *base,
 			 unsigned int len) const
   {
@@ -331,7 +334,7 @@ struct hb_sanitize_context_t :
 		    unsigned int a,
 		    unsigned int b) const
   {
-    return this->check_range (base, a, b, hb_static_size (T));
+    return this->check_range (base, hb_static_size (T), a, b);
   }
 
   bool check_start_recursion (int max_depth)
