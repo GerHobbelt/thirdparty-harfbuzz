@@ -1,5 +1,5 @@
 /*
- * Copyright © 2012  Google, Inc.
+ * Copyright © 2023  Behdad Esfahbod
  *
  *  This is part of HarfBuzz, a text shaping library.
  *
@@ -20,46 +20,68 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  THE SOFTWARE PROVIDED HEREUNDER IS
  * ON AN "AS IS" BASIS, AND THE COPYRIGHT HOLDER HAS NO OBLIGATION TO
  * PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
- *
- * Google Author(s): Behdad Esfahbod
  */
 
-#ifndef HB_SHAPER_LIST_HH
-#define HB_SHAPER_LIST_HH
-#endif /* HB_SHAPER_LIST_HH */ /* Dummy header guards */
+#ifndef HB_WASM_API_H
+#define HB_WASM_API_H
 
-#ifndef HB_NO_SHAPER
+/*
+#include "hb.h"
+*/
+
+#include <stdint.h>
 
 
-/* v--- Add new shapers in the right place here. */
-
-#ifdef HAVE_WASM
-/* Only picks up fonts that have a "Wasm" table. */
-HB_SHAPER_IMPLEMENT (wasm)
-#endif
-
-#ifdef HAVE_GRAPHITE2
-/* Only picks up fonts that have a "Silf" table. */
-HB_SHAPER_IMPLEMENT (graphite2)
-#endif
-
-#ifndef HB_NO_OT_SHAPE
-HB_SHAPER_IMPLEMENT (ot) /* <--- This is our main shaper. */
-#endif
-
-#ifdef HAVE_UNISCRIBE
-HB_SHAPER_IMPLEMENT (uniscribe)
-#endif
-#ifdef HAVE_DIRECTWRITE
-HB_SHAPER_IMPLEMENT (directwrite)
-#endif
-#ifdef HAVE_CORETEXT
-HB_SHAPER_IMPLEMENT (coretext)
-#endif
-
-#ifndef HB_NO_FALLBACK_SHAPE
-HB_SHAPER_IMPLEMENT (fallback) /* <--- This should be last. */
+#ifndef HB_WASM_BEGIN_DECLS
+# ifdef __cplusplus
+#  define HB_WASM_BEGIN_DECLS	extern "C" {
+#  define HB_WASM_END_DECLS	}
+# else /* !__cplusplus */
+#  define HB_WASM_BEGIN_DECLS
+#  define HB_WASM_END_DECLS
+# endif /* !__cplusplus */
 #endif
 
 
+HB_WASM_BEGIN_DECLS
+
+#ifndef HB_WASM_API
+#define HB_WASM_API(x) x
 #endif
+#ifndef HB_WASM_INTERFACE
+#define HB_WASM_INTERFACE(x) x
+#endif
+#ifndef HB_WASM_EXEC_ENV
+#define HB_WASM_EXEC_ENV
+#endif
+
+
+#ifndef bool_t
+#define bool_t uint32_t
+#endif
+#ifndef ref_t
+#define ref_t uint32_t
+#endif
+typedef ref_t face_t;
+typedef ref_t font_t;
+typedef ref_t buffer_t;
+
+
+/* font */
+
+face_t
+HB_WASM_API (font_get_face) (HB_WASM_EXEC_ENV
+			     font_t);
+
+
+/* shape interface */
+
+bool_t
+HB_WASM_INTERFACE (shape) (HB_WASM_EXEC_ENV
+			   font_t,
+			   buffer_t);
+
+
+HB_WASM_END_DECLS
+
+#endif /* HB_WASM_API_H */
