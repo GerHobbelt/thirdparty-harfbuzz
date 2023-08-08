@@ -52,7 +52,7 @@ struct DeviceRecord
 
     unsigned length = it.len ();
 
-    if (unlikely (!c->extend (this, length)))  return_trace (false);
+    if (unlikely (!c->extend_size (this, get_size (length), false)))  return_trace (false);
 
     this->pixelSize = pixelSize;
     this->maxWidth =
@@ -125,7 +125,7 @@ struct hdmx
 	    | hb_map (c->plan->reverse_glyph_map)
 	    | hb_map ([this, c, device_record] (hb_codepoint_t _)
 		      {
-			if (c->plan->is_empty_glyph (_))
+			if (_ == HB_MAP_VALUE_INVALID)
 			  return Null (HBUINT8);
 			return device_record->widthsZ.as_array (get_num_glyphs ()) [_];
 		      })
