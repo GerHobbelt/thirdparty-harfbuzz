@@ -139,6 +139,7 @@ typedef struct
   ptr_t(glyph_info_t) info;
   ptr_t(glyph_position_t) pos;
 } buffer_contents_t;
+#define BUFFER_CONTENTS_INIT {0, 0, 0}
 
 HB_WASM_API (bool_t, buffer_contents_realloc) (HB_WASM_EXEC_ENV
 					       ptr_d(buffer_contents_t, contents),
@@ -149,8 +150,9 @@ HB_WASM_API (void, buffer_contents_free) (HB_WASM_EXEC_ENV
 
 typedef struct buffer_t buffer_t;
 
-HB_WASM_API_COMPOUND (buffer_contents_t, buffer_copy_contents) (HB_WASM_EXEC_ENV_COMPOUND
-								ptr_d(buffer_t, buffer));
+HB_WASM_API (bool_t, buffer_copy_contents) (HB_WASM_EXEC_ENV
+					    ptr_d(buffer_t, buffer),
+					    ptr_d(buffer_contents_t, contents));
 
 HB_WASM_API (bool_t, buffer_set_contents) (HB_WASM_EXEC_ENV
 					   ptr_d(buffer_t, buffer),
@@ -172,9 +174,10 @@ HB_WASM_API (void, buffer_reverse_clusters) (HB_WASM_EXEC_ENV
 
 typedef struct face_t face_t;
 
-HB_WASM_API_COMPOUND (blob_t, face_reference_table) (HB_WASM_EXEC_ENV_COMPOUND
-						     ptr_d(face_t, face),
-						     tag_t table_tag);
+HB_WASM_API (bool_t, face_copy_table) (HB_WASM_EXEC_ENV
+				       ptr_d(face_t, face),
+				       tag_t table_tag,
+				       ptr_d(blob_t, blob));
 
 HB_WASM_API (unsigned, face_get_upem) (HB_WASM_EXEC_ENV
 				       ptr_d(face_t, face));
@@ -205,7 +208,8 @@ HB_WASM_API (position_t, font_get_glyph_v_advance) (HB_WASM_EXEC_ENV
 						    ptr_d(font_t, font),
 						    codepoint_t glyph);
 
-typedef struct {
+typedef struct
+{
   position_t x_bearing;
   position_t y_bearing;
   position_t width;
@@ -223,9 +227,40 @@ HB_WASM_API (void, font_glyph_to_string) (HB_WASM_EXEC_ENV
 					  char *s, uint32_t size);
 
 
+/* outline */
+
+enum glyph_outline_point_type_t
+{
+  MOVE_TO,
+  LINE_TO,
+  QUADRATIC_TO,
+  CUBIC_TO,
+};
+
+typedef struct
+{
+  float x;
+  float y;
+  uint32_t type;
+} glyph_outline_point_t;
+
+typedef struct
+{
+  uint32_t n_points;
+  ptr_t(glyph_outline_point_t) points;
+  uint32_t n_contours;
+  ptr_t(uint32_t) contours;
+} glyph_outline_t;
+
+HB_WASM_API (bool_t, font_copy_glyph_outline) (HB_WASM_EXEC_ENV
+					       ptr_d(font_t, font),
+					       codepoint_t glyph,
+					       ptr_d(glyph_outline_t, outline));
+
 /* shape */
 
-typedef struct {
+typedef struct
+{
   tag_t    tag;
   uint32_t value;
   uint32_t start;
