@@ -915,7 +915,7 @@ struct hb_bit_set_t
 
     /* The extra page_map length is necessary; can't just rely on vector here,
      * since the next check would be tricked because a null page also has
-     * major==0, which we can't distinguish from an actualy major==0 page... */
+     * major==0, which we can't distinguish from an actually major==0 page... */
     unsigned i = last_page_lookup;
     if (likely (i < page_map.length))
     {
@@ -949,7 +949,7 @@ struct hb_bit_set_t
 
     /* The extra page_map length is necessary; can't just rely on vector here,
      * since the next check would be tricked because a null page also has
-     * major==0, which we can't distinguish from an actualy major==0 page... */
+     * major==0, which we can't distinguish from an actually major==0 page... */
     unsigned i = last_page_lookup;
     if (likely (i < page_map.length))
     {
