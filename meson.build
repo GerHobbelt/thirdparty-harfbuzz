@@ -3,7 +3,7 @@ project('harfbuzz', 'c', 'cpp',
   version: '8.1.1',
   default_options: [
     'cpp_eh=none',          # Just to support msvc, we are passing -fno-exceptions also anyway
-    'cpp_rtti=false',       # Just to support msvc, we are passing -fno-rtti also anyway
+    # 'cpp_rtti=false',     # Do NOT enable, wraps inherit it and ICU needs RTTI
     'cpp_std=c++14',        # Just to support msvc, their STL requires it
     'wrap_mode=nofallback', # Use --wrap-mode=default to revert, https://github.com/harfbuzz/harfbuzz/pull/2548
   ],
