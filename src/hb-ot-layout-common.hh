@@ -2469,6 +2469,12 @@ struct VarRegionAxis
 		  (startCoord.to_int() >= 0 || endCoord.to_int() <= 0 || peakCoord.to_int() == 0));
   }
 
+  bool serialize (hb_serialize_context_t *c) const
+  {
+    TRACE_SERIALIZE (this);
+    return_trace (c->embed (this));
+  }
+
   public:
   F2DOT14	startCoord;
   F2DOT14	peakCoord;
@@ -2526,6 +2532,47 @@ struct VarRegionList
     return_trace (c->check_struct (this) && axesZ.sanitize (c, axisCount * regionCount));
   }
 
+  bool serialize (hb_serialize_context_t *c,
+                  const hb_vector_t<hb_tag_t>& axis_tags,
+                  const hb_vector_t<const hb_hashmap_t<hb_tag_t, Triple>*>& regions)
+  {
+    TRACE_SERIALIZE (this);
+    unsigned axis_count = axis_tags.length;
+    unsigned region_count = regions.length;
+    if (!axis_count || !region_count) return_trace (false);
+    if (unlikely (hb_unsigned_mul_overflows (axis_count * region_count,
+                                             VarRegionAxis::static_size))) return_trace (false);
+    if (unlikely (!c->extend_min (this))) return_trace (false);
+    axisCount = axis_count;
+    regionCount = region_count;
+
+    for (unsigned r = 0; r < region_count; r++)
+    {
+      const auto& region = regions[r];
+      for (unsigned i = 0; i < axis_count; i++)
+      {
+        hb_tag_t tag = axis_tags.arrayZ[i];
+        VarRegionAxis var_region_rec;
+        Triple *coords;
+        if (region->has (tag, &coords))
+        {
+          var_region_rec.startCoord.set_float (coords->minimum);
+          var_region_rec.peakCoord.set_float (coords->middle);
+          var_region_rec.endCoord.set_float (coords->maximum);
+        }
+        else
+        {
+          var_region_rec.startCoord.set_int (0);
+          var_region_rec.peakCoord.set_int (0);
+          var_region_rec.endCoord.set_int (0);
+        }
+        if (!var_region_rec.serialize (c))
+          return_trace (false);
+      }
+    }
+    return_trace (true);
+  }
+
   bool serialize (hb_serialize_context_t *c, const VarRegionList *src, const hb_inc_bimap_t &region_map)
   {
     TRACE_SERIALIZE (this);
@@ -2544,6 +2591,45 @@ struct VarRegionList
     }
 
     return_trace (true);
+  }
+
+  bool get_var_region (unsigned region_index,
+                       const hb_map_t& axes_old_index_tag_map,
+                       hb_hashmap_t<hb_tag_t, Triple>& axis_tuples /* OUT */) const
+  {
+    if (region_index >= regionCount) return false;
+    const VarRegionAxis* axis_region = axesZ.arrayZ + (region_index * axisCount);
+    for (unsigned i = 0; i < axisCount; i++)
+    {
+      hb_tag_t *axis_tag;
+      if (!axes_old_index_tag_map.has (i, &axis_tag))
+        return false;
+
+      float min_val = axis_region->startCoord.to_float ();
+      float def_val = axis_region->peakCoord.to_float ();
+      float max_val = axis_region->endCoord.to_float ();
+
+      if (def_val != 0.f)
+        axis_tuples.set (*axis_tag, Triple (min_val, def_val, max_val));
+      axis_region++;
+    }
+    return !axis_tuples.in_error ();
+  }
+
+  bool get_var_regions (const hb_map_t& axes_old_index_tag_map,
+                        hb_vector_t<hb_hashmap_t<hb_tag_t, Triple>>& regions /* OUT */) const
+  {
+    if (!regions.alloc (regionCount))
+      return false;
+
+    for (unsigned i = 0; i < regionCount; i++)
+    {
+      hb_hashmap_t<hb_tag_t, Triple> axis_tuples;
+      if (!get_var_region (i, axes_old_index_tag_map, axis_tuples))
+        return false;
+      regions.push (std::move (axis_tuples));
+    }
+    return !regions.in_error ();
   }
 
   unsigned int get_size () const { return min_size + VarRegionAxis::static_size * axisCount * regionCount; }
@@ -2565,6 +2651,9 @@ struct VarData
 
   unsigned int get_region_index_count () const
   { return regionIndices.len; }
+  
+  unsigned get_region_index (unsigned i) const
+  { return i >= regionIndices.len ? -1 : regionIndices[i]; }
 
   unsigned int get_row_size () const
   { return (wordCount () + regionIndices.len) * (longWords () ? 2 : 1); }
@@ -2761,13 +2850,15 @@ struct VarData
     }
   }
 
-  protected:
+  public:
   const HBUINT8 *get_delta_bytes () const
   { return &StructAfter<HBUINT8> (regionIndices); }
 
+  protected:
   HBUINT8 *get_delta_bytes ()
   { return &StructAfter<HBUINT8> (regionIndices); }
 
+  public:
   int32_t get_item_delta_fast (unsigned int item, unsigned int region,
 			       const HBUINT8 *delta_bytes, unsigned row_size) const
   {
@@ -2840,6 +2931,7 @@ struct VarData
 
 struct VariationStore
 {
+  friend struct item_variations_t;
   using cache_t = VarRegionList::cache_t;
 
   cache_t *create_cache () const
@@ -3038,6 +3130,22 @@ struct VariationStore
 #endif
      return dataSets.len;
    }
+
+  const VarData& get_sub_table (unsigned i) const
+  {
+#ifdef HB_NO_VAR
+     return Null (VarData);
+#endif
+     return this+dataSets[i];
+  }
+
+  const VarRegionList& get_region_list () const
+  {
+#ifdef HB_NO_VAR
+     return Null (VarRegionList);
+#endif
+     return this+regions;
+  }
 
   protected:
   HBUINT16				format;
