@@ -2307,7 +2307,7 @@ struct delta_row_encoding_t
    * needed for this region */
   hb_vector_t<uint8_t> chars;
   unsigned width;
-  unsigned columns;
+  hb_vector_t<uint8_t> columns;
   unsigned overhead;
   hb_vector_t<const hb_vector_t<int>*> items;
 
@@ -2375,21 +2375,26 @@ struct delta_row_encoding_t
     return ret;
   }
 
-  unsigned get_columns ()
+  hb_vector_t<uint8_t> get_columns ()
   {
-    unsigned cols = 0;
-    unsigned i = 1;
+    hb_vector_t<uint8_t> cols;
+    cols.alloc (chars.length);
     for (auto v : chars)
     {
-      if (v)
-        cols |= i;
-      i <<= 1;
+      uint8_t flag = v ? 1 : 0;
+      cols.push (flag);
     }
     return cols;
   }
 
-  static inline unsigned get_chars_overhead (unsigned cols)
-  { return 10 + hb_popcount (cols) * 2; }
+  static inline unsigned get_chars_overhead (const hb_vector_t<uint8_t>& cols)
+  {
+    unsigned c = 4 + 6; // 4 bytes for LOffset, 6 bytes for VarData header
+    unsigned cols_bit_count = 0;
+    for (auto v : cols)
+      if (v) cols_bit_count++;
+    return c + cols_bit_count * 2;
+  }
 
   unsigned get_gain () const
   {
@@ -2402,8 +2407,12 @@ struct delta_row_encoding_t
     int combined_width = 0;
     for (unsigned i = 0; i < chars.length; i++)
       combined_width += hb_max (chars.arrayZ[i], other_encoding.chars.arrayZ[i]);
+   
+    hb_vector_t<uint8_t> combined_columns;
+    combined_columns.alloc (columns.length);
+    for (unsigned i = 0; i < columns.length; i++)
+      combined_columns.push (columns.arrayZ[i] | other_encoding.columns.arrayZ[i]);
     
-    int combined_columns = columns | other_encoding.columns;
     int combined_overhead = get_chars_overhead (combined_columns);
     int combined_gain = (int) overhead + (int) other_encoding.overhead - combined_overhead
                         - (combined_width - (int) width) * items.length
@@ -2730,6 +2739,81 @@ struct VarData
   }
 
   bool serialize (hb_serialize_context_t *c,
+                  bool has_long,
+                  const hb_vector_t<const hb_vector_t<int>*>& rows)
+  {
+    TRACE_SERIALIZE (this);
+    if (unlikely (!c->extend_min (this))) return_trace (false);
+    unsigned row_count = rows.length;
+    itemCount = row_count;
+
+    int min_threshold = has_long ? -65536 : -128;
+    int max_threshold = has_long ? +65535 : +127;
+    enum delta_size_t { kZero=0, kNonWord, kWord };
+    hb_vector_t<delta_size_t> delta_sz;
+    unsigned num_regions = rows[0]->length;
+    if (!delta_sz.resize (num_regions))
+      return_trace (false);
+
+    unsigned word_count = 0;
+    for (unsigned r = 0; r < num_regions; r++)
+    {
+      for (unsigned i = 0; i < row_count; i++)
+      {
+        int delta = rows[i]->arrayZ[r];
+        if (delta < min_threshold || delta > max_threshold)
+        {
+          delta_sz[r] = kWord;
+          word_count++;
+          break;
+        }
+        else if (delta != 0)
+        {
+          delta_sz[r] = kNonWord;
+        }
+      }
+    }
+
+    /* reorder regions: words and then non-words*/
+    unsigned word_index = 0;
+    unsigned non_word_index = word_count;
+    hb_map_t ri_map;
+    for (unsigned r = 0; r < num_regions; r++)
+    {
+      if (!delta_sz[r]) continue;
+      unsigned new_r = (delta_sz[r] == kWord)? word_index++ : non_word_index++;
+      if (!ri_map.set (new_r, r))
+        return_trace (false);
+    }
+
+    wordSizeCount = word_count | (has_long ? 0x8000u /* LONG_WORDS */ : 0);
+
+    unsigned ri_count = ri_map.get_population ();
+    regionIndices.len = ri_count;
+    if (unlikely (!c->extend (this))) return_trace (false);
+
+    for (unsigned r = 0; r < ri_count; r++)
+    {
+      hb_codepoint_t *idx;
+      if (!ri_map.has (r, &idx))
+        return_trace (false);
+      regionIndices[r] = *idx;
+    }
+
+    HBUINT8 *delta_bytes = get_delta_bytes ();
+    unsigned row_size = get_row_size ();
+    for (unsigned int i = 0; i < row_count; i++)
+    {
+      for (unsigned int r = 0; r < ri_count; r++)
+      {
+        int delta = rows[i]->arrayZ[ri_map[r]];
+        set_item_delta_fast (i, r, delta, delta_bytes, row_size);
+      }
+    }
+    return_trace (true);
+  }
+
+  bool serialize (hb_serialize_context_t *c,
 		  const VarData *src,
 		  const hb_inc_bimap_t &inner_map,
 		  const hb_inc_bimap_t &region_map)
@@ -2889,6 +2973,7 @@ struct VarData
 				 get_row_size ());
   }
 
+  protected:
   void set_item_delta_fast (unsigned int item, unsigned int region, int32_t delta,
 			    HBUINT8 *delta_bytes, unsigned row_size)
   {
@@ -3000,6 +3085,36 @@ struct VariationStore
 		  format == 1 &&
 		  regions.sanitize (c, this) &&
 		  dataSets.sanitize (c, this));
+  }
+
+  bool serialize (hb_serialize_context_t *c,
+                  bool has_long,
+                  const hb_vector_t<hb_tag_t>& axis_tags,
+                  const hb_vector_t<const hb_hashmap_t<hb_tag_t, Triple>*>& region_list,
+                  const hb_vector_t<delta_row_encoding_t>& vardata_encodings)
+  {
+    TRACE_SERIALIZE (this);
+#ifdef HB_NO_VAR
+    return_trace (false);
+#endif
+    if (unlikely (!c->extend_min (this))) return_trace (false);
+    
+    format = 1;
+    if (!regions.serialize_serialize (c, axis_tags, region_list))
+      return_trace (false);
+
+    unsigned num_var_data = vardata_encodings.length;
+    if (!num_var_data) return_trace (false);
+    if (unlikely (!c->check_assign (dataSets.len, num_var_data,
+                                    HB_SERIALIZE_ERROR_INT_OVERFLOW)))
+      return_trace (false);
+
+    if (unlikely (!c->extend (dataSets))) return_trace (false);
+    for (unsigned i = 0; i < num_var_data; i++)
+      if (!dataSets[i].serialize_serialize (c, has_long, vardata_encodings[i].items))
+        return_trace (false);
+    
+    return_trace (true);
   }
 
   bool serialize (hb_serialize_context_t *c,
