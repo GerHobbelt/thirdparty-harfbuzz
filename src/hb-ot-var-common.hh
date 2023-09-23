@@ -1938,6 +1938,9 @@ struct item_variations_t
     unsigned start_row = 0;
     hb_vector_t<delta_row_encoding_t> encoding_objs;
     hb_hashmap_t<hb_vector_t<uint8_t>, unsigned> chars_idx_map;
+
+    /* delta_rows map, used for filtering out duplicate rows */
+    hb_hashmap_t<const hb_vector_t<int>*, unsigned> delta_rows_map;
     for (unsigned major = 0; major < vars.length; major++)
     {
       /* deltas are stored in tuples(column based), convert them back into items
@@ -1954,10 +1957,10 @@ struct item_variations_t
         if (!region_map.has (&(tuple.axis_tuples), &col_idx))
           continue;
 
-        for (unsigned i = start_row; i < start_row + num_rows; i++)
+        for (unsigned i = 0; i < num_rows; i++)
         {
           int rounded_delta = roundf (tuple.deltas_x[i]);
-          delta_rows[i][*col_idx] += rounded_delta;
+          delta_rows[start_row + i][*col_idx] += rounded_delta;
           if ((!has_long) && (rounded_delta < -65536 || rounded_delta > 65535))
             has_long = true;
         }
@@ -1980,8 +1983,17 @@ struct item_variations_t
           if (all_zeros)
             continue;
         }
+
+        if (!front_mapping.set ((major<<16) + minor, &row))
+          return false;
+
         hb_vector_t<uint8_t> chars = delta_row_encoding_t::get_row_chars (row);
         if (!chars) return false;
+
+        if (delta_rows_map.has (&row))
+          continue;
+
+        delta_rows_map.set (&row, 1);
         unsigned *obj_idx;
         if (chars_idx_map.has (chars, &obj_idx))
         {
@@ -1996,8 +2008,6 @@ struct item_variations_t
           if (!chars_idx_map.set (chars, encoding_objs.length - 1))
             return false;
         }
-        if (!front_mapping.set ((major<<16) + minor, &row))
-          return false;
       }
 
       start_row += num_rows;
@@ -2052,7 +2062,7 @@ struct item_variations_t
       for (const auto& row : hb_concat (encoding.items, other_encoding.items))
         combined_encoding_obj.add_row (row);
 
-      for (unsigned idx = 0; i < encoding_objs.length; i++)
+      for (unsigned idx = 0; idx < encoding_objs.length; idx++)
       {
         if (removed_todo_idxes.has (idx)) continue;
 
@@ -2090,35 +2100,34 @@ struct item_variations_t
     /* sort again based on width, make result deterministic */
     encodings.qsort (delta_row_encoding_t::cmp_width);
 
-    /* full encoding_row -> new VarIdxes mapping */
-    hb_hashmap_t<const hb_vector_t<int>*, unsigned> back_mapping;
-
-    for (unsigned major = 0; major < encodings.length; major++)
-      if (!compile_varidx_map (major, front_mapping, back_mapping))
-        return false;
-    return true;
+    return compile_varidx_map (front_mapping);
   }
 
   private:
   /* compile varidx_map for one VarData subtable (index specified by major) */
-  bool compile_varidx_map (unsigned major,
-                           const hb_hashmap_t<unsigned, const hb_vector_t<int>*>& front_mapping,
-                           hb_hashmap_t<const hb_vector_t<int>*, unsigned> back_mapping)
+  bool compile_varidx_map (const hb_hashmap_t<unsigned, const hb_vector_t<int>*>& front_mapping)
   {
-    delta_row_encoding_t& encoding = encodings[major];
-    /* just sanity check, this shouldn't happen */
-    if (encoding.is_empty ())
-      return false;
+    /* full encoding_row -> new VarIdxes mapping */
+    hb_hashmap_t<const hb_vector_t<int>*, unsigned> back_mapping;
 
-    unsigned num_rows = encoding.items.length;
-    /* sort rows, make result deterministic */
-    encoding.items.qsort (_cmp_row);
-
-    /* compile old to new var_idxes mapping */
-    for (unsigned minor = 0; minor < num_rows; minor++)
+    for (unsigned major = 0; major < encodings.length; major++)
     {
-      unsigned new_varidx = (major << 16) + minor;
-      back_mapping.set (encoding.items.arrayZ[minor], new_varidx);
+      delta_row_encoding_t& encoding = encodings[major];
+      /* just sanity check, this shouldn't happen */
+      if (encoding.is_empty ())
+        return false;
+  
+      unsigned num_rows = encoding.items.length;
+  
+      /* sort rows, make result deterministic */
+      encoding.items.qsort (_cmp_row);
+  
+      /* compile old to new var_idxes mapping */
+      for (unsigned minor = 0; minor < num_rows; minor++)
+      {
+        unsigned new_varidx = (major << 16) + minor;
+        back_mapping.set (encoding.items.arrayZ[minor], new_varidx);
+      }
     }
 
     for (auto _ : front_mapping.iter ())
