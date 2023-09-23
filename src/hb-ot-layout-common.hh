@@ -2306,9 +2306,9 @@ struct delta_row_encoding_t
   /* each byte represents a region, value is one of 0/1/2/4, which means bytes
    * needed for this region */
   hb_vector_t<uint8_t> chars;
-  unsigned width;
+  unsigned width = 0;
   hb_vector_t<uint8_t> columns;
-  unsigned overhead;
+  unsigned overhead = 0;
   hb_vector_t<const hb_vector_t<int>*> items;
 
   delta_row_encoding_t () = default;
@@ -2317,7 +2317,7 @@ struct delta_row_encoding_t
                         delta_row_encoding_t ()
 
   {
-    chars = chars_;
+    chars = std::move (chars_);
     width = get_width ();
     columns = get_columns ();
     overhead = get_chars_overhead (columns);
