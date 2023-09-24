@@ -804,11 +804,14 @@ struct graph_t
     // Note: there's a built in assumption here that roots won't link to other roots via a wide link.
     hb_set_t parents;    
     for (unsigned root_idx : roots)
+    {
       subgraph.set (root_idx, wide_parents (root_idx, parents));
+    }
     hb_set_t visited;
     for (unsigned root_idx : roots)
+    {
       find_subgraph (root_idx, visited, subgraph);
-
+    }
     if (subgraph.in_error ())
       return false;
 
@@ -872,8 +875,10 @@ struct graph_t
   void find_subgraph (unsigned node_idx, hb_set_t& visited, hb_map_t& subgraph)
   {
     if (visited.has(node_idx))
+    {
       // Only count the outgoing links from each node once.
       return;
+    }
     visited.add(node_idx);
 
     for (const auto& link : vertices_[node_idx].obj.all_links ())
