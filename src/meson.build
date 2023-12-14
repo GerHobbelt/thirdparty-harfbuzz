@@ -413,6 +413,17 @@ hb_headers = hb_base_headers
 
 harfbuzz_deps = [thread_dep, m_dep] + harfbuzz_extra_deps
 
+libsupcxx_dep = []
+libstdcxx_dep = []
+if get_option('default_library') == 'static'
+  if cpp.get_id() == 'gcc'
+    libsupcxx_dep += cpp.find_library('supc++', required : false)
+    libstdcxx_dep += cpp.find_library('stdc++', required : false)
+  elif cpp.get_id() == 'clang'
+    libsupcxx_dep += cpp.find_library('c++', required : false)
+  endif
+endif
+
 libharfbuzz_link_language = 'c'
 
 hb_features = configuration_data()
@@ -627,12 +638,14 @@ endif
 
 pkgmod.generate(libharfbuzz,
   description: 'HarfBuzz text shaping library',
+  libraries: libsupcxx_dep,
   subdirs: [meson.project_name()],
   version: meson.project_version(),
 )
 
 pkgmod.generate(libharfbuzz_subset,
   description: 'HarfBuzz font subsetter',
+  libraries: libsupcxx_dep,
   requires: ['harfbuzz = @0@'.format(meson.project_version())],
   subdirs: [meson.project_name()],
   version: meson.project_version(),
@@ -666,6 +679,7 @@ if have_icu and not have_icu_builtin
 
   pkgmod.generate(libharfbuzz_icu,
     description: 'HarfBuzz text shaping library ICU integration',
+    libraries: [ libsupcxx_dep, libstdcxx_dep ],
     requires: ['harfbuzz = @0@'.format(meson.project_version())],
     subdirs: [meson.project_name()],
     version: meson.project_version(),
@@ -779,6 +793,7 @@ if have_gobject
 
   pkgmod.generate(libharfbuzz_gobject,
     description: 'HarfBuzz text shaping library GObject integration',
+    libraries: libsupcxx_dep,
     requires: ['harfbuzz = @0@'.format(meson.project_version()), 'glib-2.0', 'gobject-2.0'],
     subdirs: [meson.project_name()],
     version: meson.project_version(),
