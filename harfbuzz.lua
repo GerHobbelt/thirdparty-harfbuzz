@@ -34,6 +34,7 @@ files {
     "./src/hb-number.cc",
     "./src/hb-ot-cff1-table.cc",
     "./src/hb-ot-cff2-table.cc",
+    "./src/hb-ot-color.cc",
     "./src/hb-ot-face.cc",
     "./src/hb-ot-font.cc",
     "./src/hb-outline.cc",
