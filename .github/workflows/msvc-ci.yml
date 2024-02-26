@@ -6,11 +6,15 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   msvc:
     runs-on: ${{ matrix.os }}
 
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-2019, windows-latest]
         include:
@@ -23,30 +27,35 @@ jobs:
     name: ${{ matrix.name }}
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch : ${{ matrix.ARCH }}
-      - name: Install Dependencies
-        run: |
-          pip install --upgrade meson ninja fonttools
-      - name: Build
-        run: |
-          # This dir contains a pkg-config which meson will happily use and later fail, so remove it
-          $env:path = ($env:path.Split(';') | Where-Object { $_ -ne 'C:\Strawberry\perl\bin' }) -join ';'
-
+    - name: Checkout
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+    - name: Setup Ccache
+      uses: hendrikmuhs/ccache-action@6d1841ec156c39a52b1b23a810da917ab98da1f4 # v1.2.10
+      with:
+        variant: sccache
+        key: ${{ github.job }}-${{ matrix.os }}-${{ matrix.ARCH }}
+    - name: Setup Python
+      uses: actions/setup-python@65d7f2d534ac1bc67fcd62888c5f4f3d2cb2b236 # v4.7.1
+      with:
+        python-version: '3.x'
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@cec98b9d092141f74527d0afa6feb2af698cfe89 # v1.12.1
+      with:
+        arch : ${{ matrix.ARCH }}
+    - name: Install Python Dependencies
+      run: |
+        pip3 install -r .ci/requirements.txt --require-hashes
+    - name: Setup Meson
+      run: |
+          sccache --version
           meson setup build `
-            --wrap-mode=default `
+            --wrap-mode=forcefallback `
             --buildtype=release `
             -Dglib=enabled `
             -Dfreetype=enabled `
             -Dgdi=enabled `
             -Ddirectwrite=enabled
-
-          meson compile -C build
-      - name: Test
-        run: |
-          meson test --print-errorlogs --suite=harfbuzz -C build
+    - name: Build
+      run: meson compile -Cbuild
+    - name: Test
+      run: meson test --print-errorlogs --suite=harfbuzz -Cbuild

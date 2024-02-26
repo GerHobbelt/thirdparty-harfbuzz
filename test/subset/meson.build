@@ -1,5 +1,6 @@
 tests = [
   'basics',
+  'preprocess',
   'full-font',
   'cff-full-font',
   'japanese',
@@ -33,7 +34,7 @@ tests = [
   'layout.duplicate_features',
   'layout.unsorted_featurelist',
   'layout.drop_feature',
-  'layout.default_features',
+  'no_layout_closure',
   'cmap',
   'cmap14',
   'sbix',
@@ -41,15 +42,46 @@ tests = [
   'colr_glyphs',
   'math',
   'math_coverage_offset',
-# TODO: re-enable once colrv1 subsetting is stabilized.
-# 'colrv1.notoemoji',
+  # TODO: re-enable once colrv1 subsetting is stabilized.
+  # 'colrv1.notoemoji',
   'colrv1',
+  'colrv1_copy_varstore',
   'colr_with_components',
   'cbdt',
   'variable',
   'glyph_names',
+  'glyph_map',
   'post',
+  '32bit_var_store',
+  'pin_all_at_default',
+  'instantiate_glyf',
+  'instantiate_cff2',
+  'full_instance',
+  'instance_feature_variations',
+  'instance_no_double_free',
+  'mvar_full_instance',
+  'instance_comp_glyph_empty_child',
+  'post_apply_mvar_delta',
+  'apply_cvar_delta',
+  'collect_name_ids',
+  'instantiate_colrv1',
+  'instantiate_cff2_update_metrics',
+  'layout.empty_ligature_offset',
 ]
+
+if get_option('experimental_api')
+  tests += [
+    'glyf_partial_instancing',
+    'mvar_partial_instance',
+    'update_def_wght',
+    'empty_region_vardata',
+    'feature_variations_partial_instance',
+    'gdef_partial_instance',
+    'value_format_partial_instance',
+    'feature_variation_instance_collect_lookups',
+    'iftb_requirements'
+    ]
+endif
 
 repack_tests = [
   'basic',
@@ -59,7 +91,6 @@ repack_tests = [
   'advanced_prioritization',
   'space_splitting',
 ]
-
 
 run_test = find_program('run-tests.py')
 
