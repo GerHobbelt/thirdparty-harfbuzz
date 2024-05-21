@@ -178,6 +178,8 @@ extract_make_variable(HB_SUBSET_CLI_sources ${UTILSOURCES})
 add_prefix_to_list(HB_SUBSET_CLI_sources "${PROJECT_SOURCE_DIR}/util/")
 extract_make_variable(HB_OT_SHAPE_CLOSURE_sources ${UTILSOURCES})
 add_prefix_to_list(HB_OT_SHAPE_CLOSURE_sources "${PROJECT_SOURCE_DIR}/util/")
+extract_make_variable(HB_INFO_sources ${UTILSOURCES})
+add_prefix_to_list(HB_INFO_sources "${PROJECT_SOURCE_DIR}/util/")
 
 
 file(READ configure.ac CONFIGUREAC)
@@ -490,7 +492,7 @@ endif ()
 ## Define harfbuzz-subset library
 if (HB_BUILD_SUBSET)
   add_library(harfbuzz-subset ${subset_project_sources} ${subset_project_headers})
-  list(APPEND project_headers ${PROJECT_SOURCE_DIR}/src/hb-subset.h)
+  list(APPEND project_headers ${PROJECT_SOURCE_DIR}/src/hb-subset.h ${PROJECT_SOURCE_DIR}/src/hb-subset-repacker.h)
   add_dependencies(harfbuzz-subset harfbuzz)
   target_link_libraries(harfbuzz-subset harfbuzz ${THIRD_PARTY_LIBS})
 
@@ -665,14 +667,8 @@ if (HB_HAVE_INTROSPECTION)
       -I${PROJECT_BINARY_DIR}/src
       ${hb_includedir_cflags}
       ${hb_defines_cflags}
-      -DHB_H
-      -DHB_H_IN
-      -DHB_OT_H
-      -DHB_OT_H_IN
-      -DHB_AAT_H
-      -DHB_AAT_H_IN
-      -DHB_GOBJECT_H
-      -DHB_GOBJECT_H_IN
+      -DHB_NO_SINGLE_HEADER_ERROR
+      -DHB_HAVE_GOBJECT
       -DHB_EXTERN=
       --cflags-end
       --library=harfbuzz-gobject
@@ -729,6 +725,11 @@ if (HB_BUILD_UTILS)
 
   add_executable(hb-ot-shape-closure ${HB_OT_SHAPE_CLOSURE_sources})
   target_link_libraries(hb-ot-shape-closure harfbuzz)
+
+  if (HB_HAVE_GOBJECT)
+    add_executable(hb-info ${HB_INFO_sources})
+    target_link_libraries(hb-info harfbuzz-gobject harfbuzz)
+  endif()
 endif ()
 
 
@@ -779,6 +780,28 @@ macro ( make_pkgconfig_pc_file name )
     COMPONENT pkgconfig
   )
 endmacro ( make_pkgconfig_pc_file )
+
+# Generate hb-features.h with the features we enabled
+macro (make_hb_features_h)
+  file(READ "${PROJECT_SOURCE_DIR}/src/hb-features.h.in" feature_h_in)
+  foreach(arg cairo coretext directwrite freetype gdi glib gobject graphite icu uniscribe wasm)
+    string(TOUPPER ${arg} feature_caps)
+    set(feature_instring "#mesondefine HB_HAS_${feature_caps}")
+    if (HB_HAVE_${feature_caps})
+      set(feature_outstring "#define HB_HAS_${feature_caps} 1")
+    else ()
+      set(feature_outstring "/* #undef HB_HAS_${feature_caps} */")
+    endif()
+    string(REPLACE ${feature_instring} ${feature_outstring} feature_h_in ${feature_h_in})
+  endforeach()
+  file(WRITE "${PROJECT_BINARY_DIR}/src/hb-features.h" ${feature_h_in})
+  if (NOT SKIP_INSTALL_HEADERS AND NOT SKIP_INSTALL_ALL)
+    install(
+      FILES "${PROJECT_BINARY_DIR}/src/hb-features.h"
+      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/harfbuzz"
+    )
+  endif()
+endmacro (make_hb_features_h)
 
 if (NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL)
   install(TARGETS harfbuzz
@@ -836,6 +859,12 @@ if (NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL)
       RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
 
+    if (HB_HAVE_GOBJECT)
+      install(TARGETS hb-info
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+      )
+    endif()
+
     install(TARGETS hb-ot-shape-closure
       RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
@@ -863,4 +892,5 @@ if (NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL)
       )
     endif ()
   endif ()
+  make_hb_features_h()
 endif ()
