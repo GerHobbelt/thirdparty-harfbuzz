@@ -30,6 +30,7 @@
 
 #include "hb-kern.hh"
 #include "hb-aat-layout-ankr-table.hh"
+#include "hb-set-digest.hh"
 
 /*
  * kerx -- Extended Kerning
@@ -82,7 +83,7 @@ struct KernPair
     return_trace (c->check_struct (this));
   }
 
-  protected:
+  public:
   HBGlyphID16	left;
   HBGlyphID16	right;
   FWORD		value;
@@ -122,13 +123,31 @@ struct KerxSubTableFormat0
   {
     const KerxSubTableFormat0 &table;
     hb_aat_apply_context_t *c;
+    hb_set_digest_t left_set, right_set;
+
+    template <typename set_t>
+    void collect_glyphs (set_t &left, set_t &right)
+    {
+      for (const KernPair& pair : table.pairs)
+      {
+        left_set.add (pair.left);
+        right_set.add (pair.right);
+      }
+    }
 
     accelerator_t (const KerxSubTableFormat0 &table_,
 		   hb_aat_apply_context_t *c_) :
-		     table (table_), c (c_) {}
+		     table (table_), c (c_)
+    {
+      collect_glyphs (left_set, right_set);
+    }
 
     int get_kerning (hb_codepoint_t left, hb_codepoint_t right) const
-    { return table.get_kerning (left, right, c); }
+    {
+      if (!left_set[left] || !right_set[right])
+        return 0;
+      return table.get_kerning (left, right, c);
+    }
   };
 
 
@@ -228,13 +247,14 @@ struct KerxSubTableFormat1
 	depth (0),
 	crossStream (table->header.coverage & table->header.CrossStream) {}
 
-    bool is_actionable (StateTableDriver<Types, EntryData> *driver HB_UNUSED,
+    bool is_actionable (hb_buffer_t *buffer HB_UNUSED,
+			StateTableDriver<Types, EntryData> *driver HB_UNUSED,
 			const Entry<EntryData> &entry)
     { return Format1EntryT::performAction (entry); }
-    void transition (StateTableDriver<Types, EntryData> *driver,
+    void transition (hb_buffer_t *buffer,
+		     StateTableDriver<Types, EntryData> *driver,
 		     const Entry<EntryData> &entry)
     {
-      hb_buffer_t *buffer = driver->buffer;
       unsigned int flags = entry.flags;
 
       if (flags & Format1EntryT::Reset)
@@ -351,7 +371,7 @@ struct KerxSubTableFormat1
 
     driver_context_t dc (this, c);
 
-    StateTableDriver<Types, EntryData> driver (machine, c->buffer, c->font->face);
+    StateTableDriver<Types, EntryData> driver (machine, c->font->face);
     driver.drive (&dc, c);
 
     return_trace (true);
@@ -493,14 +513,14 @@ struct KerxSubTableFormat4
 	mark_set (false),
 	mark (0) {}
 
-    bool is_actionable (StateTableDriver<Types, EntryData> *driver HB_UNUSED,
+    bool is_actionable (hb_buffer_t *buffer HB_UNUSED,
+			StateTableDriver<Types, EntryData> *driver HB_UNUSED,
 			const Entry<EntryData> &entry)
     { return entry.data.ankrActionIndex != 0xFFFF; }
-    void transition (StateTableDriver<Types, EntryData> *driver,
+    void transition (hb_buffer_t *buffer,
+		     StateTableDriver<Types, EntryData> *driver,
 		     const Entry<EntryData> &entry)
     {
-      hb_buffer_t *buffer = driver->buffer;
-
       if (mark_set && entry.data.ankrActionIndex != 0xFFFF && buffer->idx < buffer->len)
       {
 	hb_glyph_position_t &o = buffer->cur_pos();
@@ -600,7 +620,7 @@ struct KerxSubTableFormat4
 
     driver_context_t dc (this, c);
 
-    StateTableDriver<Types, EntryData> driver (machine, c->buffer, c->font->face);
+    StateTableDriver<Types, EntryData> driver (machine, c->font->face);
     driver.drive (&dc, c);
 
     return_trace (true);
