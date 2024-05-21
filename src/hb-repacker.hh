@@ -266,7 +266,24 @@ bool _resolve_shared_overflow(const hb_vector_t<graph::overflow_record_t>& overf
     result = sorted_graph.duplicate(&parents, r.child);
   }
 
-  return result != (unsigned) -1;
+  if (result == (unsigned) -1) return result;
+
+  if (parents.get_population() > 1) {
+    // If the duplicated node has more than one parent pre-emptively raise it's priority to the maximum.
+    // This will place it close to the parents. Node's with only one parent, don't need this as normal overflow
+    // resolution will raise priority if needed.
+    //
+    // Reasoning: most of the parents to this child are likely at the same layer in the graph. Duplicating
+    // the child will theoretically allow it to be placed closer to it's parents. However, due to the shortest
+    // distance sort by default it's placement will remain in the same layer, thus it will remain in roughly the
+    // same position (and distance from parents) as the original child node. The overflow resolution will attempt
+    // to move nodes closer, but only for non-shared nodes. Since this node is shared, it will simply be given
+    // further duplication which defeats the attempt to duplicate with multiple parents. To fix this we
+    // pre-emptively raise priority now which allows the duplicated node to pack into the same layer as it's parents.
+    sorted_graph.vertices_[result].give_max_priority();
+  }
+
+  return result;
 }
 
 static inline
@@ -419,7 +436,7 @@ template<typename T>
 inline hb_blob_t*
 hb_resolve_overflows (const T& packed,
                       hb_tag_t table_tag,
-                      unsigned max_rounds = 20,
+                      unsigned max_rounds = 32,
                       bool recalculate_extensions = false) {
   graph_t sorted_graph (packed);
   if (sorted_graph.in_error ())
