@@ -491,7 +491,7 @@ _collect_base_variation_indices (hb_subset_plan_t* plan)
   base->collect_variation_indices (plan, varidx_set);
   const OT::ItemVariationStore &var_store = base->get_var_store ();
   unsigned subtable_count = var_store.get_sub_table_count ();
-  
+
 
   _remap_variation_indices (var_store, varidx_set,
                             plan->normalized_coords,
@@ -731,7 +731,7 @@ _populate_unicodes_to_retain (const hb_set_t *unicodes,
       plan->codepoint_to_glyph->alloc (unicodes->get_population () + glyphs->get_population ());
 
       auto &gid_to_unicodes = plan->accelerator->gid_to_unicodes;
-      
+
       for (hb_codepoint_t gid : *glyphs)
       {
         auto unicodes = gid_to_unicodes.get (gid);
@@ -794,10 +794,6 @@ _populate_unicodes_to_retain (const hb_set_t *unicodes,
     plan->_glyphset_gsub.add_array (&arr.arrayZ->second, arr.length, sizeof (*arr.arrayZ));
   }
 }
-
-#ifndef HB_COMPOSITE_OPERATIONS_PER_GLYPH
-#define HB_COMPOSITE_OPERATIONS_PER_GLYPH 64
-#endif
 
 static unsigned
 _glyf_add_gid_and_children (const OT::glyf_accelerator_t &glyf,
@@ -928,7 +924,7 @@ _populate_gids_to_retain (hb_subset_plan_t* plan,
   if (glyf.has_data ())
     for (hb_codepoint_t gid : cur_glyphset)
       _glyf_add_gid_and_children (glyf, gid, &plan->_glyphset,
-				  cur_glyphset.get_population () * HB_COMPOSITE_OPERATIONS_PER_GLYPH);
+				  cur_glyphset.get_population () * HB_MAX_COMPOSITE_OPERATIONS_PER_GLYPH);
   else
     plan->_glyphset.union_ (cur_glyphset);
 #ifndef HB_NO_SUBSET_CFF
