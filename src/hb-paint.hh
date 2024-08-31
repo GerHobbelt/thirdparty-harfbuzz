@@ -29,7 +29,9 @@
 #include "hb-face.hh"
 #include "hb-font.hh"
 
+#if !defined(_USE_MATH_DEFINES)
 #define _USE_MATH_DEFINES
+#endif
 #include <math.h>
 
 #define HB_PAINT_FUNCS_IMPLEMENT_CALLBACKS \
