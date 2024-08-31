@@ -799,6 +799,7 @@ parse_file_for (const char *name,
       g_set_error (error, G_OPTION_ERROR, G_OPTION_ERROR_FAILED,
 		   "Failed reading file `%s': %s",
 		   arg, strerror (errno));
+      fclose (fp);
       return false;
     }
     g_string_append_c (gs, '\0');
@@ -818,6 +819,8 @@ parse_file_for (const char *name,
   while (!feof (fp));
 
   g_string_free (gs, false);
+
+  fclose (fp);
 
   return true;
 }
