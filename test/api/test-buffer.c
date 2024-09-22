@@ -26,8 +26,13 @@
 
 #include "hb-test.h"
 
-/* Unit tests for hb-buffer.h */
+#include "hb.h"
 
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+/* Unit tests for hb-buffer.h */
 
 static const char utf8[10] = "ab\360\240\200\200defg";
 static const uint16_t utf16[8] = {'a', 'b', 0xD840, 0xDC00, 'd', 'e', 'f', 'g'};
@@ -55,6 +60,10 @@ typedef struct
 {
   hb_buffer_t *buffer;
 } fixture_t;
+
+
+
+#if defined(HAVE_GLIB)
 
 static void
 fixture_init (fixture_t *fixture, gconstpointer user_data)
@@ -924,9 +933,17 @@ test_buffer_serialize_deserialize (void)
 
 }
 
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#define main  harfbuzz_test_buffer_main
+#endif
+
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
+#if defined(HAVE_GLIB)
+
   unsigned int i;
 
   hb_test_init (&argc, &argv);
@@ -951,4 +968,12 @@ main (int argc, char **argv)
   hb_test_add (test_buffer_serialize_deserialize);
 
   return hb_test_run();
+
+#else
+
+  fprintf(stderr, "harfbuzz-test-buffer is not supported/built on this platform.\n");
+
+  return 1;
+
+#endif
 }

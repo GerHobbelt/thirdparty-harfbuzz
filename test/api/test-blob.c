@@ -26,6 +26,11 @@
 
 #include "hb-test.h"
 
+#include "hb.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+
 /* Unit tests for hb-blob.h */
 
 #if defined(HAVE_SYS_MMAN_H) && defined(HAVE_MPROTECT) && defined(HAVE_MMAP)
@@ -41,6 +46,9 @@
 
 #endif
 
+
+
+#if defined(HAVE_GLIB)
 
 static void
 test_blob_empty (void)
@@ -322,10 +330,17 @@ test_blob_subblob (fixture_t *fixture, gconstpointer user_data)
     g_assert ('\0' == data[i]);
 }
 
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#define main harfbuzz_test_blob_main
+#endif
 
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
+#if defined(HAVE_GLIB)
+
   unsigned int i;
 
   hb_test_init (&argc, &argv);
@@ -346,4 +361,12 @@ main (int argc, char **argv)
    */
 
   return hb_test_run ();
+
+#else
+
+  fprintf(stderr, "harfbuzz-test-blob is not supported/built on this platform.\n");
+
+  return 1;
+
+#endif
 }

@@ -26,11 +26,19 @@
 
 #include "hb-test.h"
 
+#include "hb.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+
 /* Unit tests for hb-font.h */
 
 
 static const char test_data[] = "test\0data";
 
+
+
+#if defined(HAVE_GLIB)
 
 static void
 test_face_empty (void)
@@ -598,9 +606,17 @@ test_font_properties (void)
   hb_font_destroy (subfont);
 }
 
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#define main harfbuzz_test_font_main
+#endif
+
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
+#if defined(HAVE_GLIB)
+
   hb_test_init (&argc, &argv);
 
   hb_test_add (test_face_empty);
@@ -616,4 +632,12 @@ main (int argc, char **argv)
   hb_test_add (test_font_properties);
 
   return hb_test_run();
+
+#else
+
+  fprintf(stderr, "harfbuzz-test-font is not supported/built on this platform.\n");
+
+  return 1;
+
+#endif
 }

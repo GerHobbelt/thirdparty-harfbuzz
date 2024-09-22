@@ -26,6 +26,14 @@
 
 #include "hb-test.h"
 
+#include "hb.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+
+
+#if defined(HAVE_GLIB)
+
 static void
 test_glyph_names_post (void)
 {
@@ -100,13 +108,29 @@ test_glyph_names_cff (void)
   hb_face_destroy (face);
 }
 
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#define main harfbuzz_test_glyph_names_main
+#endif
+
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
+#if defined(HAVE_GLIB)
+
   hb_test_init (&argc, &argv);
 
   hb_test_add (test_glyph_names_post);
   hb_test_add (test_glyph_names_cff);
 
   return hb_test_run();
+
+#else
+
+  fprintf(stderr, "harfbuzz-test-glyph_names is not supported/built on this platform.\n");
+
+  return 1;
+
+#endif
 }

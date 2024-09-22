@@ -445,7 +445,7 @@ int main(int argc, const char **argv)
 #else
     fprintf(stderr, "hb-aots-tester is not supported/built on this platform.\n\nYou may want to port/run the harfbuzz/test/shape/data/aots/update.py generator script and rebuild.\n");
 
-    return 0;
+    return 1;
 #endif
 }
 
