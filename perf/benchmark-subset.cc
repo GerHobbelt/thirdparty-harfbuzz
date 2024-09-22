@@ -252,7 +252,12 @@ static void test_operation (operation_t op,
   }
 }
 
-int main(int argc, char** argv)
+#if defined(BUILD_MONOLITHIC)
+#define main  harfbuzz_perf_subset_benchmark_main
+#endif
+
+extern "C"
+int main(int argc, const char** argv)
 {
   benchmark::Initialize(&argc, argv);
 
@@ -284,4 +289,5 @@ int main(int argc, char** argv)
 
   if (tests != default_tests)
     free (tests);
+  return 0;
 }

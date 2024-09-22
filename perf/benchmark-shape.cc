@@ -142,7 +142,12 @@ static void test_backend (backend_t backend,
    ->Unit(benchmark::kMillisecond);
 }
 
-int main(int argc, char** argv)
+#if defined(BUILD_MONOLITHIC)
+#define main  harfbuzz_perf_shape_benchmark_main
+#endif
+
+extern "C"
+int main(int argc, const char** argv)
 {
   benchmark::Initialize(&argc, argv);
 
@@ -177,4 +182,5 @@ int main(int argc, char** argv)
 
   if (tests != default_tests)
     free (tests);
+  return 0;
 }
