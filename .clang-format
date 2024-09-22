@@ -8,8 +8,6 @@ SpaceBeforeParens: Always
 AllowShortLoopsOnASingleLine: true
 BreakBeforeBraces: Custom
 BraceWrapping:
-  AfterEnum: true
-  AfterStruct: false
   SplitEmptyFunction: false
   AfterClass: true
   AfterControlStatement: true
@@ -20,7 +18,6 @@ BraceWrapping:
   AfterUnion: true
   BeforeElse: true
 AlwaysBreakTemplateDeclarations: true
-AlignTrailingComments: true
 AlignEscapedNewlines: Left
 AllowShortBlocksOnASingleLine: true
 SpaceAfterCStyleCast: true
