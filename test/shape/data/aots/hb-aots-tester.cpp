@@ -50,7 +50,7 @@ struct TestData
     int           num_features;
 };
 
-TestData
+static TestData
 runTest(const char *testName,
         const char *fontfileName,
         unsigned int *in, int nbIn,
@@ -126,7 +126,7 @@ runTest(const char *testName,
 }
 
 
-void printArray (const char* s, int *a, int n)
+static void printArray (const char* s, int *a, int n)
 {
     printf ("%s  %d : ", s, n);
     for (int i = 0; i < n; i++) {
@@ -135,12 +135,12 @@ void printArray (const char* s, int *a, int n)
     printf ("\n");
 }
 
-void printUArray (const char* s, unsigned int *a, int n)
+static void printUArray (const char* s, unsigned int *a, int n)
 {
     printArray (s, (int *) a, n);
 }
 
-bool gsub_test(const char *testName,
+static bool gsub_test(const char *testName,
                const char *fontfileName,
                int nbIn, unsigned int *in,
                int nbSelect, unsigned int *select,
@@ -219,7 +219,7 @@ bool gsub_test(const char *testName,
     return ok;
 }
 
-bool cmap_test(const char *testName,
+static bool cmap_test(const char *testName,
                const char *fontfileName,
                int nbIn, unsigned int *in,
                int nbSelect, unsigned int *select,
@@ -298,7 +298,7 @@ bool cmap_test(const char *testName,
     return ok;
 }
 
-bool gpos_test(const char *testName,
+static bool gpos_test(const char *testName,
                const char *fontfileName,
                int nbIn,
                unsigned int *in,
@@ -425,14 +425,28 @@ bool gpos_test(const char *testName,
 }
 
 
-int main(int argc, char **argv)
+#if defined(BUILD_MONOLITHIC)
+#define main  harfbuzz_shape_aots_tester_main
+#endif
+
+extern "C"
+int main(int argc, const char **argv)
 {
+#if __has_include("hb-aots-tester.h")
+
     int failures = 0;
     int pass = 0;
 
 #include "hb-aots-tester.h"
 
     printf ("%d failures, %d pass\n", failures, pass);
+
+    return 0;
+#else
+    fprintf(stderr, "hb-aots-tester is not supported/built on this platform.\n\nYou may want to port/run the harfbuzz/test/shape/data/aots/update.py generator script and rebuild.\n");
+
+    return 0;
+#endif
 }
 
 
