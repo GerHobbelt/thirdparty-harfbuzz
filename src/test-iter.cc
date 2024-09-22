@@ -153,12 +153,12 @@ static void test_concat ()
 
   it4 += 2;
   assert (*it4 == 3);
-  assert (it4);
+  assert (!!it4);
   assert (it4.len () == 3);
 
   it4 += 2;
   assert (*it4 == 5);
-  assert (it4);
+  assert (!!it4);
   assert (it4.len () == 1);
 
   it4++;
@@ -181,7 +181,7 @@ static void test_concat ()
 
   it6 += 3;
   assert (*it6 == 4);
-  assert (it6);
+  assert (!!it6);
   assert (it6.len () == 2);
 }
 
