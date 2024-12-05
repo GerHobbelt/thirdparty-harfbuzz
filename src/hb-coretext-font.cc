@@ -172,12 +172,19 @@ hb_coretext_get_glyph_extents (hb_font_t *font,
 
 static hb_bool_t
 hb_coretext_get_font_h_extents (hb_font_t *font,
-				void *font_data HB_UNUSED,
+				void *font_data,
 				hb_font_extents_t *metrics,
 				void *user_data HB_UNUSED)
 {
-  // TODO
-  return false;
+  CTFontRef ct_font = (CTFontRef) font_data;
+  CGFloat ct_font_size = CTFontGetSize (ct_font);
+  CGFloat y_mult = (CGFloat) font->y_scale / ct_font_size;
+
+  metrics->ascender = round (CTFontGetAscent (ct_font) * y_mult);
+  metrics->descender = -round (CTFontGetDescent (ct_font) * y_mult);
+  metrics->line_gap = round (CTFontGetLeading (ct_font) * y_mult);
+
+  return true;
 }
 
 #ifndef HB_NO_DRAW
@@ -239,6 +246,32 @@ hb_coretext_draw_glyph (hb_font_t *font,
 #endif
 
 static hb_bool_t
+hb_coretext_get_glyph_name (hb_font_t *font,
+			    void *font_data HB_UNUSED,
+			    hb_codepoint_t glyph,
+			    char *name, unsigned int size,
+			    void *user_data HB_UNUSED)
+{
+  CGFontRef cg_font = (CGFontRef) (const void *) font->face->data.coretext;
+
+  CGGlyph cg_glyph = glyph;
+  CFStringRef cf_name = CGFontCopyGlyphNameForGlyph (cg_font, cg_glyph);
+  if (!cf_name)
+    return false;
+
+  CFIndex len = CFStringGetLength (cf_name);
+  if (len > size - 1)
+    len = size - 1;
+
+  CFStringGetBytes (cf_name, CFRangeMake (0, len),
+		    kCFStringEncodingUTF8, 0, false,
+		    (UInt8 *) name, size, &len);
+
+  name[len] = '\0';
+  return true;
+}
+
+static hb_bool_t
 hb_coretext_get_glyph_from_name (hb_font_t *font HB_UNUSED,
 				 void *font_data,
 				 const char *name, int len,
@@ -293,7 +326,7 @@ static struct hb_coretext_font_funcs_lazy_loader_t : hb_font_funcs_lazy_loader_t
     hb_font_funcs_set_glyph_extents_func (funcs, hb_coretext_get_glyph_extents, nullptr, nullptr);
 
 #ifndef HB_NO_OT_FONT_GLYPH_NAMES
-    //hb_font_funcs_set_glyph_name_func (funcs, hb_coretext_get_glyph_name, nullptr, nullptr);
+    hb_font_funcs_set_glyph_name_func (funcs, hb_coretext_get_glyph_name, nullptr, nullptr);
     hb_font_funcs_set_glyph_from_name_func (funcs, hb_coretext_get_glyph_from_name, nullptr, nullptr);
 #endif
 
