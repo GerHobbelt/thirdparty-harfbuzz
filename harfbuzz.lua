@@ -79,7 +79,8 @@ if (_PLATFORM_COCOA) then
     }
 
     files {
-        "src/hb-coretext.cc"
+        "src/hb-coretext-font.cc",
+        "src/hb-coretext-shape.cc"
     }
 end
 
@@ -89,7 +90,8 @@ if (_PLATFORM_IOS) then
     }
 
     files {
-        "src/hb-coretext.cc"
+        "src/hb-coretext-font.cc",
+        "src/hb-coretext-shape.cc"
     }
 end
 
@@ -105,7 +107,8 @@ if (_PLATFORM_MACOS) then
     }
 
     files {
-        "src/hb-coretext.cc"
+        "src/hb-coretext-font.cc",
+        "src/hb-coretext-shape.cc"
     }
 end
 
