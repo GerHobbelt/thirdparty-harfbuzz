@@ -222,7 +222,8 @@ static void test_subset (operation_t op,
   if (retain_gids)
     strcat (name, "/retaingids");
 
-  benchmark::RegisterBenchmark (name, BM_subset, op, test_input, retain_gids)
+  benchmark::RegisterBenchmark (BENCHMARK_FAMILY_ID, name, BM_subset, op,
+				test_input, retain_gids)
       ->Range(10, test_input.max_subset_size)
       ->Unit(time_unit);
 }
@@ -273,7 +274,7 @@ int main(int argc, const char** argv)
 
 #undef TEST_OPERATION
 
-  benchmark::RunSpecifiedBenchmarks();
+  benchmark::RunSpecifiedBenchmarks (BENCHMARK_FAMILY_ID, false);
   benchmark::Shutdown();
 
   if (tests != default_tests)

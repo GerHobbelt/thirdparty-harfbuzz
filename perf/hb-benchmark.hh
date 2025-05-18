@@ -40,11 +40,14 @@
 #include <hb-coretext.h>
 #endif
 
+#define BENCHMARK_FAMILY_ID    "harfbuzz"
+
 #include <benchmark/benchmark.h>
 
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
 
 
 HB_BEGIN_DECLS
@@ -69,6 +72,7 @@ hb_benchmark_face_create_from_file_or_fail (const char *font_path,
     return hb_face_create_from_file_or_fail (font_path, face_index);
 
   assert (false);
+  throw std::runtime_error ("Unknown font loader");
 }
 
 HB_END_DECLS

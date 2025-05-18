@@ -123,7 +123,8 @@ static void test_backend (backend_t backend,
   strcat (name, "/");
   strcat (name, backend_name);
 
-  benchmark::RegisterBenchmark (name, BM_Shape, variable, backend, test_input)
+  benchmark::RegisterBenchmark (BENCHMARK_FAMILY_ID, name, BM_Shape, variable,
+				backend, test_input)
    ->Unit(benchmark::kMillisecond);
 }
 
@@ -162,7 +163,7 @@ int main(int argc, const char** argv)
     }
   }
 
-  benchmark::RunSpecifiedBenchmarks();
+  benchmark::RunSpecifiedBenchmarks (BENCHMARK_FAMILY_ID, false);
   benchmark::Shutdown();
 
   if (tests != default_tests)

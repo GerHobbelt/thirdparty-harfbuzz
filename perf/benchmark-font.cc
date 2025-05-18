@@ -257,7 +257,8 @@ static void test_backend (backend_t backend,
   strcat (name, "/");
   strcat (name, backend_name);
 
-  benchmark::RegisterBenchmark (name, BM_Font, variable, backend, op, test_input)
+  benchmark::RegisterBenchmark (BENCHMARK_FAMILY_ID, name, BM_Font, variable,
+				backend, op, test_input)
    ->Unit(time_unit);
 }
 
@@ -314,7 +315,7 @@ int main(int argc, const char** argv)
 
 #undef TEST_OPERATION
 
-  benchmark::RunSpecifiedBenchmarks();
+  benchmark::RunSpecifiedBenchmarks (BENCHMARK_FAMILY_ID, false);
   benchmark::Shutdown();
 
   if (tests != default_tests)
