@@ -504,7 +504,7 @@ struct OpenTypeFontFile
 			 Iterator items)
   {
     TRACE_SERIALIZE (this);
-    assert (sfnt_tag != TTCTag);
+    assert (sfnt_tag != uint32_t{TTCTag});
     if (unlikely (!c->extend_min (this))) return_trace (false);
     return_trace (u.fontFace.serialize (c, sfnt_tag, items));
   }
