@@ -55,6 +55,7 @@
 #include "hb-ot-tag.cc"
 #include "hb-ot-var.cc"
 #include "hb-outline.cc"
+#include "hb-paint-bounded.cc"
 #include "hb-paint-extents.cc"
 #include "hb-paint.cc"
 #include "hb-set.cc"
