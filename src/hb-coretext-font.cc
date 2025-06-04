@@ -28,7 +28,7 @@
 
 #ifdef HAVE_CORETEXT
 
-#include "hb-coretext.h"
+#include "hb-coretext.hh"
 
 #include "hb-draw.hh"
 #include "hb-font.hh"
@@ -42,7 +42,7 @@
 #  define kCTFontOrientationVertical kCTFontVerticalOrientation
 #endif
 
-#define MAX_GLYPHS 64u
+#define MAX_GLYPHS 256u
 
 static void
 _hb_coretext_font_destroy (void *font_data)
@@ -194,6 +194,10 @@ hb_coretext_get_variation_glyph (hb_font_t *font HB_UNUSED,
     if (cg_glyph[i])
       return false;
 
+  // Humm. CoreText falls back to the default glyph if the variation selector
+  // is not supported.  We cannot truly detect that case. So, in essence,
+  // we are always returning true here...
+
   *glyph = cg_glyph[0];
   return true;
 }
@@ -264,9 +268,7 @@ hb_coretext_get_glyph_v_advances (hb_font_t* font, void* font_data,
     }
   }
 }
-#endif
 
-#ifndef HB_NO_VERTICAL
 static hb_bool_t
 hb_coretext_get_glyph_v_origin (hb_font_t *font,
 				void *font_data,
@@ -310,9 +312,9 @@ hb_coretext_get_glyph_extents (hb_font_t *font,
 						    kCTFontOrientationDefault, glyphs, NULL, 1);
 
   extents->x_bearing = round (bounds.origin.x * x_mult);
-  extents->y_bearing = round (bounds.origin.y * y_mult);
+  extents->y_bearing = round ((bounds.origin.y + bounds.size.height) * y_mult);
   extents->width = round (bounds.size.width * x_mult);
-  extents->height = round (bounds.size.height * y_mult);
+  extents->height = round (bounds.origin.y * y_mult) - extents->y_bearing;
 
   return true;
 }
@@ -461,10 +463,8 @@ static struct hb_coretext_font_funcs_lazy_loader_t : hb_font_funcs_lazy_loader_t
 
     hb_font_funcs_set_font_h_extents_func (funcs, hb_coretext_get_font_h_extents, nullptr, nullptr);
     hb_font_funcs_set_glyph_h_advances_func (funcs, hb_coretext_get_glyph_h_advances, nullptr, nullptr);
-    //hb_font_funcs_set_glyph_h_origin_func (funcs, hb_coretext_get_glyph_h_origin, nullptr, nullptr);
 
 #ifndef HB_NO_VERTICAL
-    //hb_font_funcs_set_font_v_extents_func (funcs, hb_coretext_get_font_v_extents, nullptr, nullptr);
     hb_font_funcs_set_glyph_v_advances_func (funcs, hb_coretext_get_glyph_v_advances, nullptr, nullptr);
     hb_font_funcs_set_glyph_v_origin_func (funcs, hb_coretext_get_glyph_v_origin, nullptr, nullptr);
 #endif

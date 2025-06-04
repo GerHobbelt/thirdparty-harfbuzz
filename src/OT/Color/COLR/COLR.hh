@@ -95,7 +95,8 @@ public:
     font (font_),
     palette (
 #ifndef HB_NO_COLOR
-	     font->face->table.CPAL->get_palette_colors (palette_)
+	     // https://github.com/harfbuzz/harfbuzz/issues/5116
+	     font->face->table.CPAL->get_palette_colors (palette_ < font->face->table.CPAL->get_palette_count () ? palette_ : 0)
 #endif
     ),
     foreground (foreground_),
@@ -937,9 +938,9 @@ struct PaintGlyph
   void paint_glyph (hb_paint_context_t *c) const
   {
     TRACE_PAINT (this);
-    c->funcs->push_inverse_root_transform (c->data, c->font);
+    c->funcs->push_inverse_font_transform (c->data, c->font);
     c->funcs->push_clip_glyph (c->data, gid, c->font);
-    c->funcs->push_root_transform (c->data, c->font);
+    c->funcs->push_font_transform (c->data, c->font);
     c->recurse (this+paint);
     c->funcs->pop_transform (c->data);
     c->funcs->pop_clip (c->data);
@@ -1516,10 +1517,12 @@ struct PaintComposite
   void paint_glyph (hb_paint_context_t *c) const
   {
     TRACE_PAINT (this);
+    c->funcs->push_group (c->data);
     c->recurse (this+backdrop);
     c->funcs->push_group (c->data);
     c->recurse (this+src);
     c->funcs->pop_group (c->data, (hb_paint_composite_mode_t) (int) mode);
+    c->funcs->pop_group (c->data, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
   }
 
   HBUINT8		format; /* format = 32 */
@@ -2227,7 +2230,7 @@ struct COLR
     public:
     hb_blob_ptr_t<COLR> colr;
     private:
-    hb_atomic_ptr_t<hb_colr_scratch_t> cached_scratch;
+    hb_atomic_t<hb_colr_scratch_t *> cached_scratch;
   };
 
   void closure_glyphs (hb_codepoint_t glyph,
@@ -2629,6 +2632,7 @@ struct COLR
     }
     else
     {
+      // Ugh. We need to undo the synthetic slant here. Leave it for now. :-(.
       extents->x_bearing = e.xmin;
       extents->y_bearing = e.ymax;
       extents->width = e.xmax - e.xmin;
@@ -2696,6 +2700,7 @@ struct COLR
 	  if (get_clip (glyph, &extents, instancer))
 	  {
 	    font->scale_glyph_extents (&extents);
+	    font->synthetic_glyph_extents (&extents);
 	    c.funcs->push_clip_rectangle (c.data,
 					  extents.x_bearing,
 					  extents.y_bearing + extents.height,
@@ -2724,7 +2729,7 @@ struct COLR
 	  }
 	}
 
-	c.funcs->push_root_transform (c.data, font);
+	c.funcs->push_font_transform (c.data, font);
 
 	if (is_bounded)
 	  c.recurse (*paint);
@@ -2802,9 +2807,7 @@ void PaintColrLayers::paint_glyph (hb_paint_context_t *c) const
       return;
 
     const Paint &paint = paint_offset_lists.get_paint (i);
-    c->funcs->push_group (c->data);
     c->recurse (paint);
-    c->funcs->pop_group (c->data, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
   }
 }
 
@@ -2816,7 +2819,7 @@ void PaintColrGlyph::paint_glyph (hb_paint_context_t *c) const
   if (unlikely (!node.visit (gid)))
     return;
 
-  c->funcs->push_inverse_root_transform (c->data, c->font);
+  c->funcs->push_inverse_font_transform (c->data, c->font);
   if (c->funcs->color_glyph (c->data, gid, c->font))
   {
     c->funcs->pop_transform (c->data);
