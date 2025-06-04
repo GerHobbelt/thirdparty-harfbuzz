@@ -43,6 +43,7 @@ hb_base_sources = files(
   'hb-common.cc',
   'hb-config.hh',
   'hb-debug.hh',
+  'hb-decycler.hh',
   'hb-dispatch.hh',
   'hb-draw.cc',
   'hb-draw.hh',
@@ -326,6 +327,9 @@ hb_base_headers += hb_version_h
 hb_ft_sources = files('hb-ft.cc', 'hb-ft-colr.hh')
 hb_ft_headers = files('hb-ft.h')
 
+hb_fontations_sources = files()
+hb_fontations_headers = files('hb-fontations.h')
+
 hb_glib_sources = files('hb-glib.cc')
 hb_glib_headers = files('hb-glib.h')
 
@@ -514,6 +518,15 @@ if conf.get('HAVE_CORETEXT', 0) == 1
   harfbuzz_deps += coretext_deps
 endif
 
+if conf.get('HAVE_FONTATIONS', 0) == 1
+
+  subdir('fontations')
+
+  hb_sources += hb_fontations_sources
+  hb_headers += hb_fontations_headers
+  harfbuzz_deps += [harfbuzz_fontations_dep]
+endif
+
 have_icu = conf.get('HAVE_ICU', 0) == 1
 have_icu_builtin = conf.get('HAVE_ICU_BUILTIN', 0) == 1
 if have_icu and have_icu_builtin
@@ -664,7 +677,7 @@ if conf.get('HAVE_CAIRO', 0) == 1
     include_directories: incconfig,
     dependencies: [m_dep, cairo_dep],
     link_with: [libharfbuzz],
-     cpp_args: cpp_args + extra_hb_cpp_args,
+    cpp_args: cpp_args + extra_hb_cpp_args,
     soversion: hb_so_version,
     version: version,
     install: true,
@@ -727,6 +740,7 @@ if get_option('tests').enabled()
     'test-bimap': ['test-bimap.cc', 'hb-static.cc'],
     'test-cff': ['test-cff.cc', 'hb-static.cc'],
     'test-classdef-graph': ['graph/test-classdef-graph.cc', 'hb-static.cc', 'graph/gsubgpos-context.cc'],
+    'test-decycler': ['test-decycler.cc', 'hb-static.cc'],
     'test-iter': ['test-iter.cc', 'hb-static.cc'],
     'test-machinery': ['test-machinery.cc', 'hb-static.cc'],
     'test-map': ['test-map.cc', 'hb-static.cc'],
