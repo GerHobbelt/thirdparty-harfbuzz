@@ -215,7 +215,7 @@ void serialize_link (const hb_serialize_context_t::object_t::link_t& link,
       return;
     default:
       // Unexpected link width.
-      assert (0);
+      assert (!!0);
   }
 }
 

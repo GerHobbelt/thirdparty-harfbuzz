@@ -96,7 +96,7 @@ propagate_attachment_offsets (hb_glyph_position_t *pos,
 
   propagate_attachment_offsets (pos, len, j, direction, nesting_level - 1);
 
-  assert (!!(type & GPOS_impl::ATTACH_TYPE_MARK) ^ !!(type & GPOS_impl::ATTACH_TYPE_CURSIVE));
+  assert (!!(!!(type & GPOS_impl::ATTACH_TYPE_MARK) ^ !!(type & GPOS_impl::ATTACH_TYPE_CURSIVE)));
 
   if (type & GPOS_impl::ATTACH_TYPE_CURSIVE)
   {

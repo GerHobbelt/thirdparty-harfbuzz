@@ -523,7 +523,7 @@ int main(int argc, const char** argv)
   }
 
   hb_blob_t *blob = hb_blob_create_from_file_or_fail (argv[1]);
-  assert (blob);
+  assert (blob != nullptr);
   printf ("Opened font file %s: %u bytes long\n", argv[1], hb_blob_get_length (blob));
 #ifndef MAIN_CC_NO_PRIVATE_API
   print_layout_info_using_private_api (blob);

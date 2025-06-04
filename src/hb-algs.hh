@@ -777,7 +777,7 @@ hb_popcount (T v)
     return hb_popcount<uint64_t> ((uint64_t) v) + hb_popcount ((uint64_t) (v >> shift));
   }
 
-  assert (0);
+  assert (!!0);
   return 0; /* Shut up stupid compiler. */
 }
 
@@ -855,7 +855,7 @@ hb_bit_storage (T v)
 			  hb_bit_storage<uint64_t> ((uint64_t) v);
   }
 
-  assert (0);
+  assert (!!0);
   return 0; /* Shut up stupid compiler. */
 }
 
@@ -932,7 +932,7 @@ hb_ctz (T v)
 			  hb_bit_storage<uint64_t> ((uint64_t) (v >> shift)) + shift;
   }
 
-  assert (0);
+  assert (!!0);
   return 0; /* Shut up stupid compiler. */
 }
 

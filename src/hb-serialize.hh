@@ -484,7 +484,7 @@ struct hb_serialize_context_t
     if (!objidx)
       return;
 
-    assert (current);
+    assert (current != nullptr);
 
     if (!current->add_virtual_link(objidx))
       err (HB_SERIALIZE_ERROR_OTHER);
@@ -493,7 +493,7 @@ struct hb_serialize_context_t
   objidx_t last_added_child_index() const {
     if (unlikely (in_error ())) return (objidx_t) -1;
 
-    assert (current);
+    assert (current != nullptr);
     if (!bool(current->real_links)) {
       return (objidx_t) -1;
     }
@@ -512,7 +512,7 @@ struct hb_serialize_context_t
     if (!objidx)
       return;
 
-    assert (current);
+    assert (current != nullptr);
     for (auto& l : current->real_links) {
       if (l.objidx == objidx) {
         continue;
@@ -532,7 +532,7 @@ struct hb_serialize_context_t
     if (!objidx)
       return;
 
-    assert (current);
+    assert (current != nullptr);
     assert (current->head <= (const char *) &ofs);
 
     auto& link = *current->real_links.push ();
@@ -562,7 +562,7 @@ struct hb_serialize_context_t
   {
     if (unlikely (in_error ())) return 0;
     if (!base) return 0;
-    assert (current);
+    assert (current != nullptr);
     assert (current->head <= (const char *) base);
     return (const char *) base - current->head;
   }

@@ -97,7 +97,7 @@ _hb_ot_metrics_get_position_common (hb_font_t           *font,
 #undef GET_METRIC_Y
 #undef GET_METRIC_X
 #undef GET_VAR
-  default:                               assert (0); return false;
+  default:                               assert (!!0); return false;
   }
 }
 

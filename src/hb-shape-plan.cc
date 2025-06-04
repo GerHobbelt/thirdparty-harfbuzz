@@ -407,7 +407,7 @@ _hb_shape_plan_execute_internal (hb_shape_plan_t    *shape_plan,
     return false;
 
   assert (shape_plan->face_unsafe == font->face);
-  assert (hb_segment_properties_equal (&shape_plan->key.props, &buffer->props));
+  assert (!!hb_segment_properties_equal (&shape_plan->key.props, &buffer->props));
 
 #define HB_SHAPER_EXECUTE(shaper) \
 	HB_STMT_START { \
