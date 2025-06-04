@@ -1386,10 +1386,10 @@ hb_ot_layout_collect_lookups (hb_face_t      *face,
  * @face: #hb_face_t to work upon
  * @table_tag: #HB_OT_TAG_GSUB or #HB_OT_TAG_GPOS
  * @lookup_index: The index of the feature lookup to query
- * @glyphs_before: (out): Array of glyphs preceding the substitution range
- * @glyphs_input: (out): Array of input glyphs that would be substituted by the lookup
- * @glyphs_after: (out): Array of glyphs following the substitution range
- * @glyphs_output: (out): Array of glyphs that would be the substituted output of the lookup
+ * @glyphs_before: (out) (nullable): Array of glyphs preceding the substitution range
+ * @glyphs_input: (out) (nullable): Array of input glyphs that would be substituted by the lookup
+ * @glyphs_after: (out) (nullable): Array of glyphs following the substitution range
+ * @glyphs_output: (out) (nullable): Array of glyphs that would be the substituted output of the lookup
  *
  * Fetches a list of all glyphs affected by the specified lookup in the
  * specified face's GSUB table or GPOS table.
@@ -2017,7 +2017,7 @@ inline void hb_ot_map_t::apply (const Proxy &proxy,
   unsigned int i = 0;
 
   auto *font_data = font->data.ot.get ();
-  auto *var_store_cache = font_data == HB_SHAPER_DATA_SUCCEEDED ? nullptr : (OT::ItemVariationStore::cache_t *) font_data;
+  auto *var_store_cache = (OT::hb_scalar_cache_t *) font_data;
 
   OT::hb_ot_apply_context_t c (table_index, font, buffer, proxy.accel.get_blob (), var_store_cache);
   c.set_recurse_func (Proxy::Lookup::template dispatch_recurse_func<OT::hb_ot_apply_context_t>);
