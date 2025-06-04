@@ -130,7 +130,7 @@ struct hb_decycler_node_t
     if (prev)
       prev->u.decycler = &decycler;
 
-    assert (decycler.tortoise);
+    assert (decycler.tortoise != nullptr);
     if (decycler.tortoise_awake)
       decycler.tortoise = decycler.tortoise->prev;
 
