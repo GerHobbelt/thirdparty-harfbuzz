@@ -280,7 +280,18 @@ struct UnsizedByteStr : UnsizedArrayOf <HBUINT8>
    * A descendent struct Dict uses a Null pointer to indicate a missing table,
    * checked before access.
    */
+  
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4296) // warning C4296: '>=': expression is always true
+#endif
+
   DEFINE_SIZE_MIN(0);
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
 };
 
 /* A byte string associated with the current offset and an error condition */

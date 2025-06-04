@@ -1516,6 +1516,11 @@ struct TupleValues
       run_length++;
     }
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4251 4310) // warning C4310: cast truncates constant value
+#endif
+
     while (run_length >= 64)
     {
       *it++ = char (VALUES_ARE_ZEROS | 63);
@@ -1528,6 +1533,11 @@ struct TupleValues
       *it++ = char (VALUES_ARE_ZEROS | (run_length - 1));
       encoded_len++;
     }
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
     return encoded_len;
   }
 

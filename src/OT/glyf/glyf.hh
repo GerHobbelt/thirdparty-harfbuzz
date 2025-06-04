@@ -157,9 +157,19 @@ struct glyf
   UnsizedArrayOf<HBUINT8>
 		dataZ;	/* Glyphs data. */
   public:
+  
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4296) // warning C4296: '>=': expression is always true
+#endif
+
   DEFINE_SIZE_MIN (0);	/* In reality, this is UNBOUNDED() type; but since we always
 			 * check the size externally, allow Null() object of it by
 			 * defining it _MIN instead. */
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 };
 
 struct glyf_accelerator_t

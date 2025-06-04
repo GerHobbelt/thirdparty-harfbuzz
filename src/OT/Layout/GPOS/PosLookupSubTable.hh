@@ -69,7 +69,17 @@ struct PosLookupSubTable
   ExtensionPos          extension;
   } u;
   public:
-  DEFINE_SIZE_MIN (0);
+
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4296) // warning C4296: '>=': expression is always true
+#endif
+
+  DEFINE_SIZE_MIN(0);
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 };
 
 }

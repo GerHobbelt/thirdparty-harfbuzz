@@ -205,8 +205,18 @@ struct FDSelect0 {
   { return HBUINT8::static_size * num_glyphs; }
 
   HBUINT8     fds[HB_VAR_ARRAY];
+  
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4296) // warning C4296: '>=': expression is always true
+#endif
 
-  DEFINE_SIZE_MIN (0);
+  DEFINE_SIZE_MIN(0);
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
 };
 
 template <typename GID_TYPE, typename FD_TYPE>
