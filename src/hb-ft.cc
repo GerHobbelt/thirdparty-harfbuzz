@@ -37,11 +37,7 @@
 #include "hb-draw.hh"
 #include "hb-font.hh"
 #include "hb-machinery.hh"
-#ifndef HB_NO_AAT
-#include "hb-aat-layout-trak-table.hh"
-#endif
 #include "hb-ot-os2-table.hh"
-#include "hb-ot-stat-table.hh"
 #include "hb-ot-shaper-arabic-pua.hh"
 #include "hb-paint.hh"
 
@@ -484,7 +480,6 @@ hb_ft_get_glyph_h_advances (hb_font_t* font, void* font_data,
   const hb_ft_font_t *ft_font = (const hb_ft_font_t *) font_data;
   _hb_ft_hb_font_check_changed (font, ft_font);
 
-  hb_position_t *orig_first_advance = first_advance;
   hb_lock_t lock (ft_font->lock);
   FT_Face ft_face = ft_font->ft_face;
   int load_flags = ft_font->load_flags;
@@ -525,38 +520,6 @@ hb_ft_get_glyph_h_advances (hb_font_t* font, void* font_data,
     first_glyph = &StructAtOffsetUnaligned<hb_codepoint_t> (first_glyph, glyph_stride);
     first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
   }
-
-  if (font->x_strength && !font->embolden_in_place)
-  {
-    /* Emboldening. */
-    hb_position_t x_strength = font->x_scale >= 0 ? font->x_strength : -font->x_strength;
-    first_advance = orig_first_advance;
-    for (unsigned int i = 0; i < count; i++)
-    {
-      *first_advance += *first_advance ? x_strength : 0;
-      first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
-    }
-  }
-
-#ifndef HB_NO_AAT
-  /* According to Ned, trak is applied by default for "modern fonts", as detected by presence of STAT table. */
-#ifndef HB_NO_STYLE
-  bool apply_trak = font->face->table.STAT->has_data () && font->face->table.trak->has_data ();
-#else
-  bool apply_trak = false;
-#endif
-  if (apply_trak)
-  {
-    hb_position_t tracking = font->face->table.trak->get_h_tracking (font);
-    first_advance = orig_first_advance;
-    for (unsigned int i = 0; i < count; i++)
-    {
-      *first_advance += tracking;
-      first_glyph = &StructAtOffsetUnaligned<hb_codepoint_t> (first_glyph, glyph_stride);
-      first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
-    }
-  }
-#endif
 }
 
 #ifndef HB_NO_VERTICAL
@@ -589,26 +552,11 @@ hb_ft_get_glyph_v_advance (hb_font_t *font,
   if (unlikely (FT_Get_Advance (ft_font->ft_face, glyph, ft_font->load_flags | FT_LOAD_VERTICAL_LAYOUT, &v)))
     return 0;
 
-  v = (int) (y_mult * v);
-
   /* Note: FreeType's vertical metrics grows downward while other FreeType coordinates
    * have a Y growing upward.  Hence the extra negation. */
+  v = ((-v + (1<<9)) >> 10);
 
-  hb_position_t y_strength = font->y_scale >= 0 ? font->y_strength : -font->y_strength;
-  v = ((-v + (1<<9)) >> 10) + (font->embolden_in_place ? 0 : y_strength);
-
-#ifndef HB_NO_AAT
-  /* According to Ned, trak is applied by default for "modern fonts", as detected by presence of STAT table. */
-#ifndef HB_NO_STYLE
-  bool apply_trak = font->face->table.STAT->has_data () && font->face->table.trak->has_data ();
-#else
-  bool apply_trak = false;
-#endif
-  if (apply_trak)
-    v += font->face->table.trak->get_v_tracking (font);
-#endif
-
-  return v;
+  return (hb_position_t) (y_mult * v);
 }
 #endif
 
@@ -722,10 +670,10 @@ hb_ft_get_glyph_extents (hb_font_t *font,
   float x2 = x1 + x_mult *  ft_face->glyph->metrics.width;
   float y2 = y1 + y_mult * -ft_face->glyph->metrics.height;
 
-  extents->x_bearing = floorf (x1);
-  extents->y_bearing = floorf (y1);
-  extents->width = ceilf (x2) - extents->x_bearing;
-  extents->height = ceilf (y2) - extents->y_bearing;
+  extents->x_bearing = roundf (x1);
+  extents->y_bearing = roundf (y1);
+  extents->width = roundf (x2) - extents->x_bearing;
+  extents->height = roundf (y2) - extents->y_bearing;
 
   return true;
 }
@@ -933,38 +881,6 @@ hb_ft_draw_glyph (hb_font_t *font,
   };
 
   hb_draw_session_t draw_session (draw_funcs, draw_data, font->slant_xy);
-
-  /* Embolden */
-  if (font->x_strength || font->y_strength)
-  {
-    FT_Outline_EmboldenXY (&ft_face->glyph->outline, font->x_strength, font->y_strength);
-
-    int x_shift = 0;
-    int y_shift = 0;
-    if (font->embolden_in_place)
-    {
-      /* Undo the FreeType shift. */
-      x_shift = -font->x_strength / 2;
-      y_shift = 0;
-      if (font->y_scale < 0) y_shift = -font->y_strength;
-    }
-    else
-    {
-      /* FreeType applied things in the wrong direction for negative scale; fix up. */
-      if (font->x_scale < 0) x_shift = -font->x_strength;
-      if (font->y_scale < 0) y_shift = -font->y_strength;
-    }
-    if (x_shift || y_shift)
-    {
-      auto &outline = ft_face->glyph->outline;
-      for (auto &point : hb_iter (outline.points, outline.contours[outline.n_contours - 1] + 1))
-      {
-	point.x += x_shift;
-	point.y += y_shift;
-      }
-    }
-  }
-
 
   FT_Outline_Decompose (&ft_face->glyph->outline,
 			&outline_funcs,
@@ -1455,7 +1371,7 @@ hb_ft_font_changed (hb_font_t *font)
  * variation-axis settings on the @font.
  * This call is fast if nothing has changed on @font.
  *
- * Note that as of version REPLACEME, calling this function is not necessary,
+ * Note that as of version 11.0.0, calling this function is not necessary,
  * as HarfBuzz will automatically detect changes to the font and update
  * the underlying FT_Face as needed.
  *
@@ -1651,7 +1567,7 @@ _destroy_blob (void *p)
  * Return value: (transfer full): The new face object, or `NULL` if
  * loading fails (eg. blob does not contain valid font data).
  *
- * XSince: REPLACEME
+ * Since: 11.0.0
  */
 hb_face_t *
 hb_ft_face_create_from_blob_or_fail (hb_blob_t    *blob,

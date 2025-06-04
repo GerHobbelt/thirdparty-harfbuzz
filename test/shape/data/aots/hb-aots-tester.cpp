@@ -106,7 +106,7 @@ runTest(const char *testName,
 
         features = (hb_feature_t *) malloc (sizeof (*features) * nbSelect);
         for (int i = 0; i < nbSelect; i++) {
-            if (select[i] != -1) {
+            if (select[i] != (unsigned) -1) {
                 features[nbFeatures].tag = HB_TAG('t', 'e', 's', 't');
                 features[nbFeatures].value = select[i];
                 features[nbFeatures].start = i;
@@ -137,6 +137,14 @@ static void printArray (const char* s, int *a, int n)
 static void printUArray (const char* s, unsigned int *a, int n)
 {
     printArray (s, (int *) a, n);
+}
+
+void writeDirective (FILE *file)
+{
+  fseek (file, 0, SEEK_END);
+  unsigned file_size = ftell (file);
+  if (!file_size)
+    fprintf (file, "@shaper=ot\n");
 }
 
 static bool gsub_test(const char *testName,
@@ -171,6 +179,7 @@ static bool gsub_test(const char *testName,
     char test_name[255];
     sprintf (test_name, "../../tests/%.*s.tests", (int) (strrchr (testName, '_') - testName), testName);
     FILE *tests_file = fopen (test_name, "a+");
+    writeDirective (tests_file);
     if (!ok) fprintf (tests_file, "#");
     fprintf (tests_file, "../fonts/%s;--features=\"", fontfileName + 9);
     for (unsigned int i = 0; i < data.num_features; i++)
@@ -250,6 +259,7 @@ static bool cmap_test(const char *testName,
     char test_name[255];
     sprintf (test_name, "../../tests/%.*s.tests", (int) (strrchr (testName, '_') - testName), testName);
     FILE *tests_file = fopen (test_name, "a+");
+    writeDirective (tests_file);
     if (!ok) fprintf (tests_file, "#");
     fprintf (tests_file, "../fonts/%s;--features=\"", fontfileName + 9);
     for (unsigned int i = 0; i < data.num_features; i++)
@@ -380,6 +390,7 @@ static bool gpos_test(const char *testName,
     char test_name[255];
     sprintf (test_name, "../../tests/%.*s.tests", (int) (strrchr (testName, '_') - testName), testName);
     FILE *tests_file = fopen (test_name, "a+");
+    writeDirective (tests_file);
     if (!ok) fprintf (tests_file, "#");
     fprintf (tests_file, "../fonts/%s;--features=\"", fontfileName + 9);
     for (unsigned int i = 0; i < data.num_features; i++)

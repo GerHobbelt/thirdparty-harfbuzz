@@ -2,8 +2,11 @@
 
 import pathlib
 import subprocess
+import os
 import sys
 import tempfile
+
+EXE_WRAPPER = os.environ.get("MESON_EXE_WRAPPER")
 
 
 def run_command(command):
@@ -11,6 +14,10 @@ def run_command(command):
     Run a command, capturing potentially large output in a temp file.
     Returns (output_string, exit_code).
     """
+    global EXE_WRAPPER
+    if EXE_WRAPPER:
+        command = [EXE_WRAPPER] + command
+
     with tempfile.TemporaryFile() as tempf:
         p = subprocess.Popen(command, stdout=tempf, stderr=tempf)
         p.wait()
@@ -50,8 +57,7 @@ def main():
     fails = 0
     batch_index = 0
 
-    # Run in batches of up to 64 files
-    for chunk in chunkify(files_to_test, 64):
+    for chunk in chunkify(files_to_test):
         batch_index += 1
         cmd_line = [fuzzer] + chunk
         output, returncode = run_command(cmd_line)

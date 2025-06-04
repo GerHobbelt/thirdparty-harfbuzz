@@ -37,7 +37,7 @@ jobs:
       - run: meson dist --no-tests -Cbuild
       - persist_to_workspace:
           root: .
-          paths: build/meson-dist/harfbuzz-*.tar.xz
+          paths: [build/meson-dist/harfbuzz-*.tar.xz]
 
   publish-dist:
     executor: dist-executor
@@ -57,21 +57,6 @@ jobs:
       - run: meson setup build --buildtype=debugoptimized
       - run: meson compile -Cbuild -j9
       - run: RUN_VALGRIND=1 meson test -Cbuild -t 10 --no-suite=slow --wrap='valgrind --leak-check=full --error-exitcode=1' --print-errorlogs --num-processes=$(($(nproc)/2 + 1))
-
-  minsize:
-    docker:
-      - image: ubuntu
-    steps:
-      - checkout
-      - run: apt update
-      - run: DEBIAN_FRONTEND=noninteractive apt install -y ninja-build binutils gcc g++ pkg-config ragel libfreetype6-dev libglib2.0-dev libcairo2-dev python3 python3-pip python3-venv
-      - run: |
-          python3 -m venv venv
-          source venv/bin/activate
-          pip3 install meson==0.56.0
-          meson setup build --buildtype=minsize
-          meson compile -Cbuild
-          meson test -Cbuild --print-errorlogs
 
   asan-ubsan:
     docker:
@@ -132,12 +117,16 @@ jobs:
     executor: win32-executor
     steps:
       - checkout
-      - run: apt update && DEBIAN_FRONTEND=noninteractive apt install -y ninja-build python3 python3-pip python3-venv git g++-mingw-w64-i686 zip
+      - run: dpkg --add-architecture i386
+      - run: apt update
+      - run: DEBIAN_FRONTEND=noninteractive apt install -y ninja-build python3 python3-pip python3-venv git g++-mingw-w64-i686 zip wine wine32
       - run: |
+          export LANG=en_US.UTF-8
           python3 -m venv venv
           source venv/bin/activate
           pip3 install meson==1.6.0
           bash .ci/build-win.sh 32
+          meson devenv -Cbuild-win32 meson test -t 10 --print-errorlogs --suite=harfbuzz
       - store_artifacts:
           path: harfbuzz-win32.zip
       - persist_to_workspace:
@@ -150,6 +139,8 @@ jobs:
       - checkout
       - attach_workspace:
           at: .
+      - run: apt update
+      - run: DEBIAN_FRONTEND=noninteractive apt install -y curl
       - run: |
           mv harfbuzz-win32{,-$CIRCLE_TAG}.zip
           .ci/publish_release_artifact.sh harfbuzz-win32-$CIRCLE_TAG.zip
@@ -158,12 +149,16 @@ jobs:
     executor: win64-executor
     steps:
       - checkout
-      - run: apt update && DEBIAN_FRONTEND=noninteractive apt install -y ninja-build python3 python3-pip python3-venv git g++-mingw-w64-x86-64 zip
+      - run: dpkg --add-architecture i386
+      - run: apt update
+      - run: DEBIAN_FRONTEND=noninteractive apt install -y ninja-build python3 python3-pip python3-venv git g++-mingw-w64-x86-64 zip wine wine64 wine32:i386
       - run: |
+          export LANG=en_US.UTF-8
           python3 -m venv venv
           source venv/bin/activate
           pip3 install meson==1.6.0
           bash .ci/build-win.sh 64
+          meson devenv -Cbuild-win64 meson test -t 10 --print-errorlogs --suite=harfbuzz
       - store_artifacts:
           path: harfbuzz-win64.zip
       - persist_to_workspace:
@@ -176,6 +171,8 @@ jobs:
       - checkout
       - attach_workspace:
           at: .
+      - run: apt update
+      - run: DEBIAN_FRONTEND=noninteractive apt install -y curl
       - run: |
           mv harfbuzz-win64{,-$CIRCLE_TAG}.zip
           .ci/publish_release_artifact.sh harfbuzz-win64-$CIRCLE_TAG.zip
@@ -200,7 +197,6 @@ workflows:
             branches:
               ignore: /.*/
       - fedora-valgrind
-      - minsize
       - asan-ubsan
       - tsan
       - msan
