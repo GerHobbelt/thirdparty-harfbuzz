@@ -146,6 +146,9 @@ _hb_ft_font_destroy (void *data)
 /* hb_font changed, update FT_Face. */
 static void _hb_ft_hb_font_changed (hb_font_t *font, FT_Face ft_face)
 {
+  if (unlikely (font->destroy != (hb_destroy_func_t) _hb_ft_font_destroy))
+    return;
+
   hb_ft_font_t *ft_font = (hb_ft_font_t *) font->user_data;
 
   float x_mult = 1.f, y_mult = 1.f;
@@ -204,8 +207,12 @@ static void _hb_ft_hb_font_changed (hb_font_t *font, FT_Face ft_face)
       hb_free (ft_coords);
     }
   }
-  else
+  else if (num_coords)
+  {
+    // Some old versions of FreeType crash if we
+    // call this function on non-variable fonts.
     FT_Set_Var_Design_Coordinates (ft_face, 0, nullptr);
+  }
 #endif
 }
 
@@ -1100,6 +1107,10 @@ _hb_ft_reference_table (hb_face_t *face HB_UNUSED, hb_tag_t tag, void *user_data
   FT_ULong  length = 0;
   FT_Error error;
 
+  /* In new FreeType, a tag value of 1 loads the SFNT table directory. Reject it. */
+  if (tag == 1)
+    return nullptr;
+
   /* Note: FreeType like HarfBuzz uses the NONE tag for fetching the entire blob */
 
   error = FT_Load_Sfnt_Table (ft_face, tag, 0, nullptr, &length);
@@ -1727,7 +1738,12 @@ hb_ft_font_set_funcs (hb_font_t *font)
   ft_face->generic.finalizer = _release_blob;
 
   // And the FT_Library to the blob
-  hb_blob_set_user_data (blob, &ft_library_key, ft_library, destroy_ft_library, true);
+  if (unlikely (!hb_blob_set_user_data (blob, &ft_library_key, ft_library, destroy_ft_library, true)))
+  {
+    DEBUG_MSG (FT, font, "hb_blob_set_user_data() failed");
+    FT_Done_Face (ft_face);
+    return;
+  }
 
   _hb_ft_font_set_funcs (font, ft_face, true);
   hb_ft_font_set_load_flags (font, FT_LOAD_DEFAULT | FT_LOAD_NO_HINTING);
