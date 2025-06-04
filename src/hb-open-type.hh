@@ -1523,14 +1523,14 @@ struct TupleValues
 
     while (run_length >= 64)
     {
-      *it++ = char (VALUES_ARE_ZEROS | 63);
+      *it++ = (unsigned char) (VALUES_ARE_ZEROS | 63);
       run_length -= 64;
       encoded_len++;
     }
 
     if (run_length)
     {
-      *it++ = char (VALUES_ARE_ZEROS | (run_length - 1));
+      *it++ = (unsigned char) (VALUES_ARE_ZEROS | (run_length - 1));
       encoded_len++;
     }
 
