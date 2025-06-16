@@ -6,16 +6,16 @@ use std::ffi::c_void;
 use std::ptr::null_mut;
 use std::str::FromStr;
 
-use harfruzz::{FontRef, NormalizedCoord, ShaperData, ShaperInstance, Tag};
+use harfrust::{FontRef, NormalizedCoord, ShaperData, ShaperInstance, Tag};
 
-pub struct HBHarfRuzzFaceData<'a> {
+pub struct HBHarfRustFaceData<'a> {
     face_blob: *mut hb_blob_t,
     font_ref: FontRef<'a>,
     shaper_data: ShaperData,
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn _hb_harfruzz_shaper_face_data_create_rs(
+pub unsafe extern "C" fn _hb_harfrust_shaper_face_data_create_rs(
     face: *mut hb_face_t,
 ) -> *mut c_void {
     let face_index = hb_face_get_index(face);
@@ -33,7 +33,7 @@ pub unsafe extern "C" fn _hb_harfruzz_shaper_face_data_create_rs(
     };
     let shaper_data = ShaperData::new(&font_ref);
 
-    let hr_face_data = Box::new(HBHarfRuzzFaceData {
+    let hr_face_data = Box::new(HBHarfRustFaceData {
         face_blob,
         font_ref,
         shaper_data,
@@ -43,14 +43,14 @@ pub unsafe extern "C" fn _hb_harfruzz_shaper_face_data_create_rs(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn _hb_harfruzz_shaper_face_data_destroy_rs(data: *mut c_void) {
-    let data = data as *mut HBHarfRuzzFaceData;
+pub unsafe extern "C" fn _hb_harfrust_shaper_face_data_destroy_rs(data: *mut c_void) {
+    let data = data as *mut HBHarfRustFaceData;
     let hr_face_data = Box::from_raw(data);
     let blob = hr_face_data.face_blob;
     hb_blob_destroy(blob);
 }
 
-pub struct HBHarfRuzzFontData {
+pub struct HBHarfRustFontData {
     shaper_instance: ShaperInstance,
 }
 
@@ -67,58 +67,58 @@ fn font_to_shaper_instance(font: *mut hb_font_t, font_ref: &FontRef<'_>) -> Shap
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn _hb_harfruzz_shaper_font_data_create_rs(
+pub unsafe extern "C" fn _hb_harfrust_shaper_font_data_create_rs(
     font: *mut hb_font_t,
     face_data: *const c_void,
 ) -> *mut c_void {
-    let face_data = face_data as *const HBHarfRuzzFaceData;
+    let face_data = face_data as *const HBHarfRustFaceData;
 
     let font_ref = &(*face_data).font_ref;
     let shaper_instance = font_to_shaper_instance(font, font_ref);
 
-    let hr_font_data = Box::new(HBHarfRuzzFontData { shaper_instance });
+    let hr_font_data = Box::new(HBHarfRustFontData { shaper_instance });
     let hr_font_data_ptr = Box::into_raw(hr_font_data);
 
     hr_font_data_ptr as *mut c_void
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn _hb_harfruzz_shaper_font_data_destroy_rs(data: *mut c_void) {
-    let data = data as *mut HBHarfRuzzFontData;
+pub unsafe extern "C" fn _hb_harfrust_shaper_font_data_destroy_rs(data: *mut c_void) {
+    let data = data as *mut HBHarfRustFontData;
     let _hr_font_data = Box::from_raw(data);
 }
 
-fn hb_language_to_hr_language(language: hb_language_t) -> Option<harfruzz::Language> {
+fn hb_language_to_hr_language(language: hb_language_t) -> Option<harfrust::Language> {
     let language_str = unsafe { hb_language_to_string(language) };
     if language_str.is_null() {
         return None;
     }
     let language_str = unsafe { std::ffi::CStr::from_ptr(language_str) };
     let language_str = language_str.to_str().unwrap_or_default();
-    Some(harfruzz::Language::from_str(language_str).unwrap())
+    Some(harfrust::Language::from_str(language_str).unwrap())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn _hb_harfruzz_shape_plan_create_rs(
+pub unsafe extern "C" fn _hb_harfrust_shape_plan_create_rs(
     font_data: *const c_void,
     face_data: *const c_void,
     script: hb_script_t,
     language: hb_language_t,
     direction: hb_direction_t,
 ) -> *mut c_void {
-    let font_data = font_data as *const HBHarfRuzzFontData;
-    let face_data = face_data as *const HBHarfRuzzFaceData;
+    let font_data = font_data as *const HBHarfRustFontData;
+    let face_data = face_data as *const HBHarfRustFaceData;
 
     let font_ref = &(*face_data).font_ref;
 
-    let script = harfruzz::Script::from_iso15924_tag(Tag::from_u32(script));
+    let script = harfrust::Script::from_iso15924_tag(Tag::from_u32(script));
     let language = hb_language_to_hr_language(language);
     let direction = match direction {
-        hb_direction_t_HB_DIRECTION_LTR => harfruzz::Direction::LeftToRight,
-        hb_direction_t_HB_DIRECTION_RTL => harfruzz::Direction::RightToLeft,
-        hb_direction_t_HB_DIRECTION_TTB => harfruzz::Direction::TopToBottom,
-        hb_direction_t_HB_DIRECTION_BTT => harfruzz::Direction::BottomToTop,
-        _ => harfruzz::Direction::Invalid,
+        hb_direction_t_HB_DIRECTION_LTR => harfrust::Direction::LeftToRight,
+        hb_direction_t_HB_DIRECTION_RTL => harfrust::Direction::RightToLeft,
+        hb_direction_t_HB_DIRECTION_TTB => harfrust::Direction::TopToBottom,
+        hb_direction_t_HB_DIRECTION_BTT => harfrust::Direction::BottomToTop,
+        _ => harfrust::Direction::Invalid,
     };
 
     let shaper = (*face_data)
@@ -128,19 +128,19 @@ pub unsafe extern "C" fn _hb_harfruzz_shape_plan_create_rs(
         .build();
 
     let hr_shape_plan =
-        harfruzz::ShapePlan::new(&shaper, direction, script, language.as_ref(), &[]);
+        harfrust::ShapePlan::new(&shaper, direction, script, language.as_ref(), &[]);
     let hr_shape_plan = Box::new(hr_shape_plan);
     Box::into_raw(hr_shape_plan) as *mut c_void
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn _hb_harfruzz_shape_plan_destroy_rs(data: *mut c_void) {
-    let data = data as *mut harfruzz::ShapePlan;
+pub unsafe extern "C" fn _hb_harfrust_shape_plan_destroy_rs(data: *mut c_void) {
+    let data = data as *mut harfrust::ShapePlan;
     let _hr_shape_plan = Box::from_raw(data);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn _hb_harfruzz_shape_rs(
+pub unsafe extern "C" fn _hb_harfrust_shape_rs(
     font_data: *const c_void,
     face_data: *const c_void,
     shape_plan: *const c_void,
@@ -149,33 +149,33 @@ pub unsafe extern "C" fn _hb_harfruzz_shape_rs(
     features: *const hb_feature_t,
     num_features: u32,
 ) -> hb_bool_t {
-    let font_data = font_data as *const HBHarfRuzzFontData;
-    let face_data = face_data as *const HBHarfRuzzFaceData;
+    let font_data = font_data as *const HBHarfRustFontData;
+    let face_data = face_data as *const HBHarfRustFaceData;
 
     let font_ref = &(*face_data).font_ref;
 
-    let mut hr_buffer = harfruzz::UnicodeBuffer::new();
+    let mut hr_buffer = harfrust::UnicodeBuffer::new();
 
     // Set buffer properties
     let cluster_level = hb_buffer_get_cluster_level(buffer);
     let cluster_level = match cluster_level {
         hb_buffer_cluster_level_t_HB_BUFFER_CLUSTER_LEVEL_MONOTONE_GRAPHEMES => {
-            harfruzz::BufferClusterLevel::MonotoneGraphemes
+            harfrust::BufferClusterLevel::MonotoneGraphemes
         }
         hb_buffer_cluster_level_t_HB_BUFFER_CLUSTER_LEVEL_MONOTONE_CHARACTERS => {
-            harfruzz::BufferClusterLevel::MonotoneCharacters
+            harfrust::BufferClusterLevel::MonotoneCharacters
         }
         hb_buffer_cluster_level_t_HB_BUFFER_CLUSTER_LEVEL_CHARACTERS => {
-            harfruzz::BufferClusterLevel::Characters
+            harfrust::BufferClusterLevel::Characters
         }
         hb_buffer_cluster_level_t_HB_BUFFER_CLUSTER_LEVEL_GRAPHEMES => {
-            harfruzz::BufferClusterLevel::Graphemes
+            harfrust::BufferClusterLevel::Graphemes
         }
-        _ => harfruzz::BufferClusterLevel::default(),
+        _ => harfrust::BufferClusterLevel::default(),
     };
     hr_buffer.set_cluster_level(cluster_level);
     let flags = hb_buffer_get_flags(buffer);
-    hr_buffer.set_flags(harfruzz::BufferFlags::from_bits_truncate(flags));
+    hr_buffer.set_flags(harfrust::BufferFlags::from_bits_truncate(flags));
     let not_found_variation_selector_glyph =
         hb_buffer_get_not_found_variation_selector_glyph(buffer);
     if not_found_variation_selector_glyph != u32::MAX {
@@ -186,16 +186,16 @@ pub unsafe extern "C" fn _hb_harfruzz_shape_rs(
     let script = hb_buffer_get_script(buffer);
     let language = hb_buffer_get_language(buffer);
     let direction = hb_buffer_get_direction(buffer);
-    // Convert to HarfRuzz types
-    let script = harfruzz::Script::from_iso15924_tag(Tag::from_u32(script))
-        .unwrap_or(harfruzz::script::UNKNOWN);
+    // Convert to HarfRust types
+    let script = harfrust::Script::from_iso15924_tag(Tag::from_u32(script))
+        .unwrap_or(harfrust::script::UNKNOWN);
     let language = hb_language_to_hr_language(language);
     let direction = match direction {
-        hb_direction_t_HB_DIRECTION_LTR => harfruzz::Direction::LeftToRight,
-        hb_direction_t_HB_DIRECTION_RTL => harfruzz::Direction::RightToLeft,
-        hb_direction_t_HB_DIRECTION_TTB => harfruzz::Direction::TopToBottom,
-        hb_direction_t_HB_DIRECTION_BTT => harfruzz::Direction::BottomToTop,
-        _ => harfruzz::Direction::Invalid,
+        hb_direction_t_HB_DIRECTION_LTR => harfrust::Direction::LeftToRight,
+        hb_direction_t_HB_DIRECTION_RTL => harfrust::Direction::RightToLeft,
+        hb_direction_t_HB_DIRECTION_TTB => harfrust::Direction::TopToBottom,
+        hb_direction_t_HB_DIRECTION_BTT => harfrust::Direction::BottomToTop,
+        _ => harfrust::Direction::Invalid,
     };
     // Set properties on the buffer
     hr_buffer.set_script(script);
@@ -236,7 +236,7 @@ pub unsafe extern "C" fn _hb_harfruzz_shape_rs(
                 let value = f.value;
                 let start = f.start;
                 let end = f.end;
-                harfruzz::Feature {
+                harfrust::Feature {
                     tag: Tag::from_u32(tag),
                     value,
                     start,
@@ -249,7 +249,7 @@ pub unsafe extern "C" fn _hb_harfruzz_shape_rs(
     let glyphs = if shape_plan.is_null() {
         shaper.shape(hr_buffer, &features)
     } else {
-        let shape_plan = shape_plan as *const harfruzz::ShapePlan;
+        let shape_plan = shape_plan as *const harfrust::ShapePlan;
         shaper.shape_with_plan(shape_plan.as_ref().unwrap(), hr_buffer, &features)
     };
 
@@ -293,10 +293,10 @@ pub unsafe extern "C" fn _hb_harfruzz_shape_rs(
         if hr_info.safe_to_insert_tatweel() {
             info.mask |= hb_glyph_flags_t_HB_GLYPH_FLAG_SAFE_TO_INSERT_TATWEEL;
         }
-        pos.x_advance = (hr_pos.x_advance as f32 * x_scale).round() as hb_position_t;
-        pos.y_advance = (hr_pos.y_advance as f32 * y_scale).round() as hb_position_t;
-        pos.x_offset = (hr_pos.x_offset as f32 * x_scale).round() as hb_position_t;
-        pos.y_offset = (hr_pos.y_offset as f32 * y_scale).round() as hb_position_t;
+        pos.x_advance = (hr_pos.x_advance as f32 * x_scale + 0.5).floor() as hb_position_t;
+        pos.y_advance = (hr_pos.y_advance as f32 * y_scale + 0.5).floor() as hb_position_t;
+        pos.x_offset = (hr_pos.x_offset as f32 * x_scale + 0.5).floor() as hb_position_t;
+        pos.y_offset = (hr_pos.y_offset as f32 * y_scale + 0.5).floor() as hb_position_t;
     }
 
     true as hb_bool_t
