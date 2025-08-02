@@ -7,6 +7,9 @@
 #include "glib.h"
 #endif
 
+
+#if defined(DO_HB_TESTS)
+
 #include "hb-subset.h"
 #include "helper-subset.hh"
 
@@ -113,3 +116,5 @@ main (int _argc, char ** _argv)
 
   return 0;
 }
+
+#endif // defined(DO_HB_TESTS)

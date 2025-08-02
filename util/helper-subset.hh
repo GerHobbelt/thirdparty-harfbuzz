@@ -26,7 +26,9 @@
 #ifndef HELPER_SUBSET_HH
 #define HELPER_SUBSET_HH
 
+#ifndef _WIN32
 #include "glib.h"
+#endif
 #include <errno.h>
 #include <math.h>
 #include <stdbool.h>

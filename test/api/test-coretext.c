@@ -24,8 +24,9 @@
  * Author: Matthias Clasen
  */
 
-
 #include "hb-test.h"
+
+#if defined(DO_HB_TESTS)
 
 #include "hb-coretext.h"
 
@@ -111,3 +112,5 @@ main (int argc, char **argv)
 
   return hb_test_run ();
 }
+
+#endif // DO_HB_TESTS

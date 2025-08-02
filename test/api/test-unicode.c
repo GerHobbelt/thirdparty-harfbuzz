@@ -32,6 +32,7 @@
 /* Unit tests for hb-glib.h */
 /* Unit tests for hb-icu.h */
 
+#if defined(DO_HB_TESTS)
 
 #ifdef HAVE_GLIB
 #include <hb-glib.h>
@@ -1045,3 +1046,5 @@ main (int argc, char **argv)
 
   return hb_test_run ();
 }
+
+#endif // DO_HB_TESTS

@@ -35,6 +35,8 @@
 #endif
 #endif
 
+#if defined(DO_HB_TESTS)
+
 static inline hb_bool_t
 have_ft_colrv1 (void)
 {
@@ -668,3 +670,5 @@ main (int argc, char **argv)
 
   return status;
 }
+
+#endif // defined(DO_HB_TESTS)

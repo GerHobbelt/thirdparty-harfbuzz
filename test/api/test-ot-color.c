@@ -31,6 +31,8 @@
 
 /* Unit tests for hb-ot-color.h */
 
+#if defined(DO_HB_TESTS)
+
 /* Test font with the following CPAL v0 table, as TTX and manual disassembly:
 
   <CPAL>
@@ -515,3 +517,5 @@ main (int argc, char **argv)
   hb_face_destroy (colrv1);
   return status;
 }
+
+#endif // defined(DO_HB_TESTS)

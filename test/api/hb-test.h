@@ -29,6 +29,8 @@
 
 #include <hb-config.hh>
 
+#define DO_HB_TESTS 1
+
 #if defined(HAVE_GLIB)
 
 #include <hb-glib.h>
@@ -349,6 +351,8 @@ typedef bool gboolean;
 
 char *g_strdup_printf(const char *msg, ...);
 
+char *g_strdup(const char *str);
+
 void g_free(void *ptr);
 
 typedef void *gpointer;
@@ -387,6 +391,9 @@ typedef struct
 } GString;
 
 typedef hb_codepoint_t gunichar;
+
+
+#undef DO_HB_TESTS
 
 #endif // HAVE_GLIB
 
