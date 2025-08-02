@@ -32,6 +32,10 @@
 #include "test-c.c"
 #undef NO_MAIN
 
+#include <hb-config.hh>
+
+#if defined(HAVE_GLIB)
+
 #ifdef HAVE_DIRECTWRITE
 #include <hb-directwrite.h>
 #endif
@@ -113,3 +117,5 @@ main (int argc, char **argv)
 
   return hb_test_run ();
 }
+
+#endif

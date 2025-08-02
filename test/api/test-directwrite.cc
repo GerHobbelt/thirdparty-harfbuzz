@@ -24,6 +24,9 @@
  * Author: Matthias Clasen
  */
 
+#include <hb-config.hh>
+
+#if defined(HAVE_GLIB)
 
 #include "hb-test.h"
 
@@ -140,3 +143,5 @@ main (int argc, char **argv)
 
   return hb_test_run ();
 }
+
+#endif
