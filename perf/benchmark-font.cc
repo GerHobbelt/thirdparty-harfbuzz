@@ -106,7 +106,7 @@ static void BM_Font (benchmark::State &state,
     hb_font_set_variations (font, variations, count);
   }
 
-  bool ret = hb_font_set_funcs_using (font, backend);
+  bool ret = !!hb_font_set_funcs_using (font, backend);
   if (!ret)
   {
     state.SkipWithError("Backend failed to initialize for font.");
@@ -199,7 +199,7 @@ static void BM_Font (benchmark::State &state,
 	hb_font_t *font = hb_font_create (face);
 	hb_face_destroy (face);
 
-	bool ret = hb_font_set_funcs_using (font, backend);
+	bool ret = !!hb_font_set_funcs_using (font, backend);
 	if (!ret)
 	{
 	  state.SkipWithError("Backend failed to initialize for font.");
