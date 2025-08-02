@@ -5017,6 +5017,18 @@ struct Device
     }
   }
 
+  bool is_variation_device () const
+  {
+    switch (u.b.format) {
+#ifndef HB_NO_VAR
+    case 0x8000:
+      return true;
+#endif
+    default:
+      return false;
+    }
+  }
+
   protected:
   union {
   DeviceHeader		b;
