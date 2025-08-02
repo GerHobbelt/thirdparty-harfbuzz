@@ -125,7 +125,7 @@ static void test_backend (const char *backend,
     hb_font_set_variations (font, &wght, 1);
   }
 
-  bool ret = hb_font_set_funcs_using (font, backend);
+  bool ret = !!hb_font_set_funcs_using (font, backend);
   assert (ret);
 
   std::vector<std::thread> threads;

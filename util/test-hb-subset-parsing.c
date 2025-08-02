@@ -1,6 +1,12 @@
+#include "hb-test.h"
+
 #include <assert.h>
 #include <stdio.h>
+
+#if !defined(_WIN32)
 #include "glib.h"
+#endif
+
 #include "hb-subset.h"
 #include "helper-subset.hh"
 

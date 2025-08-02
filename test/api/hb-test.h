@@ -278,6 +278,116 @@ hb_test_open_font_file (const char *font_path)
 
 HB_END_DECLS
 
+#else // HAVE_GLIB
+
+#include <libassert/assert.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdbool.h>
+
+#include <hb.h>
+
+typedef bool gboolean;
+
+#ifndef TRUE
+#define TRUE 1
 #endif
+#ifndef FALSE
+#define FALSE 0
+#endif
+
+#ifndef HB_UNUSED
+#if defined(__GNUC__) && (__GNUC__ >= 4) || (__clang__)
+#define HB_UNUSED	__attribute__((unused))
+#elif defined(_MSC_VER) /* https://github.com/harfbuzz/harfbuzz/issues/635 */
+#define HB_UNUSED       __pragma(warning(suppress: 4100 4101))
+#else
+#define HB_UNUSED
+#endif
+#endif
+
+#define g_assert(...)		      LIBASSERT_DEBUG_ASSERT(__VA_ARGS__)
+
+#define g_assert_cmpint(a, op, b)     LIBASSERT_DEBUG_ASSERT(a op b)
+#define g_assert_true(expr)	      LIBASSERT_DEBUG_ASSERT(expr)
+#define g_assert_cmphex(a, op, b)     LIBASSERT_DEBUG_ASSERT(a op b)
+#define g_assert_cmpuint(a, op, b)    LIBASSERT_DEBUG_ASSERT(a op b)
+#define g_assert_cmpstr(a, op, b)     LIBASSERT_DEBUG_ASSERT(a op b)
+
+/* This is too ugly to be public API, but quite handy. */
+#define HB_TAG_CHAR4(s)                                  \
+  (HB_TAG(((const char *) s)[0], ((const char *) s)[1],  \
+	   ((const char *) s)[2], ((const char *) s)[3]))
+
+#if defined(__GCC__)
+#define G_GNUC_UNUSED __attribute__((__unused__))
+#else
+#define G_GNUC_UNUSED /* empty */
+#endif
+
+#define g_test_message(...)	    fprintf(stderr, __VA_ARGS__)
+
+#define g_error(...)		    fprintf(stderr, "ERROR: %s", __VA_ARGS__)
+
+#ifndef g_assert_true
+#define g_assert_true		    g_assert
+#endif
+#ifndef g_assert_false
+#define g_assert_false(expr)	    g_assert(!(expr))
+#endif
+#ifndef g_assert_nonnull
+#define g_assert_nonnull	    g_assert
+#endif
+#ifndef g_assert_cmpmem
+#define g_assert_cmpmem(m1, l1, m2, l2)	  g_assert_true(l1 == l2 && memcmp(m1, m2, l1) == 0)
+#endif
+
+#define g_test_skip(msg)           fprintf(stderr, "Test SKIPPED: %s\n", msg)
+
+char *g_strdup_printf(const char *msg, ...);
+
+void g_free(void *ptr);
+
+typedef void *gpointer;
+typedef const void *gconstpointer;
+
+
+void hb_test_init(int *argc, const char ***argv);
+int hb_test_run(void);
+
+typedef void hb_test_func_t(void);
+typedef void hb_test_data_func_t(const void *);
+
+void hb_test_add_func(const char *test_path, hb_test_func_t test_func);
+#define hb_test_add(Func)   hb_test_add_func(#Func, Func)
+
+hb_face_t *hb_test_open_font_file(const char *font_path);
+hb_face_t *hb_test_open_font_file_with_index(const char *font_path, unsigned face_index);
+
+char *hb_test_resolve_path(const char *path);
+
+void hb_test_add_data_func_flavor(const char *test_path,
+				  const char *flavor,
+				  const void *test_data,
+				  hb_test_data_func_t test_func);
+
+#define hb_test_add_data_flavor(UserData, Flavor, Func)   hb_test_add_data_func_flavor(#Func, Flavor, UserData, Func)
+#define hb_test_add_flavor(Flavor, Func)                  hb_test_add_data_flavor(Flavor, Flavor, Func)
+
+#define HB_FACE_ADD_TABLE(face, tag, data)		  /* I couldn't be buggered (yet) --> TBD */
+
+void hb_test_assert_blobs_equal(hb_blob_t *expected_blob, hb_blob_t *actual_blob);
+
+typedef struct
+{
+  char *str;
+} GString;
+
+typedef hb_codepoint_t gunichar;
+
+#endif // HAVE_GLIB
 
 #endif /* HB_TEST_H */

@@ -99,8 +99,7 @@ static void test_shaper (const char *shaper,
   strcat (name, "/");
   strcat (name, shaper);
 
-  benchmark::RegisterBenchmark (BENCHMARK_FAMILY_ID, name, BM_Shape, shaper, variable,
-				backend, test_input)
+  benchmark::RegisterBenchmark (BENCHMARK_FAMILY_ID, name, BM_Shape, shaper, test_input)
    ->Unit(benchmark::kMillisecond);
 }
 
