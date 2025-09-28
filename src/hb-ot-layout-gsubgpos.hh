@@ -670,8 +670,14 @@ struct hb_ot_apply_context_t :
 {
   const char *get_name () { return "APPLY"; }
   typedef return_t (*recurse_func_t) (hb_ot_apply_context_t *c, unsigned int lookup_index);
+
   template <typename T>
-  return_t dispatch (const T &obj) { return obj.apply (this); }
+  static inline auto apply_ (const T &obj, hb_ot_apply_context_t *c, hb_priority<1>) HB_RETURN (return_t, obj.apply (c, nullptr) )
+  template <typename T>
+  static inline auto apply_ (const T &obj, hb_ot_apply_context_t *c, hb_priority<0>) HB_RETURN (return_t, obj.apply (c) )
+  template <typename T>
+  return_t dispatch (const T &obj) { return apply_(obj, this, hb_prioritize); }
+
   static return_t default_return_value () { return false; }
   bool stop_sublookup_iteration (return_t r) const { return r; }
   return_t recurse (unsigned int sub_lookup_index)
@@ -720,6 +726,9 @@ struct hb_ot_apply_context_t :
   signed last_base = -1; // GPOS uses
   unsigned last_base_until = 0; // GPOS uses
 
+  hb_vector_t<uint32_t> match_positions;
+  uint32_t stack_match_positions[8];
+
   hb_ot_apply_context_t (unsigned int table_index_,
 			 hb_font_t *font_,
 			 hb_buffer_t *buffer_,
@@ -749,6 +758,7 @@ struct hb_ot_apply_context_t :
   {
     init_iters ();
     buffer->collect_codepoints (digest);
+    match_positions.set_storage (stack_match_positions);
   }
 
   void init_iters ()
@@ -860,8 +870,8 @@ struct hb_ot_apply_context_t :
       _hb_glyph_info_set_glyph_props (&buffer->cur(), props);
 
     if (cached_props != (unsigned) -1)
-      _hb_glyph_info_set_match (&buffer->cur(),
-				check_glyph_property (&buffer->cur(), cached_props, false));
+      _hb_glyph_info_set_matches (&buffer->cur(),
+				  check_glyph_property (&buffer->cur(), cached_props, false));
   }
 
   void replace_glyph (hb_codepoint_t glyph_index)
@@ -890,52 +900,56 @@ struct hb_ot_apply_context_t :
 
 enum class hb_ot_subtable_cache_op_t
 {
-  CREATE,
   ENTER,
   LEAVE,
-  DESTROY,
 };
 
 struct hb_accelerate_subtables_context_t :
        hb_dispatch_context_t<hb_accelerate_subtables_context_t>
 {
-  template <typename Type>
-  static inline bool apply_to (const void *obj, hb_ot_apply_context_t *c)
+  template <typename T>
+  static inline auto apply_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<1>) HB_RETURN (bool, obj->apply (c, external_cache) )
+  template <typename T>
+  static inline auto apply_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<0>) HB_RETURN (bool, obj->apply (c) )
+  template <typename T>
+  static inline bool apply_to (const void *obj, hb_ot_apply_context_t *c, void *external_cache)
   {
-    const Type *typed_obj = (const Type *) obj;
-    return typed_obj->apply (c);
+    const T *typed_obj = (const T *) obj;
+    return apply_ (typed_obj, c, external_cache, hb_prioritize);
   }
 
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
   template <typename T>
-  static inline auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, hb_priority<1>) HB_RETURN (bool, obj->apply_cached (c) )
+  static inline auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<2>) HB_RETURN (bool, obj->apply_cached (c, external_cache) )
   template <typename T>
-  static inline auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, hb_priority<0>) HB_RETURN (bool, obj->apply (c) )
-  template <typename Type>
-  static inline bool apply_cached_to (const void *obj, hb_ot_apply_context_t *c)
+  static inline auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<1>) HB_RETURN (bool, obj->apply (c, external_cache) )
+  template <typename T>
+  static inline auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<0>) HB_RETURN (bool, obj->apply (c) )
+  template <typename T>
+  static inline bool apply_cached_to (const void *obj, hb_ot_apply_context_t *c, void *external_cache)
   {
-    const Type *typed_obj = (const Type *) obj;
-    return apply_cached_ (typed_obj, c, hb_prioritize);
+    const T *typed_obj = (const T *) obj;
+    return apply_cached_ (typed_obj, c, external_cache, hb_prioritize);
   }
 
   template <typename T>
-  static inline auto cache_func_ (void *p,
+  static inline auto cache_func_ (hb_ot_apply_context_t *c,
 				  hb_ot_subtable_cache_op_t op,
-				  hb_priority<1>) HB_RETURN (void *, T::cache_func (p, op) )
+				  hb_priority<1>) HB_RETURN (bool, T::cache_func (c, op) )
   template <typename T=void>
-  static inline void * cache_func_ (void *p,
-				    hb_ot_subtable_cache_op_t op HB_UNUSED,
-				    hb_priority<0>) { return (void *) false; }
+  static inline bool cache_func_ (hb_ot_apply_context_t *c,
+				  hb_ot_subtable_cache_op_t op HB_UNUSED,
+				  hb_priority<0>) { return false; }
   template <typename Type>
-  static inline void * cache_func_to (void *p,
-				      hb_ot_subtable_cache_op_t op)
+  static inline bool cache_func_to (hb_ot_apply_context_t *c,
+				    hb_ot_subtable_cache_op_t op)
   {
-    return cache_func_<Type> (p, op, hb_prioritize);
+    return cache_func_<Type> (c, op, hb_prioritize);
   }
 #endif
 
-  typedef bool (*hb_apply_func_t) (const void *obj, hb_ot_apply_context_t *c);
-  typedef void * (*hb_cache_func_t) (void *p, hb_ot_subtable_cache_op_t op);
+  typedef bool (*hb_apply_func_t) (const void *obj, hb_ot_apply_context_t *c, void *external_cache);
+  typedef bool (*hb_cache_func_t) (hb_ot_apply_context_t *c, hb_ot_subtable_cache_op_t op);
 
   struct hb_applicable_t
   {
@@ -943,7 +957,7 @@ struct hb_accelerate_subtables_context_t :
     friend struct hb_ot_layout_lookup_accelerator_t;
 
     template <typename T>
-    void init (const T &obj_,
+    bool init (const T &obj_,
 	       hb_apply_func_t apply_func_
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
 	       , hb_apply_func_t apply_cached_func_
@@ -956,23 +970,44 @@ struct hb_accelerate_subtables_context_t :
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
       apply_cached_func = apply_cached_func_;
       cache_func = cache_func_;
+      external_cache = external_cache_create (obj_);
+      if (unlikely (!external_cache))
+        return false;
+      if (external_cache == (void *) 1)
+        external_cache = nullptr; // Special value to indicate no cache.
 #endif
       digest.init ();
       obj_.get_coverage ().collect_coverage (&digest);
+      return true;
     }
 
+#ifdef HB_NO_OT_LAYOUT_LOOKUP_CACHE
     bool apply (hb_ot_apply_context_t *c) const
     {
-      return digest.may_have (c->buffer->cur().codepoint) && apply_func (obj, c);
+      return digest.may_have (c->buffer->cur().codepoint) && apply_func (obj, c, nullptr);
     }
-#ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
+#else
+    bool apply (hb_ot_apply_context_t *c) const
+    {
+      return digest.may_have (c->buffer->cur().codepoint) && apply_func (obj, c, external_cache);
+    }
     bool apply_cached (hb_ot_apply_context_t *c) const
     {
-      return digest.may_have (c->buffer->cur().codepoint) &&  apply_cached_func (obj, c);
+      return digest.may_have (c->buffer->cur().codepoint) &&  apply_cached_func (obj, c, external_cache);
+    }
+
+    template <typename T>
+    auto _external_cache_create (const T &obj, hb_priority<1>) HB_AUTO_RETURN ( obj.external_cache_create () )
+    template <typename T>
+    auto _external_cache_create (const T &obj, hb_priority<0>) HB_AUTO_RETURN ( (void *) 1 )
+    template <typename T>
+    void *external_cache_create (const T &obj)
+    {
+      return _external_cache_create (obj, hb_prioritize);
     }
     bool cache_enter (hb_ot_apply_context_t *c) const
     {
-      return (bool) cache_func (c, hb_ot_subtable_cache_op_t::ENTER);
+      return cache_func (c, hb_ot_subtable_cache_op_t::ENTER);
     }
     void cache_leave (hb_ot_apply_context_t *c) const
     {
@@ -986,6 +1021,7 @@ struct hb_accelerate_subtables_context_t :
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
     hb_apply_func_t apply_cached_func;
     hb_cache_func_t cache_func;
+    void *external_cache;
 #endif
     hb_set_digest_t digest;
   };
@@ -1003,13 +1039,17 @@ struct hb_accelerate_subtables_context_t :
   {
     hb_applicable_t *entry = &array[i++];
 
-    entry->init (obj,
-		 apply_to<T>
+    if (!entry->init (obj,
+			        apply_to<T>
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
-		 , apply_cached_to<T>
-		 , cache_func_to<T>
+			        , apply_cached_to<T>
+			        , cache_func_to<T>
 #endif
-		 );
+			        ))
+    {
+      i--;
+      return hb_empty_t ();
+    }
 
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
     /* Cache handling
@@ -1189,38 +1229,50 @@ static inline bool match_class (hb_glyph_info_t &info, unsigned value, const voi
   const ClassDef &class_def = *reinterpret_cast<const ClassDef *>(data);
   return class_def.get_class (info.codepoint) == value;
 }
-static inline bool match_class_cached (hb_glyph_info_t &info, unsigned value, const void *data)
+static inline unsigned get_class_cached (const ClassDef &class_def, hb_glyph_info_t &info)
 {
   unsigned klass = info.syllable();
   if (klass < 255)
-    return klass == value;
-  const ClassDef &class_def = *reinterpret_cast<const ClassDef *>(data);
+    return klass;
   klass = class_def.get_class (info.codepoint);
   if (likely (klass < 255))
     info.syllable() = klass;
-  return klass == value;
+  return klass;
 }
-static inline bool match_class_cached1 (hb_glyph_info_t &info, unsigned value, const void *data)
+static inline bool match_class_cached (hb_glyph_info_t &info, unsigned value, const void *data)
+{
+  const ClassDef &class_def = *reinterpret_cast<const ClassDef *>(data);
+  return get_class_cached (class_def, info) == value;
+}
+static inline unsigned get_class_cached1 (const ClassDef &class_def, hb_glyph_info_t &info)
 {
   unsigned klass = info.syllable() & 0x0F;
   if (klass < 15)
-    return klass == value;
-  const ClassDef &class_def = *reinterpret_cast<const ClassDef *>(data);
+    return klass;
   klass = class_def.get_class (info.codepoint);
   if (likely (klass < 15))
     info.syllable() = (info.syllable() & 0xF0) | klass;
-  return klass == value;
+  return klass;
 }
-static inline bool match_class_cached2 (hb_glyph_info_t &info, unsigned value, const void *data)
+static inline bool match_class_cached1 (hb_glyph_info_t &info, unsigned value, const void *data)
+{
+  const ClassDef &class_def = *reinterpret_cast<const ClassDef *>(data);
+  return get_class_cached1 (class_def, info) == value;
+}
+static inline unsigned get_class_cached2 (const ClassDef &class_def, hb_glyph_info_t &info)
 {
   unsigned klass = (info.syllable() & 0xF0) >> 4;
   if (klass < 15)
-    return klass == value;
-  const ClassDef &class_def = *reinterpret_cast<const ClassDef *>(data);
+    return klass;
   klass = class_def.get_class (info.codepoint);
   if (likely (klass < 15))
     info.syllable() = (info.syllable() & 0x0F) | (klass << 4);
-  return klass == value;
+  return klass;
+}
+static inline bool match_class_cached2 (hb_glyph_info_t &info, unsigned value, const void *data)
+{
+  const ClassDef &class_def = *reinterpret_cast<const ClassDef *>(data);
+  return get_class_cached2 (class_def, info) == value;
 }
 static inline bool match_coverage (hb_glyph_info_t &info, unsigned value, const void *data)
 {
@@ -1259,7 +1311,6 @@ static bool match_input (hb_ot_apply_context_t *c,
 			 match_func_t match_func,
 			 const void *match_data,
 			 unsigned int *end_position,
-			 unsigned int *match_positions,
 			 unsigned int *p_total_component_count = nullptr)
 {
   TRACE_APPLY (nullptr);
@@ -1317,7 +1368,10 @@ static bool match_input (hb_ot_apply_context_t *c,
       return_trace (false);
     }
 
-    match_positions[i] = skippy_iter.idx;
+    if (unlikely (i + 1 > c->match_positions.length &&
+		  !c->match_positions.resize (i + 1, false)))
+      return_trace (false);
+    c->match_positions.arrayZ[i] = skippy_iter.idx;
 
     unsigned int this_lig_id = _hb_glyph_info_get_lig_id (&buffer->info[skippy_iter.idx]);
     unsigned int this_lig_comp = _hb_glyph_info_get_lig_comp (&buffer->info[skippy_iter.idx]);
@@ -1377,13 +1431,12 @@ static bool match_input (hb_ot_apply_context_t *c,
     *p_total_component_count = total_component_count;
   }
 
-  match_positions[0] = buffer->idx;
+  c->match_positions.arrayZ[0] = buffer->idx;
 
   return_trace (true);
 }
 static inline bool ligate_input (hb_ot_apply_context_t *c,
 				 unsigned int count, /* Including the first glyph */
-				 const unsigned int *match_positions, /* Including the first glyph */
 				 unsigned int match_end,
 				 hb_codepoint_t lig_glyph,
 				 unsigned int total_component_count)
@@ -1426,10 +1479,10 @@ static inline bool ligate_input (hb_ot_apply_context_t *c,
    *   https://bugzilla.gnome.org/show_bug.cgi?id=437633
    */
 
-  bool is_base_ligature = _hb_glyph_info_is_base_glyph (&buffer->info[match_positions[0]]);
-  bool is_mark_ligature = _hb_glyph_info_is_mark (&buffer->info[match_positions[0]]);
+  bool is_base_ligature = _hb_glyph_info_is_base_glyph (&buffer->info[c->match_positions.arrayZ[0]]);
+  bool is_mark_ligature = _hb_glyph_info_is_mark (&buffer->info[c->match_positions.arrayZ[0]]);
   for (unsigned int i = 1; i < count; i++)
-    if (!_hb_glyph_info_is_mark (&buffer->info[match_positions[i]]))
+    if (!_hb_glyph_info_is_mark (&buffer->info[c->match_positions.arrayZ[i]]))
     {
       is_base_ligature = false;
       is_mark_ligature = false;
@@ -1455,7 +1508,7 @@ static inline bool ligate_input (hb_ot_apply_context_t *c,
 
   for (unsigned int i = 1; i < count; i++)
   {
-    while (buffer->idx < match_positions[i] && buffer->successful)
+    while (buffer->idx < c->match_positions.arrayZ[i] && buffer->successful)
     {
       if (is_ligature)
       {
@@ -1694,16 +1747,12 @@ static inline void recurse_lookups (context_t *c,
 
 static inline void apply_lookup (hb_ot_apply_context_t *c,
 				 unsigned int count, /* Including the first glyph */
-				 unsigned int *match_positions, /* Including the first glyph */
 				 unsigned int lookupCount,
 				 const LookupRecord lookupRecord[], /* Array of LookupRecords--in design order */
 				 unsigned int match_end)
 {
   hb_buffer_t *buffer = c->buffer;
   int end;
-
-  unsigned int *match_positions_input = match_positions;
-  unsigned int match_positions_count = count;
 
   /* All positions are distance from beginning of *output* buffer.
    * Adjust. */
@@ -1714,7 +1763,7 @@ static inline void apply_lookup (hb_ot_apply_context_t *c,
     int delta = bl - buffer->idx;
     /* Convert positions to new indexing. */
     for (unsigned int j = 0; j < count; j++)
-      match_positions[j] += delta;
+      c->match_positions.arrayZ[j] += delta;
   }
 
   for (unsigned int i = 0; i < lookupCount && buffer->successful; i++)
@@ -1726,10 +1775,10 @@ static inline void apply_lookup (hb_ot_apply_context_t *c,
     unsigned int orig_len = buffer->backtrack_len () + buffer->lookahead_len ();
 
     /* This can happen if earlier recursed lookups deleted many entries. */
-    if (unlikely (match_positions[idx] >= orig_len))
+    if (unlikely (c->match_positions.arrayZ[idx] >= orig_len))
       continue;
 
-    if (unlikely (!buffer->move_to (match_positions[idx])))
+    if (unlikely (!buffer->move_to (c->match_positions.arrayZ[idx])))
       break;
 
     if (unlikely (buffer->max_ops <= 0))
@@ -1788,9 +1837,9 @@ static inline void apply_lookup (hb_ot_apply_context_t *c,
      */
 
     end += delta;
-    if (end < int (match_positions[idx]))
+    if (end < int (c->match_positions.arrayZ[idx]))
     {
-      /* End might end up being smaller than match_positions[idx] if the recursed
+      /* End might end up being smaller than match_positions.arrayZ[idx] if the recursed
        * lookup ended up removing many items.
        * Just never rewind end beyond start of current position, since that is
        * not possible in the recursed lookup.  Also adjust delta as such.
@@ -1798,8 +1847,8 @@ static inline void apply_lookup (hb_ot_apply_context_t *c,
        * https://bugs.chromium.org/p/chromium/issues/detail?id=659496
        * https://github.com/harfbuzz/harfbuzz/issues/1611
        */
-      delta += match_positions[idx] - end;
-      end = match_positions[idx];
+      delta += c->match_positions.arrayZ[idx] - end;
+      end = c->match_positions.arrayZ[idx];
     }
 
     unsigned int next = idx + 1; /* next now is the position after the recursed lookup. */
@@ -1808,27 +1857,9 @@ static inline void apply_lookup (hb_ot_apply_context_t *c,
     {
       if (unlikely (delta + count > HB_MAX_CONTEXT_LENGTH))
 	break;
-      if (unlikely (delta + count > match_positions_count))
-      {
-        unsigned new_match_positions_count = hb_max (delta + count, hb_max(match_positions_count, 4u) * 1.5);
-        if (match_positions == match_positions_input)
-	{
-	  match_positions = (unsigned int *) hb_malloc (new_match_positions_count * sizeof (match_positions[0]));
-	  if (unlikely (!match_positions))
-	    break;
-	  memcpy (match_positions, match_positions_input, count * sizeof (match_positions[0]));
-	  match_positions_count = new_match_positions_count;
-	}
-	else
-	{
-	  unsigned int *new_match_positions = (unsigned int *) hb_realloc (match_positions, new_match_positions_count * sizeof (match_positions[0]));
-	  if (unlikely (!new_match_positions))
-	    break;
-	  match_positions = new_match_positions;
-	  match_positions_count = new_match_positions_count;
-	}
-      }
-
+      if (unlikely (count + delta > c->match_positions.length &&
+		    !c->match_positions.resize (count + delta, false)))
+        return;
     }
     else
     {
@@ -1838,22 +1869,19 @@ static inline void apply_lookup (hb_ot_apply_context_t *c,
     }
 
     /* Shift! */
-    memmove (match_positions + next + delta, match_positions + next,
-	     (count - next) * sizeof (match_positions[0]));
+    memmove (c->match_positions + next + delta, c->match_positions + next,
+	     (count - next) * sizeof (c->match_positions.arrayZ[0]));
     next += delta;
     count += delta;
 
     /* Fill in new entries. */
     for (unsigned int j = idx + 1; j < next; j++)
-      match_positions[j] = match_positions[j - 1] + 1;
+      c->match_positions.arrayZ[j] = c->match_positions.arrayZ[j - 1] + 1;
 
     /* And fixup the rest. */
     for (; next < count; next++)
-      match_positions[next] += delta;
+      c->match_positions.arrayZ[next] += delta;
   }
-
-  if (match_positions != match_positions_input)
-    hb_free (match_positions);
 
   assert (end >= 0);
   (void) buffer->move_to (end);
@@ -1957,25 +1985,17 @@ static bool context_apply_lookup (hb_ot_apply_context_t *c,
 				  const ContextApplyLookupContext &lookup_context)
 {
   if (unlikely (inputCount > HB_MAX_CONTEXT_LENGTH)) return false;
-  unsigned match_positions_stack[4];
-  unsigned *match_positions = match_positions_stack;
-  if (unlikely (inputCount > ARRAY_LENGTH (match_positions_stack)))
-  {
-    match_positions = (unsigned *) hb_malloc (hb_max (inputCount, 1u) * sizeof (match_positions[0]));
-    if (unlikely (!match_positions))
-      return false;
-  }
 
   unsigned match_end = 0;
   bool ret = false;
   if (match_input (c,
 		   inputCount, input,
 		   lookup_context.funcs.match, lookup_context.match_data,
-		   &match_end, match_positions))
+		   &match_end))
   {
     c->buffer->unsafe_to_break (c->buffer->idx, match_end);
     apply_lookup (c,
-		  inputCount, match_positions,
+		  inputCount,
 		  lookupCount, lookupRecord,
 		  match_end);
     ret = true;
@@ -1986,10 +2006,32 @@ static bool context_apply_lookup (hb_ot_apply_context_t *c,
     ret = false;
   }
 
-  if (unlikely (match_positions != match_positions_stack))
-    hb_free (match_positions);
-
   return ret;
+}
+
+static inline bool context_cache_func (hb_ot_apply_context_t *c, hb_ot_subtable_cache_op_t op)
+{
+  switch (op)
+  {
+    case hb_ot_subtable_cache_op_t::ENTER:
+    {
+      if (!HB_BUFFER_TRY_ALLOCATE_VAR (c->buffer, syllable))
+	return false;
+      auto &info = c->buffer->info;
+      unsigned count = c->buffer->len;
+      for (unsigned i = 0; i < count; i++)
+	info[i].syllable() = 255;
+      c->new_syllables = 255;
+      return true;
+    }
+    case hb_ot_subtable_cache_op_t::LEAVE:
+    {
+      c->new_syllables = (unsigned) -1;
+      HB_BUFFER_DEALLOCATE_VAR (c->buffer, syllable);
+      break;
+    }
+  }
+  return false;
 }
 
 template <typename Types>
@@ -2620,41 +2662,14 @@ struct ContextFormat2_5
 
   unsigned cache_cost () const
   {
-    unsigned c = (this+classDef).cost () * ruleSet.len;
-    return c >= 4 ? c : 0;
+    return (this+classDef).cost ();
   }
-  static void * cache_func (void *p, hb_ot_subtable_cache_op_t op)
+  static bool cache_func (hb_ot_apply_context_t *c, hb_ot_subtable_cache_op_t op)
   {
-    switch (op)
-    {
-      case hb_ot_subtable_cache_op_t::CREATE:
-	return (void *) true;
-      case hb_ot_subtable_cache_op_t::ENTER:
-      {
-	hb_ot_apply_context_t *c = (hb_ot_apply_context_t *) p;
-	if (!HB_BUFFER_TRY_ALLOCATE_VAR (c->buffer, syllable))
-	  return (void *) false;
-	auto &info = c->buffer->info;
-	unsigned count = c->buffer->len;
-	for (unsigned i = 0; i < count; i++)
-	  info[i].syllable() = 255;
-	c->new_syllables = 255;
-	return (void *) true;
-      }
-      case hb_ot_subtable_cache_op_t::LEAVE:
-      {
-	hb_ot_apply_context_t *c = (hb_ot_apply_context_t *) p;
-	c->new_syllables = (unsigned) -1;
-	HB_BUFFER_DEALLOCATE_VAR (c->buffer, syllable);
-	return nullptr;
-      }
-      case hb_ot_subtable_cache_op_t::DESTROY:
-        return nullptr;
-    }
-    return nullptr;
+    return context_cache_func (c, op);
   }
 
-  bool apply_cached (hb_ot_apply_context_t *c) const { return _apply (c, true); }
+  bool apply_cached (hb_ot_apply_context_t *c, void *external_cache HB_UNUSED) const { return _apply (c, true); }
   bool apply (hb_ot_apply_context_t *c) const { return _apply (c, false); }
   bool _apply (hb_ot_apply_context_t *c, bool cached) const
   {
@@ -2669,10 +2684,7 @@ struct ContextFormat2_5
       &class_def
     };
 
-    if (cached && c->buffer->cur().syllable() < 255)
-      index = c->buffer->cur().syllable ();
-    else
-      index = class_def.get_class (c->buffer->cur().codepoint);
+    index = cached ? get_class_cached (class_def, c->buffer->cur()) : class_def.get_class (c->buffer->cur().codepoint);
     const RuleSet &rule_set = this+ruleSet[index];
     return_trace (rule_set.apply (c, lookup_context));
   }
@@ -3080,14 +3092,6 @@ static bool chain_context_apply_lookup (hb_ot_apply_context_t *c,
 					const ChainContextApplyLookupContext &lookup_context)
 {
   if (unlikely (inputCount > HB_MAX_CONTEXT_LENGTH)) return false;
-  unsigned match_positions_stack[4];
-  unsigned *match_positions = match_positions_stack;
-  if (unlikely (inputCount > ARRAY_LENGTH (match_positions_stack)))
-  {
-    match_positions = (unsigned *) hb_malloc (hb_max (inputCount, 1u) * sizeof (match_positions[0]));
-    if (unlikely (!match_positions))
-      return false;
-  }
 
   unsigned start_index = c->buffer->out_len;
   unsigned end_index = c->buffer->idx;
@@ -3096,7 +3100,7 @@ static bool chain_context_apply_lookup (hb_ot_apply_context_t *c,
   if (!(match_input (c,
 		     inputCount, input,
 		     lookup_context.funcs.match[1], lookup_context.match_data[1],
-		     &match_end, match_positions) && (end_index = match_end)
+		     &match_end) && (end_index = match_end)
        && match_lookahead (c,
 			   lookaheadCount, lookahead,
 			   lookup_context.funcs.match[2], lookup_context.match_data[2],
@@ -3119,13 +3123,10 @@ static bool chain_context_apply_lookup (hb_ot_apply_context_t *c,
 
   c->buffer->unsafe_to_break_from_outbuffer (start_index, end_index);
   apply_lookup (c,
-		inputCount, match_positions,
+		inputCount,
 		lookupCount, lookupRecord,
 		match_end);
   done:
-
-  if (unlikely (match_positions != match_positions_stack))
-    hb_free (match_positions);
 
   return ret;
 }
@@ -3871,40 +3872,14 @@ struct ChainContextFormat2_5
 
   unsigned cache_cost () const
   {
-    return (this+lookaheadClassDef).cost () * ruleSet.len;
+    return (this+inputClassDef).cost () + (this+lookaheadClassDef).cost ();
   }
-  static void * cache_func (void *p, hb_ot_subtable_cache_op_t op)
+  static bool cache_func (hb_ot_apply_context_t *c, hb_ot_subtable_cache_op_t op)
   {
-    switch (op)
-    {
-      case hb_ot_subtable_cache_op_t::CREATE:
-	return (void *) true;
-      case hb_ot_subtable_cache_op_t::ENTER:
-      {
-	hb_ot_apply_context_t *c = (hb_ot_apply_context_t *) p;
-	if (!HB_BUFFER_TRY_ALLOCATE_VAR (c->buffer, syllable))
-	  return (void *) false;
-	auto &info = c->buffer->info;
-	unsigned count = c->buffer->len;
-	for (unsigned i = 0; i < count; i++)
-	  info[i].syllable() = 255;
-	c->new_syllables = 255;
-	return (void *) true;
-      }
-      case hb_ot_subtable_cache_op_t::LEAVE:
-      {
-	hb_ot_apply_context_t *c = (hb_ot_apply_context_t *) p;
-	c->new_syllables = (unsigned) -1;
-	HB_BUFFER_DEALLOCATE_VAR (c->buffer, syllable);
-	return nullptr;
-      }
-      case hb_ot_subtable_cache_op_t::DESTROY:
-        return nullptr;
-    }
-    return nullptr;
+    return context_cache_func (c, op);
   }
 
-  bool apply_cached (hb_ot_apply_context_t *c) const { return _apply (c, true); }
+  bool apply_cached (hb_ot_apply_context_t *c, void *external_cache HB_UNUSED) const { return _apply (c, true); }
   bool apply (hb_ot_apply_context_t *c) const { return _apply (c, false); }
   bool _apply (hb_ot_apply_context_t *c, bool cached) const
   {
@@ -3927,11 +3902,9 @@ struct ChainContextFormat2_5
        &lookahead_class_def}
     };
 
-    // Note: Corresponds to match_class_cached2
-    if (cached && ((c->buffer->cur().syllable() & 0xF0) >> 4) < 15)
-      index = (c->buffer->cur().syllable () & 0xF0) >> 4;
-    else
-      index = input_class_def.get_class (c->buffer->cur().codepoint);
+    index = cached
+         ? get_class_cached2 (input_class_def, c->buffer->cur())
+          : input_class_def.get_class (c->buffer->cur().codepoint);
     const ChainRuleSet &rule_set = this+ruleSet[index];
     return_trace (rule_set.apply (c, lookup_context));
   }
@@ -4426,22 +4399,14 @@ struct hb_ot_layout_lookup_accelerator_t
     for (auto& subtable : hb_iter (thiz->subtables, count))
       thiz->digest.union_ (subtable.digest);
 
+    thiz->count = count;
+
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
-    if (c_accelerate_subtables.subtable_cache_user_cost < 4)
-      c_accelerate_subtables.subtable_cache_user_idx = (unsigned) -1;
-
     thiz->subtable_cache_user_idx = c_accelerate_subtables.subtable_cache_user_idx;
-
-    if (thiz->subtable_cache_user_idx != (unsigned) -1)
-    {
-      thiz->subtable_cache = thiz->subtables[thiz->subtable_cache_user_idx].cache_func (nullptr, hb_ot_subtable_cache_op_t::CREATE);
-      if (!thiz->subtable_cache)
-	thiz->subtable_cache_user_idx = (unsigned) -1;
-    }
 
     for (unsigned i = 0; i < count; i++)
       if (i != thiz->subtable_cache_user_idx)
-	thiz->subtables[i].apply_cached_func = thiz->subtables[i].apply_func;
+       thiz->subtables[i].apply_cached_func = thiz->subtables[i].apply_func;
 #endif
 
     return thiz;
@@ -4450,11 +4415,8 @@ struct hb_ot_layout_lookup_accelerator_t
   void fini ()
   {
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
-    if (subtable_cache)
-    {
-      assert (subtable_cache_user_idx != (unsigned) -1);
-      subtables[subtable_cache_user_idx].cache_func (subtable_cache, hb_ot_subtable_cache_op_t::DESTROY);
-    }
+    for (unsigned i = 0; i < count; i++)
+      hb_free (subtables[i].external_cache);
 #endif
   }
 
@@ -4464,14 +4426,14 @@ struct hb_ot_layout_lookup_accelerator_t
 #ifndef HB_OPTIMIZE_SIZE
   HB_ALWAYS_INLINE
 #endif
-  bool apply (hb_ot_apply_context_t *c, unsigned subtables_count, bool use_cache) const
+  bool apply (hb_ot_apply_context_t *c, bool use_cache) const
   {
     c->lookup_accel = this;
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
     if (use_cache)
     {
       return
-      + hb_iter (hb_iter (subtables, subtables_count))
+      + hb_iter (hb_iter (subtables, count))
       | hb_map ([&c] (const hb_accelerate_subtables_context_t::hb_applicable_t &_) { return _.apply_cached (c); })
       | hb_any
       ;
@@ -4480,7 +4442,7 @@ struct hb_ot_layout_lookup_accelerator_t
 #endif
     {
       return
-      + hb_iter (hb_iter (subtables, subtables_count))
+      + hb_iter (hb_iter (subtables, count))
       | hb_map ([&c] (const hb_accelerate_subtables_context_t::hb_applicable_t &_) { return _.apply (c); })
       | hb_any
       ;
@@ -4506,13 +4468,11 @@ struct hb_ot_layout_lookup_accelerator_t
 
 
   hb_set_digest_t digest;
-#ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
-  public:
-  void *subtable_cache = nullptr;
   private:
+  unsigned count = 0; /* Number of subtables in the array. */
+#ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
   unsigned subtable_cache_user_idx = (unsigned) -1;
 #endif
-  private:
   hb_accelerate_subtables_context_t::hb_applicable_t subtables[HB_VAR_ARRAY];
 };
 

@@ -364,6 +364,7 @@ if (WIN32 AND HB_HAVE_DIRECTWRITE)
   add_definitions(-DHAVE_DIRECTWRITE)
   list(APPEND project_headers ${PROJECT_SOURCE_DIR}/src/hb-directwrite.h)
   list(APPEND THIRD_PARTY_LIBS dwrite)
+  list(APPEND PC_LIBS_PRIV -ldwrite)
 endif ()
 
 if (HB_HAVE_CAIRO)
@@ -800,9 +801,6 @@ endif ()
 
 ## Additional harfbuzz build artifacts
 if (HB_BUILD_UTILS)
-  add_definitions("-DPACKAGE_NAME=\"HarfBuzz\"")
-  add_definitions("-DPACKAGE_VERSION=\"${HB_VERSION}\"")
-
   if (HB_HAVE_CAIRO)
     add_executable(hb-view
         ${PROJECT_SOURCE_DIR}/util/ansi-print.hh
