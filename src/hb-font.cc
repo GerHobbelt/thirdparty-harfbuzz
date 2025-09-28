@@ -1362,7 +1362,7 @@ hb_font_get_glyph_v_origin (hb_font_t      *font,
  *
  * Return value: `true` if data found, `false` otherwise
  *
- * XSince: REPLACEME
+ * Since: 11.3.0
  **/
 hb_bool_t
 hb_font_get_glyph_h_origins (hb_font_t      *font,
@@ -1397,7 +1397,7 @@ hb_font_get_glyph_h_origins (hb_font_t      *font,
  *
  * Return value: `true` if data found, `false` otherwise
  *
- * XSince: REPLACEME
+ * Since: 11.3.0
  **/
 hb_bool_t
 hb_font_get_glyph_v_origins (hb_font_t      *font,
@@ -1604,7 +1604,7 @@ hb_font_get_glyph_shape (hb_font_t *font,
  *
  * Return value: `true` if glyph was drawn, `false` otherwise
  *
- * XSince: REPLACEME
+ * Since: 11.2.0
  **/
 hb_bool_t
 hb_font_draw_glyph_or_fail (hb_font_t *font,
@@ -1641,7 +1641,7 @@ hb_font_draw_glyph_or_fail (hb_font_t *font,
  *
  * Return value: `true` if glyph was painted, `false` otherwise
  *
- * XSince: REPLACEME
+ * Since: 11.2.0
  */
 hb_bool_t
 hb_font_paint_glyph_or_fail (hb_font_t *font,
@@ -2877,7 +2877,7 @@ hb_font_get_ptem (hb_font_t *font)
  *
  * Return value: `true` if the font is synthetic, `false` otherwise.
  *
- * XSince: REPLACEME
+ * Since: 11.2.0
  */
 hb_bool_t
 hb_font_is_synthetic (hb_font_t *font)
