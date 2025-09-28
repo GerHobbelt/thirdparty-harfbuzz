@@ -94,16 +94,13 @@ struct hb_vector_t
   }
   ~hb_vector_t () { fini (); }
 
-  template <unsigned n,
-	    typename T = Type,
-	    hb_enable_if (hb_is_trivially_constructible(T) &&
-			  hb_is_trivially_destructible(T))>
+  template <unsigned n>
   void
   set_storage (Type (&array)[n])
-  {
-    set_storage (array, n);
-  }
-
+  { set_storage (array, n); }
+  void
+  set_storage (hb_array_t<Type> array)
+  { set_storage (array.arrayZ, array.length); }
   template <typename T = Type,
 	    hb_enable_if (hb_is_trivially_constructible(T) &&
 			  hb_is_trivially_destructible(T))>
@@ -113,7 +110,6 @@ struct hb_vector_t
     if (unlikely (in_error ()))
       return;
 
-    assert (n > 0);
     assert (allocated == 0);
     assert (length == 0);
 
@@ -176,9 +172,6 @@ struct hb_vector_t
 
   void fini ()
   {
-    /* We allow a hack to make the vector point to a foreign array
-     * by the user. In that case length/arrayZ are non-zero but
-     * allocated is zero. Don't free anything. */
     if (is_owned ())
     {
       shrink_vector (0);
@@ -188,11 +181,12 @@ struct hb_vector_t
   }
 
   HB_ALWAYS_INLINE_VECTOR_ALLOCS
-  void reset ()
+  hb_vector_t &reset ()
   {
     if (unlikely (in_error ()))
       reset_error ();
     resize (0);
+    return *this;
   }
 
   friend void swap (hb_vector_t& a, hb_vector_t& b) noexcept
@@ -555,7 +549,7 @@ struct hb_vector_t
   }
 
   HB_ALWAYS_INLINE_VECTOR_ALLOCS
-  bool resize (int size_, bool initialize = true, bool exact = false)
+  bool resize_full (int size_, bool initialize, bool exact)
   {
     unsigned int size = size_ < 0 ? 0u : (unsigned int) size_;
     if (!alloc (size, exact))
@@ -576,9 +570,19 @@ struct hb_vector_t
     return true;
   }
   HB_ALWAYS_INLINE_VECTOR_ALLOCS
-  bool resize_exact (int size_, bool initialize = true)
+  bool resize (int size_)
   {
-    return resize (size_, initialize, true);
+    return resize_full (size_, true, false);
+  }
+  HB_ALWAYS_INLINE_VECTOR_ALLOCS
+  bool resize_dirty (int size_)
+  {
+    return resize_full (size_, false, false);
+  }
+  HB_ALWAYS_INLINE_VECTOR_ALLOCS
+  bool resize_exact (int size_)
+  {
+    return resize_full (size_, true, true);
   }
 
   Type pop ()

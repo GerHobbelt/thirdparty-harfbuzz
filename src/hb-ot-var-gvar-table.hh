@@ -66,6 +66,7 @@ struct glyph_variations_t
 
   hb_vector_t<tuple_variations_t> glyph_variations;
 
+  hb_vector_t<F2DOT14> peak_coords_storage;
   hb_vector_t<F2DOT14> compiled_shared_tuples;
   private:
   unsigned shared_tuples_count = 0;
@@ -139,6 +140,7 @@ struct glyph_variations_t
   {
     unsigned count = plan->new_to_old_gid_list.length;
     bool iup_optimize = false;
+    optimize_scratch_t scratch;
     iup_optimize = plan->flags & HB_SUBSET_FLAGS_OPTIMIZE_IUP_DELTAS;
     for (unsigned i = 0; i < count; i++)
     {
@@ -146,7 +148,7 @@ struct glyph_variations_t
       contour_point_vector_t *all_points;
       if (!plan->new_gid_contour_points_map.has (new_gid, &all_points))
         return false;
-      if (!glyph_variations[i].instantiate (plan->axes_location, plan->axes_triple_distances, all_points, iup_optimize))
+      if (!glyph_variations[i].instantiate (plan->axes_location, plan->axes_triple_distances, scratch, all_points, iup_optimize))
         return false;
     }
     return true;
@@ -174,12 +176,20 @@ struct glyph_variations_t
      * function will always deref pointers first */
     hb_hashmap_t<const hb_vector_t<F2DOT14>*, unsigned> coords_count_map;
 
+    unsigned tuple_vars_count = + hb_iter (glyph_variations)
+				| hb_map ([] (const tuple_variations_t& vars) { return vars.tuple_vars.length; })
+				| hb_reduce (hb_add, 0)
+				;
+    if (unlikely (!peak_coords_storage.resize (tuple_vars_count * axes_index_map.get_population())))
+      return false;
+    hb_array_t<F2DOT14> peak_coords_array = peak_coords_storage.as_array ();
+
     /* count the num of shared coords */
     for (tuple_variations_t& vars: glyph_variations)
     {
       for (tuple_delta_t& var : vars.tuple_vars)
       {
-        if (!var.compile_coords (axes_index_map, axes_old_index_tag_map))
+        if (!var.compile_coords (axes_index_map, axes_old_index_tag_map, std::addressof (peak_coords_array)))
           return false;
         unsigned *count;
 	unsigned hash = hb_hash (&var.compiled_peak_coords);
@@ -666,7 +676,7 @@ struct gvar_GVAR
 
 	if (!deltas)
 	{
-	  if (unlikely (!deltas_vec.resize (count, false))) return false;
+	  if (unlikely (!deltas_vec.resize_dirty  (count))) return false;
 	  deltas = deltas_vec.as_array ();
 	  hb_memset (deltas.arrayZ + (phantom_only ? count - 4 : 0), 0,
 		     (phantom_only ? 4 : count) * sizeof (deltas[0]));
@@ -683,9 +693,9 @@ struct gvar_GVAR
 	bool apply_to_all = (indices.length == 0);
 	unsigned num_deltas = apply_to_all ? points.length : indices.length;
 	unsigned start_deltas = (phantom_only && num_deltas >= 4 ? num_deltas - 4 : 0);
-	if (unlikely (!x_deltas.resize (num_deltas, false))) return false;
+	if (unlikely (!x_deltas.resize_dirty  (num_deltas))) return false;
 	if (unlikely (!GlyphVariationData::decompile_deltas (p, x_deltas, end, false, start_deltas))) return false;
-	if (unlikely (!y_deltas.resize (num_deltas, false))) return false;
+	if (unlikely (!y_deltas.resize_dirty  (num_deltas))) return false;
 	if (unlikely (!GlyphVariationData::decompile_deltas (p, y_deltas, end, false, start_deltas))) return false;
 
 	if (!apply_to_all)

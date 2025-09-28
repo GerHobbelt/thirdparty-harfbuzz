@@ -222,6 +222,21 @@ struct TupleVariationHeader
   DEFINE_SIZE_MIN (4);
 };
 
+struct optimize_scratch_t
+{
+  iup_scratch_t iup;
+  hb_vector_t<bool> opt_indices;
+  hb_vector_t<int> rounded_x_deltas;
+  hb_vector_t<int> rounded_y_deltas;
+  hb_vector_t<float> opt_deltas_x;
+  hb_vector_t<float> opt_deltas_y;
+  hb_vector_t<unsigned char> opt_point_data;
+  hb_vector_t<unsigned char> opt_deltas_data;
+  hb_vector_t<unsigned char> point_data;
+  hb_vector_t<unsigned char> deltas_data;
+  hb_vector_t<int> rounded_deltas;
+};
+
 struct tuple_delta_t
 {
   static constexpr bool realloc_move = true;  // Watch out when adding new members!
@@ -371,10 +386,17 @@ struct tuple_delta_t
   }
 
   bool compile_coords (const hb_map_t& axes_index_map,
-		       const hb_map_t& axes_old_index_tag_map)
+		       const hb_map_t& axes_old_index_tag_map,
+		       hb_array_t<F2DOT14> *storage = nullptr)
   {
     unsigned cur_axis_count = axes_index_map.get_population ();
-    if (unlikely (!compiled_peak_coords.resize (cur_axis_count)))
+    if (storage)
+    {
+      assert (storage->length >= cur_axis_count);
+      compiled_peak_coords.set_storage (storage->sub_array (0, cur_axis_count));
+      *storage += cur_axis_count;
+    }
+    else if (unlikely (!compiled_peak_coords.resize (cur_axis_count)))
       return false;
 
     hb_array_t<F2DOT14> start_coords, end_coords;
@@ -444,7 +466,7 @@ struct tuple_delta_t
     unsigned cur_axis_count = axes_index_map.get_population ();
     /* allocate enough memory: 1 peak + 2 intermediate coords + fixed header size */
     unsigned alloc_len = 3 * cur_axis_count * (F2DOT14::static_size) + 4;
-    if (unlikely (!compiled_tuple_header.resize (alloc_len, false))) return false;
+    if (unlikely (!compiled_tuple_header.resize_dirty  (alloc_len))) return false;
 
     unsigned flag = 0;
     /* skip the first 4 header bytes: variationDataSize+tupleIndex */
@@ -505,24 +527,25 @@ struct tuple_delta_t
     return compiled_interm_coords.length;
   }
 
-  bool compile_deltas ()
-  { return compile_deltas (indices, deltas_x, deltas_y, compiled_deltas); }
+  bool compile_deltas (hb_vector_t<int> &rounded_deltas_scratch)
+  { return compile_deltas (indices, deltas_x, deltas_y, compiled_deltas, rounded_deltas_scratch); }
 
   static bool compile_deltas (hb_array_t<const bool> point_indices,
 			      hb_array_t<const float> x_deltas,
 			      hb_array_t<const float> y_deltas,
-			      hb_vector_t<unsigned char> &compiled_deltas /* OUT */)
+			      hb_vector_t<unsigned char> &compiled_deltas, /* OUT */
+			      hb_vector_t<int> &rounded_deltas /* scratch */)
   {
-    hb_vector_t<int> rounded_deltas;
-    if (unlikely (!rounded_deltas.alloc (point_indices.length)))
+    if (unlikely (!rounded_deltas.resize_dirty  (point_indices.length)))
       return false;
 
+    unsigned j = 0;
     for (unsigned i = 0; i < point_indices.length; i++)
     {
       if (!point_indices[i]) continue;
-      int rounded_delta = (int) roundf (x_deltas.arrayZ[i]);
-      rounded_deltas.push (rounded_delta);
+      rounded_deltas.arrayZ[j++] = (int) roundf (x_deltas.arrayZ[i]);
     }
+    rounded_deltas.resize (j);
 
     if (!rounded_deltas) return true;
     /* allocate enough memories 5 * num_deltas */
@@ -530,7 +553,7 @@ struct tuple_delta_t
     if (y_deltas)
       alloc_len *= 2;
 
-    if (unlikely (!compiled_deltas.resize (alloc_len, false))) return false;
+    if (unlikely (!compiled_deltas.resize_dirty  (alloc_len))) return false;
 
     unsigned encoded_len = compile_deltas (compiled_deltas, rounded_deltas);
 
@@ -569,8 +592,7 @@ struct tuple_delta_t
 
     unsigned ref_count = 0;
 
-    hb_vector_t<unsigned> &end_points = scratch;
-    end_points.reset ();
+    hb_vector_t<unsigned> &end_points = scratch.reset ();
 
     for (unsigned i = 0; i < point_count; i++)
     {
@@ -658,6 +680,7 @@ struct tuple_delta_t
 
   bool optimize (const contour_point_vector_t& contour_points,
                  bool is_composite,
+		 optimize_scratch_t &scratch,
                  double tolerance = 0.5 + 1e-10)
   {
     unsigned count = contour_points.length;
@@ -665,22 +688,21 @@ struct tuple_delta_t
         deltas_y.length != count)
       return false;
 
-    hb_vector_t<bool> opt_indices;
-    hb_vector_t<int> rounded_x_deltas, rounded_y_deltas;
+    hb_vector_t<bool> &opt_indices = scratch.opt_indices.reset ();
+    hb_vector_t<int> &rounded_x_deltas = scratch.rounded_x_deltas;
+    hb_vector_t<int> &rounded_y_deltas = scratch.rounded_y_deltas;
 
-    if (unlikely (!rounded_x_deltas.alloc (count) ||
-                  !rounded_y_deltas.alloc (count)))
+    if (unlikely (!rounded_x_deltas.resize_dirty  (count) ||
+                  !rounded_y_deltas.resize_dirty  (count)))
       return false;
 
     for (unsigned i = 0; i < count; i++)
     {
-      int rounded_x_delta = (int) roundf (deltas_x.arrayZ[i]);
-      int rounded_y_delta = (int) roundf (deltas_y.arrayZ[i]);
-      rounded_x_deltas.push (rounded_x_delta);
-      rounded_y_deltas.push (rounded_y_delta);
+      rounded_x_deltas.arrayZ[i] = (int) roundf (deltas_x.arrayZ[i]);
+      rounded_y_deltas.arrayZ[i] = (int) roundf (deltas_y.arrayZ[i]);
     }
 
-    if (!iup_delta_optimize (contour_points, rounded_x_deltas, rounded_y_deltas, opt_indices, tolerance))
+    if (!iup_delta_optimize (contour_points, rounded_x_deltas, rounded_y_deltas, opt_indices, scratch.iup, tolerance))
       return false;
 
     unsigned ref_count = 0;
@@ -689,7 +711,8 @@ struct tuple_delta_t
 
     if (ref_count == count) return true;
 
-    hb_vector_t<float> opt_deltas_x, opt_deltas_y;
+    hb_vector_t<float> &opt_deltas_x = scratch.opt_deltas_x.reset ();
+    hb_vector_t<float> &opt_deltas_y = scratch.opt_deltas_y.reset ();
     bool is_comp_glyph_wo_deltas = (is_composite && ref_count == 0);
     if (is_comp_glyph_wo_deltas)
     {
@@ -702,34 +725,31 @@ struct tuple_delta_t
         opt_indices.arrayZ[i] = false;
     }
 
-    hb_vector_t<unsigned char> opt_point_data;
+    hb_vector_t<unsigned char> &opt_point_data = scratch.opt_point_data.reset ();
     if (!compile_point_set (opt_indices, opt_point_data))
       return false;
-    hb_vector_t<unsigned char> opt_deltas_data;
+    hb_vector_t<unsigned char> &opt_deltas_data = scratch.opt_deltas_data.reset ();
     if (!compile_deltas (opt_indices,
                          is_comp_glyph_wo_deltas ? opt_deltas_x : deltas_x,
                          is_comp_glyph_wo_deltas ? opt_deltas_y : deltas_y,
-                         opt_deltas_data))
+                         opt_deltas_data,
+			 scratch.rounded_deltas))
       return false;
 
-    hb_vector_t<unsigned char> point_data;
+    hb_vector_t<unsigned char> &point_data = scratch.point_data.reset ();
     if (!compile_point_set (indices, point_data))
       return false;
-    hb_vector_t<unsigned char> deltas_data;
-    if (!compile_deltas (indices, deltas_x, deltas_y, deltas_data))
+    hb_vector_t<unsigned char> &deltas_data = scratch.deltas_data.reset ();
+    if (!compile_deltas (indices, deltas_x, deltas_y, deltas_data, scratch.rounded_deltas))
       return false;
 
     if (opt_point_data.length + opt_deltas_data.length < point_data.length + deltas_data.length)
     {
-      indices.fini ();
       indices = std::move (opt_indices);
 
       if (is_comp_glyph_wo_deltas)
       {
-        deltas_x.fini ();
         deltas_x = std::move (opt_deltas_x);
-
-        deltas_y.fini ();
         deltas_y = std::move (opt_deltas_y);
       }
     }
@@ -754,7 +774,7 @@ struct tuple_delta_t
 
     /* allocate enough memories: 2 bytes for count + 3 bytes for each point */
     unsigned num_bytes = 2 + 3 *num_points;
-    if (unlikely (!compiled_points.resize (num_bytes, false)))
+    if (unlikely (!compiled_points.resize_dirty  (num_bytes)))
       return false;
 
     unsigned pos = 0;
@@ -818,7 +838,7 @@ struct tuple_delta_t
       else
         compiled_points.arrayZ[header_pos] = (run_length - 1) | 0x80;
     }
-    return compiled_points.resize (pos, false);
+    return compiled_points.resize_dirty  (pos);
   }
 
   static double infer_delta (double target_val, double prev_val, double next_val, double prev_delta, double next_delta)
@@ -950,13 +970,13 @@ struct TupleVariationData
         bool apply_to_all = (indices.length == 0);
         unsigned num_deltas = apply_to_all ? point_count : indices.length;
 
-        if (unlikely (!deltas_x.resize (num_deltas, false) ||
+        if (unlikely (!deltas_x.resize_dirty  (num_deltas) ||
                       !TupleVariationData::decompile_deltas (p, deltas_x, end)))
           return false;
 
         if (is_gvar)
         {
-          if (unlikely (!deltas_y.resize (num_deltas, false) ||
+          if (unlikely (!deltas_y.resize_dirty  (num_deltas) ||
                         !TupleVariationData::decompile_deltas (p, deltas_y, end)))
             return false;
         }
@@ -964,10 +984,10 @@ struct TupleVariationData
         tuple_delta_t var;
         var.axis_tuples = std::move (axis_tuples);
         if (unlikely (!var.indices.resize (point_count) ||
-                      !var.deltas_x.resize (point_count, false)))
+                      !var.deltas_x.resize_dirty  (point_count)))
           return false;
 
-        if (is_gvar && unlikely (!var.deltas_y.resize (point_count, false)))
+        if (is_gvar && unlikely (!var.deltas_y.resize_dirty  (point_count)))
           return false;
 
         for (unsigned i = 0; i < num_deltas; i++)
@@ -1009,8 +1029,8 @@ struct TupleVariationData
         /* In VarData, deltas are organized in rows, convert them into
          * column(region) based tuples, resize deltas_x first */
         tuple_delta_t tuple;
-        if (!tuple.deltas_x.resize (item_count, false) ||
-            !tuple.indices.resize (item_count, false))
+        if (!tuple.deltas_x.resize_dirty  (item_count) ||
+            !tuple.indices.resize_dirty  (item_count))
           return false;
 
         for (unsigned i = 0; i < item_count; i++)
@@ -1076,7 +1096,6 @@ struct TupleVariationData
           for (unsigned i = 0; i < out.length; i++)
             new_vars.push (std::move (out[i]));
         }
-        tuple_vars.fini ();
         tuple_vars = std::move (new_vars);
       }
       return true;
@@ -1192,11 +1211,12 @@ struct TupleVariationData
       return true;
     }
 
-    bool iup_optimize (const contour_point_vector_t& contour_points)
+    bool iup_optimize (const contour_point_vector_t& contour_points,
+		       optimize_scratch_t &scratch)
     {
       for (tuple_delta_t& var : tuple_vars)
       {
-        if (!var.optimize (contour_points, is_composite))
+        if (!var.optimize (contour_points, is_composite, scratch))
           return false;
       }
       return true;
@@ -1205,6 +1225,7 @@ struct TupleVariationData
     public:
     bool instantiate (const hb_hashmap_t<hb_tag_t, Triple>& normalized_axes_location,
                       const hb_hashmap_t<hb_tag_t, TripleDistances>& axes_triple_distances,
+		      optimize_scratch_t &scratch,
                       contour_point_vector_t* contour_points = nullptr,
                       bool optimize = false)
     {
@@ -1226,7 +1247,7 @@ struct TupleVariationData
       if (!merge_tuple_variations (optimize ? contour_points : nullptr))
         return false;
 
-      if (optimize && !iup_optimize (*contour_points)) return false;
+      if (optimize && !iup_optimize (*contour_points, scratch)) return false;
       return !tuple_vars.in_error ();
     }
 
@@ -1254,6 +1275,7 @@ struct TupleVariationData
         if (shared_points_bytes)
           compiled_byte_size += shared_points_bytes->length;
       }
+      hb_vector_t<int> rounded_deltas_scratch;
       // compile delta and tuple var header for each tuple variation
       for (auto& tuple: tuple_vars)
       {
@@ -1267,7 +1289,7 @@ struct TupleVariationData
          * this tuple */
         if (!points_data->length)
           continue;
-        if (!tuple.compile_deltas ())
+        if (!tuple.compile_deltas (rounded_deltas_scratch))
           return false;
 
         unsigned points_data_length = (points_data != shared_points_bytes) ? points_data->length : 0;
@@ -1435,7 +1457,7 @@ struct TupleVariationData
       if (unlikely (p + 1 > end)) return false;
       count = ((count & POINT_RUN_COUNT_MASK) << 8) | *p++;
     }
-    if (unlikely (!points.resize (count, false))) return false;
+    if (unlikely (!points.resize_dirty  (count))) return false;
 
     unsigned n = 0;
     unsigned i = 0;
@@ -1659,8 +1681,9 @@ struct item_variations_t
   bool instantiate_tuple_vars (const hb_hashmap_t<hb_tag_t, Triple>& normalized_axes_location,
                                const hb_hashmap_t<hb_tag_t, TripleDistances>& axes_triple_distances)
   {
+    optimize_scratch_t scratch;
     for (tuple_variations_t& tuple_vars : vars)
-      if (!tuple_vars.instantiate (normalized_axes_location, axes_triple_distances))
+      if (!tuple_vars.instantiate (normalized_axes_location, axes_triple_distances, scratch))
         return false;
 
     if (!build_region_list ()) return false;
@@ -1819,7 +1842,7 @@ struct item_variations_t
         }
       }
 
-      major_rows.clear ();
+      major_rows.reset ();
       for (unsigned minor = 0; minor < num_rows; minor++)
       {
 	const hb_vector_t<int>& row = delta_rows[start_row + minor];
