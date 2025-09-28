@@ -1499,8 +1499,8 @@ struct TupleValues
     VALUE_RUN_COUNT_MASK = 0x3F
   };
 
-  static unsigned compile (hb_array_t<const int> values, /* IN */
-			   hb_array_t<unsigned char> encoded_bytes /* OUT */)
+  static unsigned compile_unsafe (hb_array_t<const int> values, /* IN */
+				  unsigned char *encoded_bytes /* OUT */)
   {
     unsigned num_values = values.length;
     unsigned encoded_len = 0;
@@ -1509,24 +1509,23 @@ struct TupleValues
     {
       int val = values.arrayZ[i];
       if (val == 0)
-        encoded_len += encode_value_run_as_zeroes (i, encoded_bytes.sub_array (encoded_len), values);
+        encoded_len += encode_value_run_as_zeroes (i, encoded_bytes + encoded_len, values);
       else if ((int8_t) val == val)
-        encoded_len += encode_value_run_as_bytes (i, encoded_bytes.sub_array (encoded_len), values);
+        encoded_len += encode_value_run_as_bytes (i, encoded_bytes + encoded_len, values);
       else if ((int16_t) val == val)
-        encoded_len += encode_value_run_as_words (i, encoded_bytes.sub_array (encoded_len), values);
+        encoded_len += encode_value_run_as_words (i, encoded_bytes + encoded_len, values);
       else
-        encoded_len += encode_value_run_as_longs (i, encoded_bytes.sub_array (encoded_len), values);
+        encoded_len += encode_value_run_as_longs (i, encoded_bytes + encoded_len, values);
     }
     return encoded_len;
   }
 
   static unsigned encode_value_run_as_zeroes (unsigned& i,
-					      hb_array_t<unsigned char> encoded_bytes,
+					      unsigned char *it,
 					      hb_array_t<const int> values)
   {
     unsigned num_values = values.length;
     unsigned run_length = 0;
-    auto it = encoded_bytes.iter ();
     unsigned encoded_len = 0;
     while (i < num_values && values.arrayZ[i] == 0)
     {
@@ -1560,7 +1559,7 @@ struct TupleValues
   }
 
   static unsigned encode_value_run_as_bytes (unsigned &i,
-					     hb_array_t<unsigned char> encoded_bytes,
+					     unsigned char *it,
 					     hb_array_t<const int> values)
   {
     unsigned start = i;
@@ -1581,7 +1580,6 @@ struct TupleValues
     unsigned run_length = i - start;
 
     unsigned encoded_len = 0;
-    auto it = encoded_bytes.iter ();
 
     while (run_length >= 64)
     {
@@ -1589,10 +1587,9 @@ struct TupleValues
       encoded_len++;
 
       for (unsigned j = 0; j < 64; j++)
-      {
-        *it++ = static_cast<char> (values.arrayZ[start + j]);
-        encoded_len++;
-      }
+	it[j] = static_cast<char> (values.arrayZ[start + j]);
+      it += 64;
+      encoded_len += 64;
 
       start += 64;
       run_length -= 64;
@@ -1603,18 +1600,16 @@ struct TupleValues
       *it++ = (VALUES_ARE_BYTES | (run_length - 1));
       encoded_len++;
 
-      while (start < i)
-      {
-        *it++ = static_cast<char> (values.arrayZ[start++]);
-        encoded_len++;
-      }
+      for (unsigned j = 0; j < run_length; j++)
+        it[j] = static_cast<char> (values.arrayZ[start + j]);
+      encoded_len += run_length;
     }
 
     return encoded_len;
   }
 
   static unsigned encode_value_run_as_words (unsigned &i,
-					     hb_array_t<unsigned char> encoded_bytes,
+					     unsigned char *it,
 					     hb_array_t<const int> values)
   {
     unsigned start = i;
@@ -1641,7 +1636,6 @@ struct TupleValues
     }
 
     unsigned run_length = i - start;
-    auto it = encoded_bytes.iter ();
     unsigned encoded_len = 0;
     while (run_length >= 64)
     {
@@ -1678,7 +1672,7 @@ struct TupleValues
   }
 
   static unsigned encode_value_run_as_longs (unsigned &i,
-					     hb_array_t<unsigned char> encoded_bytes,
+					     unsigned char *it,
 					     hb_array_t<const int> values)
   {
     unsigned start = i;
@@ -1694,7 +1688,6 @@ struct TupleValues
     }
 
     unsigned run_length = i - start;
-    auto it = encoded_bytes.iter ();
     unsigned encoded_len = 0;
     while (run_length >= 64)
     {
