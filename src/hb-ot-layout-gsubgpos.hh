@@ -455,7 +455,7 @@ struct matcher_t
   HB_ALWAYS_INLINE
 #endif
   may_skip_t may_skip (const context_t *c,
-		       const hb_glyph_info_t       &info) const
+		       const hb_glyph_info_t &info) const
   {
     if (!c->check_glyph_property (&info, lookup_props))
       return SKIP_YES;
@@ -470,7 +470,7 @@ struct matcher_t
   }
 
   public:
-  unsigned int lookup_props = 0;
+  unsigned int lookup_props = (unsigned) -1;
   hb_mask_t mask = -1;
   bool ignore_zwnj = false;
   bool ignore_zwj = false;
@@ -706,7 +706,8 @@ struct hb_ot_apply_context_t :
   hb_direction_t direction;
   hb_mask_t lookup_mask = 1;
   unsigned int lookup_index = (unsigned) -1;
-  unsigned int lookup_props = 0;
+  unsigned int lookup_props = (unsigned) -1;
+  unsigned int cached_props = (unsigned) -1; /* Cached glyph properties for the current lookup. */
   unsigned int nesting_level_left = HB_MAX_NESTING_LEVEL;
 
   bool has_glyph_classes;
@@ -772,15 +773,22 @@ struct hb_ot_apply_context_t :
     return buffer->random_state;
   }
 
-  bool match_properties_mark (hb_codepoint_t  glyph,
+  HB_ALWAYS_INLINE
+  HB_HOT
+  bool match_properties_mark (const hb_glyph_info_t *info,
 			      unsigned int    glyph_props,
-			      unsigned int    match_props) const
+			      unsigned int    match_props,
+			      bool            cached) const
   {
     /* If using mark filtering sets, the high short of
      * match_props has the set index.
      */
     if (match_props & LookupFlag::UseMarkFilteringSet)
-      return gdef_accel.mark_set_covers (match_props >> 16, glyph);
+    {
+      if (cached && match_props == cached_props)
+	return _hb_glyph_info_matches (info);
+      return gdef_accel.mark_set_covers (match_props >> 16, info->codepoint);
+    }
 
     /* The second byte of match_props has the meaning
      * "ignore marks of attachment type different than
@@ -796,7 +804,8 @@ struct hb_ot_apply_context_t :
   HB_ALWAYS_INLINE
 #endif
   bool check_glyph_property (const hb_glyph_info_t *info,
-			     unsigned int  match_props) const
+			     unsigned match_props,
+			     bool cached = true) const
   {
     unsigned int glyph_props = _hb_glyph_info_get_glyph_props (info);
 
@@ -807,7 +816,7 @@ struct hb_ot_apply_context_t :
       return false;
 
     if (unlikely (glyph_props & HB_OT_LAYOUT_GLYPH_PROPS_MARK))
-      return match_properties_mark (info->codepoint, glyph_props, match_props);
+      return match_properties_mark (info, glyph_props, match_props, cached);
 
     return true;
   }
@@ -849,6 +858,10 @@ struct hb_ot_apply_context_t :
     }
     else
       _hb_glyph_info_set_glyph_props (&buffer->cur(), props);
+
+    if (cached_props != (unsigned) -1)
+      _hb_glyph_info_set_match (&buffer->cur(),
+				check_glyph_property (&buffer->cur(), cached_props, false));
   }
 
   void replace_glyph (hb_codepoint_t glyph_index)
@@ -875,7 +888,7 @@ struct hb_ot_apply_context_t :
   }
 };
 
-enum class hb_ot_lookup_cache_op_t
+enum class hb_ot_subtable_cache_op_t
 {
   CREATE,
   ENTER,
@@ -907,22 +920,22 @@ struct hb_accelerate_subtables_context_t :
 
   template <typename T>
   static inline auto cache_func_ (void *p,
-				  hb_ot_lookup_cache_op_t op,
+				  hb_ot_subtable_cache_op_t op,
 				  hb_priority<1>) HB_RETURN (void *, T::cache_func (p, op) )
   template <typename T=void>
   static inline void * cache_func_ (void *p,
-				    hb_ot_lookup_cache_op_t op HB_UNUSED,
+				    hb_ot_subtable_cache_op_t op HB_UNUSED,
 				    hb_priority<0>) { return (void *) false; }
   template <typename Type>
   static inline void * cache_func_to (void *p,
-				      hb_ot_lookup_cache_op_t op)
+				      hb_ot_subtable_cache_op_t op)
   {
     return cache_func_<Type> (p, op, hb_prioritize);
   }
 #endif
 
   typedef bool (*hb_apply_func_t) (const void *obj, hb_ot_apply_context_t *c);
-  typedef void * (*hb_cache_func_t) (void *p, hb_ot_lookup_cache_op_t op);
+  typedef void * (*hb_cache_func_t) (void *p, hb_ot_subtable_cache_op_t op);
 
   struct hb_applicable_t
   {
@@ -959,11 +972,11 @@ struct hb_accelerate_subtables_context_t :
     }
     bool cache_enter (hb_ot_apply_context_t *c) const
     {
-      return (bool) cache_func (c, hb_ot_lookup_cache_op_t::ENTER);
+      return (bool) cache_func (c, hb_ot_subtable_cache_op_t::ENTER);
     }
     void cache_leave (hb_ot_apply_context_t *c) const
     {
-      cache_func (c, hb_ot_lookup_cache_op_t::LEAVE);
+      cache_func (c, hb_ot_subtable_cache_op_t::LEAVE);
     }
 #endif
 
@@ -1008,10 +1021,10 @@ struct hb_accelerate_subtables_context_t :
      * and we allocate the cache opportunity to the costliest subtable.
      */
     unsigned cost = cache_cost (obj, hb_prioritize);
-    if (cost > cache_user_cost)
+    if (cost > subtable_cache_user_cost)
     {
-      cache_user_idx = i - 1;
-      cache_user_cost = cost;
+      subtable_cache_user_idx = i - 1;
+      subtable_cache_user_cost = cost;
     }
 #endif
 
@@ -1026,8 +1039,8 @@ struct hb_accelerate_subtables_context_t :
   unsigned i = 0;
 
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
-  unsigned cache_user_idx = (unsigned) -1;
-  unsigned cache_user_cost = 0;
+  unsigned subtable_cache_user_idx = (unsigned) -1;
+  unsigned subtable_cache_user_cost = 0;
 #endif
 };
 
@@ -1321,7 +1334,7 @@ static bool match_input (hb_ot_apply_context_t *c,
 	if (ligbase == LIGBASE_NOT_CHECKED)
 	{
 	  bool found = false;
-	  const auto *out = buffer->out_info;
+	  auto *out = buffer->out_info;
 	  unsigned int j = buffer->out_len;
 	  while (j && _hb_glyph_info_get_lig_id (&out[j - 1]) == first_lig_id)
 	  {
@@ -2610,13 +2623,13 @@ struct ContextFormat2_5
     unsigned c = (this+classDef).cost () * ruleSet.len;
     return c >= 4 ? c : 0;
   }
-  static void * cache_func (void *p, hb_ot_lookup_cache_op_t op)
+  static void * cache_func (void *p, hb_ot_subtable_cache_op_t op)
   {
     switch (op)
     {
-      case hb_ot_lookup_cache_op_t::CREATE:
+      case hb_ot_subtable_cache_op_t::CREATE:
 	return (void *) true;
-      case hb_ot_lookup_cache_op_t::ENTER:
+      case hb_ot_subtable_cache_op_t::ENTER:
       {
 	hb_ot_apply_context_t *c = (hb_ot_apply_context_t *) p;
 	if (!HB_BUFFER_TRY_ALLOCATE_VAR (c->buffer, syllable))
@@ -2628,14 +2641,14 @@ struct ContextFormat2_5
 	c->new_syllables = 255;
 	return (void *) true;
       }
-      case hb_ot_lookup_cache_op_t::LEAVE:
+      case hb_ot_subtable_cache_op_t::LEAVE:
       {
 	hb_ot_apply_context_t *c = (hb_ot_apply_context_t *) p;
 	c->new_syllables = (unsigned) -1;
 	HB_BUFFER_DEALLOCATE_VAR (c->buffer, syllable);
 	return nullptr;
       }
-      case hb_ot_lookup_cache_op_t::DESTROY:
+      case hb_ot_subtable_cache_op_t::DESTROY:
         return nullptr;
     }
     return nullptr;
@@ -3860,13 +3873,13 @@ struct ChainContextFormat2_5
   {
     return (this+lookaheadClassDef).cost () * ruleSet.len;
   }
-  static void * cache_func (void *p, hb_ot_lookup_cache_op_t op)
+  static void * cache_func (void *p, hb_ot_subtable_cache_op_t op)
   {
     switch (op)
     {
-      case hb_ot_lookup_cache_op_t::CREATE:
+      case hb_ot_subtable_cache_op_t::CREATE:
 	return (void *) true;
-      case hb_ot_lookup_cache_op_t::ENTER:
+      case hb_ot_subtable_cache_op_t::ENTER:
       {
 	hb_ot_apply_context_t *c = (hb_ot_apply_context_t *) p;
 	if (!HB_BUFFER_TRY_ALLOCATE_VAR (c->buffer, syllable))
@@ -3878,14 +3891,14 @@ struct ChainContextFormat2_5
 	c->new_syllables = 255;
 	return (void *) true;
       }
-      case hb_ot_lookup_cache_op_t::LEAVE:
+      case hb_ot_subtable_cache_op_t::LEAVE:
       {
 	hb_ot_apply_context_t *c = (hb_ot_apply_context_t *) p;
 	c->new_syllables = (unsigned) -1;
 	HB_BUFFER_DEALLOCATE_VAR (c->buffer, syllable);
 	return nullptr;
       }
-      case hb_ot_lookup_cache_op_t::DESTROY:
+      case hb_ot_subtable_cache_op_t::DESTROY:
         return nullptr;
     }
     return nullptr;
@@ -4414,20 +4427,20 @@ struct hb_ot_layout_lookup_accelerator_t
       thiz->digest.union_ (subtable.digest);
 
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
-    if (c_accelerate_subtables.cache_user_cost < 4)
-      c_accelerate_subtables.cache_user_idx = (unsigned) -1;
+    if (c_accelerate_subtables.subtable_cache_user_cost < 4)
+      c_accelerate_subtables.subtable_cache_user_idx = (unsigned) -1;
 
-    thiz->cache_user_idx = c_accelerate_subtables.cache_user_idx;
+    thiz->subtable_cache_user_idx = c_accelerate_subtables.subtable_cache_user_idx;
 
-    if (thiz->cache_user_idx != (unsigned) -1)
+    if (thiz->subtable_cache_user_idx != (unsigned) -1)
     {
-      thiz->cache = thiz->subtables[thiz->cache_user_idx].cache_func (nullptr, hb_ot_lookup_cache_op_t::CREATE);
-      if (!thiz->cache)
-	thiz->cache_user_idx = (unsigned) -1;
+      thiz->subtable_cache = thiz->subtables[thiz->subtable_cache_user_idx].cache_func (nullptr, hb_ot_subtable_cache_op_t::CREATE);
+      if (!thiz->subtable_cache)
+	thiz->subtable_cache_user_idx = (unsigned) -1;
     }
 
     for (unsigned i = 0; i < count; i++)
-      if (i != thiz->cache_user_idx)
+      if (i != thiz->subtable_cache_user_idx)
 	thiz->subtables[i].apply_cached_func = thiz->subtables[i].apply_func;
 #endif
 
@@ -4437,10 +4450,10 @@ struct hb_ot_layout_lookup_accelerator_t
   void fini ()
   {
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
-    if (cache)
+    if (subtable_cache)
     {
-      assert (cache_user_idx != (unsigned) -1);
-      subtables[cache_user_idx].cache_func (cache, hb_ot_lookup_cache_op_t::DESTROY);
+      assert (subtable_cache_user_idx != (unsigned) -1);
+      subtables[subtable_cache_user_idx].cache_func (subtable_cache, hb_ot_subtable_cache_op_t::DESTROY);
     }
 #endif
   }
@@ -4478,8 +4491,8 @@ struct hb_ot_layout_lookup_accelerator_t
   bool cache_enter (hb_ot_apply_context_t *c) const
   {
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
-    return cache_user_idx != (unsigned) -1 &&
-	   subtables[cache_user_idx].cache_enter (c);
+    return subtable_cache_user_idx != (unsigned) -1 &&
+	   subtables[subtable_cache_user_idx].cache_enter (c);
 #else
     return false;
 #endif
@@ -4487,7 +4500,7 @@ struct hb_ot_layout_lookup_accelerator_t
   void cache_leave (hb_ot_apply_context_t *c) const
   {
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
-    subtables[cache_user_idx].cache_leave (c);
+    subtables[subtable_cache_user_idx].cache_leave (c);
 #endif
   }
 
@@ -4495,9 +4508,9 @@ struct hb_ot_layout_lookup_accelerator_t
   hb_set_digest_t digest;
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
   public:
-  void *cache = nullptr;
+  void *subtable_cache = nullptr;
   private:
-  unsigned cache_user_idx = (unsigned) -1;
+  unsigned subtable_cache_user_idx = (unsigned) -1;
 #endif
   private:
   hb_accelerate_subtables_context_t::hb_applicable_t subtables[HB_VAR_ARRAY];

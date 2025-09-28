@@ -23,8 +23,6 @@ hb_base_sources = files(
   'hb-aat-ltag-table.hh',
   'hb-aat-map.cc',
   'hb-aat-map.hh',
-  'hb-aat-var-hvgl-table.cc',
-  'hb-aat-var-hvgl-table.hh',
   'hb-algs.hh',
   'hb-array.hh',
   'hb-atomic.hh',
@@ -409,6 +407,12 @@ hb_subset_sources = files(
   'hb-subset-plan.hh',
   'hb-subset-plan-member-list.hh',
   'hb-subset-serialize.cc',
+  'hb-subset-table.hh',
+  'hb-subset-table-layout.cc',
+  'hb-subset-table-var.cc',
+  'hb-subset-table-cff.cc',
+  'hb-subset-table-color.cc',
+  'hb-subset-table-other.cc',
   'graph/gsubgpos-context.cc',
   'graph/gsubgpos-context.hh',
   'graph/gsubgpos-graph.hh',
@@ -763,7 +767,6 @@ if get_option('tests').enabled()
     foreach name, source : noinst_programs
       executable(name, source, hb_version_h,
         include_directories: incconfig,
-        cpp_args: cpp_args + ['-UNDEBUG'],
         dependencies: libharfbuzz_dep,
         install: false,
       )
@@ -1098,6 +1101,14 @@ if get_option('tests').enabled()
       suite: ['src'],
     )
   endforeach
+
+  test('check-release-notes',
+    find_program('check-release-notes.py'),
+    args: [
+      meson.current_source_dir() / '..' / 'NEWS',
+      meson.project_version()
+    ],
+  )
 endif
 
 install_headers(hb_headers + hb_subset_headers, subdir: meson.project_name())

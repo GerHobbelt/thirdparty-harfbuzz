@@ -1347,7 +1347,7 @@ struct Lookup
     TRACE_DISPATCH (this, lookup_type);
     unsigned int count = get_subtable_count ();
     for (unsigned int i = 0; i < count; i++) {
-      typename context_t::return_t r = get_subtable<TSubTable> (i).dispatch (c, lookup_type, std::forward<Ts> (ds)...);
+      typename context_t::return_t r = get_subtable<TSubTable> (i).dispatch (c, lookup_type, ds...);
       if (c->stop_sublookup_iteration (r))
 	return_trace (r);
     }
@@ -2088,7 +2088,7 @@ struct ClassDef
     }
   }
   unsigned int get_class (hb_codepoint_t glyph_id,
-			  hb_ot_lookup_cache_t *cache) const
+			  hb_ot_layout_mapping_cache_t *cache) const
   {
     unsigned klass;
     if (cache && cache->get (glyph_id, &klass)) return klass;
@@ -2581,7 +2581,7 @@ struct hb_scalar_cache_t
       return scratch_cache;
     }
 
-    auto *cache = (hb_scalar_cache_t *) hb_malloc (sizeof (hb_scalar_cache_t) - sizeof (values) + sizeof (values[0]) * count);
+    auto *cache = (hb_scalar_cache_t *) hb_malloc (sizeof (hb_scalar_cache_t) - sizeof (static_values) + sizeof (static_values[0]) * count);
     if (unlikely (!cache)) return (hb_scalar_cache_t *) &Null(hb_scalar_cache_t);
 
     cache->length = count;
@@ -2599,6 +2599,7 @@ struct hb_scalar_cache_t
 
   void clear ()
   {
+    auto *values = &static_values[0];
     for (unsigned i = 0; i < length; i++)
       values[i] = INVALID;
   }
@@ -2611,6 +2612,7 @@ struct hb_scalar_cache_t
       *value = 0.f;
       return true;
     }
+    auto *values = &static_values[0];
     auto *cached_value = &values[i];
     if (*cached_value != INVALID)
     {
@@ -2624,13 +2626,14 @@ struct hb_scalar_cache_t
   void set (unsigned i, float value)
   {
     if (unlikely (i >= length)) return;
+    auto *values = &static_values[0];
     auto *cached_value = &values[i];
     *cached_value = roundf(value * MULTIPLIER);
   }
 
   private:
   unsigned length;
-  mutable hb_atomic_t<int> values[STATIC_LENGTH];
+  mutable hb_atomic_t<int> static_values[STATIC_LENGTH];
 };
 
 struct VarRegionList
@@ -3446,7 +3449,7 @@ struct ItemVariationStore
     for (unsigned i = 0; i < count; i++)
     {
       hb_inc_bimap_t *map = inner_maps.push ();
-      if (!c->propagate_error(inner_maps))
+      if (unlikely (!c->propagate_error(inner_maps)))
         return_trace(nullptr);
       auto &data = this+dataSets[i];
 
