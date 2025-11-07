@@ -18,6 +18,7 @@ tests = [
   'test-draw.c',
   'test-draw-varc.c',
   'test-extents.c',
+  'test-face.c',
   'test-font.c',
   'test-font-scale.c',
   'test-get-table-tags.c',
@@ -33,6 +34,7 @@ tests = [
   'test-ot-layout.c',
   'test-ot-ligature-carets.c',
   'test-ot-name.c',
+  'test-ot-math.c',
   'test-ot-meta.c',
   'test-ot-metrics.c',
   'test-ot-tag.c',
@@ -42,6 +44,7 @@ tests = [
   'test-subset-repacker.c',
   'test-set.c',
   'test-shape.c',
+  'test-shape-plan.c',
   'test-style.c',
   'test-subset.c',
   'test-subset-cmap.c',
@@ -69,7 +72,6 @@ tests = [
 
 if conf.get('HAVE_FREETYPE', 0) == 1
   tests += [
-    'test-ot-math.c',
     'test-ft.c',
   ]
 endif
@@ -80,15 +82,20 @@ if conf.get('HAVE_CORETEXT', 0) == 1
   ]
 endif
 
-if conf.get('HAVE_FREETYPE', 0) == 1 and conf.get('HAVE_PTHREAD', 0) == 1
+if conf.get('HAVE_DIRECTWRITE', 0) == 1
+  tests += [
+    'test-directwrite.cc',
+  ]
+endif
+
+if conf.get('HAVE_PTHREAD', 0) == 1
   tests += 'test-multithread.c'
 endif
 
 # Default test running environment
 env = environment()
-env.set('MALLOC_CHECK_', '2')
+env.set('MALLOC_CHECK_', '1')
 env.set('G_DEBUG', 'gc-friendly')
-env.set('G_SLICE', 'always-malloc')
 env.set('G_TEST_SRCDIR', meson.current_source_dir())
 env.set('G_TEST_BUILDDIR', meson.current_build_dir())
 
@@ -96,7 +103,9 @@ foreach source : tests
   cpp_args = []
   test_name = source.split('.')[0]
 
-  deps = [glib_dep, freetype_dep, thread_dep, libharfbuzz_dep, libharfbuzz_icu_dep]
+  deps = [libharfbuzz_dep,
+          libharfbuzz_cairo_dep,
+          libharfbuzz_icu_dep]
   suite = ['api']
   if test_name.contains('-subset') or test_name.contains('-instance')
     deps += libharfbuzz_subset_dep
@@ -108,9 +117,12 @@ foreach source : tests
   endif
 
   test(test_name, executable(test_name, source,
-    cpp_args:  cpp_args,
-    include_directories: [incconfig],
-    dependencies: deps,
-    install: false,
-  ), env: env, suite: suite)
+      cpp_args:  cpp_args,
+      include_directories: [incconfig],
+      dependencies: deps,
+      install: false,
+    ),
+    protocol: 'tap',
+    env: env,
+    suite: suite)
 endforeach

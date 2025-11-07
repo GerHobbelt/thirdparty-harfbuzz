@@ -27,6 +27,7 @@
 #ifndef HB_OT_KERN_TABLE_HH
 #define HB_OT_KERN_TABLE_HH
 
+#include "hb-aat-layout-common.hh"
 #include "hb-aat-layout-kerx-table.hh"
 
 
@@ -91,9 +92,10 @@ struct KernSubTableFormat3
   {
     set_t set;
     if (likely (glyphCount))
-      set.add_range (0, glyphCount - 1);
-    left_set.union_ (set);
-    right_set.union_ (set);
+    {
+      left_set.add_range (0, num_glyphs - 1);
+      right_set.add_range (0, num_glyphs - 1);
+    }
   }
 
   protected:
@@ -342,7 +344,7 @@ struct kern
   }
 
   bool apply (AAT::hb_aat_apply_context_t *c,
-	      const AAT::kern_accelerator_data_t *accel_data = nullptr) const
+	      const AAT::kern_accelerator_data_t &accel_data) const
   { return dispatch (c, accel_data); }
 
   template <typename context_t, typename ...Ts>
@@ -395,11 +397,12 @@ struct kern
 
     bool apply (AAT::hb_aat_apply_context_t *c) const
     {
-      return table->apply (c, &accel_data);
+      return table->apply (c, accel_data);
     }
 
     hb_blob_ptr_t<kern> table;
     AAT::kern_accelerator_data_t accel_data;
+    AAT::hb_aat_scratch_t scratch;
   };
 
   protected:

@@ -1,5 +1,9 @@
 tests = [
   'basics',
+  'bidi',
+  'cmap',
+  'cmap14',
+  'cmap4_overflow',
   'preprocess',
   'full-font',
   'cff-full-font',
@@ -29,14 +33,13 @@ tests = [
   'layout.context_format2',
   'layout.gdef-varstore',
   'layout.gdef-attachlist',
+  'layout.markfilteringset',
   'layout.notonastaliqurdu',
   'layout.tinos',
   'layout.duplicate_features',
   'layout.unsorted_featurelist',
   'layout.drop_feature',
   'no_layout_closure',
-  'cmap',
-  'cmap14',
   'sbix',
   'colr',
   'colr_glyphs',
@@ -59,6 +62,7 @@ tests = [
   'instantiate_colrv1',
   'instantiate_glyf',
   'instantiate_cff2',
+  'instantiate_cff2_tsb',
   'full_instance',
   'instance_feature_variations',
   'instance_no_double_free',
@@ -111,6 +115,7 @@ foreach t : tests
     # ideally better to break and let meson handles them in parallel
     timeout: 500,
     workdir: meson.current_build_dir() / '..' / '..',
+    protocol: 'tap',
     suite: 'subset',
   )
 endforeach
@@ -126,6 +131,7 @@ foreach t : repack_tests
       meson.current_source_dir() / 'data' / 'repack_tests' / fname,
     ],
     workdir: meson.current_build_dir() / '..' / '..',
+    protocol: 'tap',
     suite: ['subset', 'repack'],
   )
 endforeach
