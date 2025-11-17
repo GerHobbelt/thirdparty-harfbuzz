@@ -457,7 +457,7 @@ struct LigatureSubtable
   struct driver_context_t
   {
     static constexpr bool in_place = false;
-    enum LigActionFlags
+    enum LigActionFlags : unsigned int /* fix warning C4865: the underlying type will change from 'int' to 'unsigned int' when '/Zc:enumTypes' is specified on the command line */
     {
       LigActionLast	= 0x80000000,	/* This is the last action in the list. This also
 					 * implies storage. */

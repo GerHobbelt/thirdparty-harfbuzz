@@ -532,7 +532,7 @@ struct KerxSubTableFormat4
   struct driver_context_t
   {
     static constexpr bool in_place = true;
-    enum SubTableFlags
+    enum SubTableFlags : unsigned int /* fix warning C4865: the underlying type will change from 'int' to 'unsigned int' when '/Zc:enumTypes' is specified on the command line */
     {
       ActionType	= 0xC0000000,	/* A two-bit field containing the action type. */
       Unused		= 0x3F000000,	/* Unused - must be zero. */
@@ -829,7 +829,7 @@ struct KerxSubTableHeader
   unsigned   tuple_count () const { return tupleCount; }
   bool     is_horizontal () const { return !(coverage & Vertical); }
 
-  enum Coverage
+  enum Coverage : unsigned int /* fix warning C4865: the underlying type will change from 'int' to 'unsigned int' when '/Zc:enumTypes' is specified on the command line */
   {
     Vertical	= 0x80000000u,	/* Set if table has vertical kerning values. */
     CrossStream	= 0x40000000u,	/* Set if table has cross-stream kerning values. */
