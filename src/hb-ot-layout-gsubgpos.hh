@@ -523,9 +523,16 @@ struct skipping_iterator_t
 #endif
   void reset (unsigned int start_index_)
   {
+    // For GSUB forward iterator
     idx = start_index_;
     end = c->buffer->len;
-    matcher.syllable = start_index_ == c->buffer->idx ? c->buffer->cur().syllable () : 0;
+    matcher.syllable = c->buffer->cur().syllable();
+  }
+  void reset_back (unsigned int start_index_, bool from_out_buffer = false)
+  {
+    // For GSUB backward iterator
+    idx = start_index_;
+    matcher.syllable = c->buffer->cur().syllable();
   }
 
 #ifndef HB_OPTIMIZE_SIZE
@@ -1554,7 +1561,7 @@ static bool match_backtrack (hb_ot_apply_context_t *c,
   TRACE_APPLY (nullptr);
 
   auto &skippy_iter = c->iter_context;
-  skippy_iter.reset (c->buffer->backtrack_len ());
+  skippy_iter.reset_back (c->buffer->backtrack_len ());
   skippy_iter.set_match_func (match_func, match_data);
   skippy_iter.set_glyph_data (backtrack);
 
@@ -2919,9 +2926,9 @@ struct Context
   template <typename context_t, typename ...Ts>
   typename context_t::return_t dispatch (context_t *c, Ts&&... ds) const
   {
-    if (unlikely (!c->may_dispatch (this, &u.format))) return c->no_dispatch_return_value ();
-    TRACE_DISPATCH (this, u.format);
-    switch (u.format) {
+    if (unlikely (!c->may_dispatch (this, &u.format.v))) return c->no_dispatch_return_value ();
+    TRACE_DISPATCH (this, u.format.v);
+    switch (u.format.v) {
     case 1: hb_barrier (); return_trace (c->dispatch (u.format1, std::forward<Ts> (ds)...));
     case 2: hb_barrier (); return_trace (c->dispatch (u.format2, std::forward<Ts> (ds)...));
     case 3: hb_barrier (); return_trace (c->dispatch (u.format3, std::forward<Ts> (ds)...));
@@ -2935,7 +2942,7 @@ struct Context
 
   protected:
   union {
-  HBUINT16			format;		/* Format identifier */
+  struct { HBUINT16 v; }	format;		/* Format identifier */
   ContextFormat1_4<SmallTypes>	format1;
   ContextFormat2_5<SmallTypes>	format2;
   ContextFormat3		format3;
@@ -4220,9 +4227,9 @@ struct ChainContext
   template <typename context_t, typename ...Ts>
   typename context_t::return_t dispatch (context_t *c, Ts&&... ds) const
   {
-    if (unlikely (!c->may_dispatch (this, &u.format))) return c->no_dispatch_return_value ();
-    TRACE_DISPATCH (this, u.format);
-    switch (u.format) {
+    if (unlikely (!c->may_dispatch (this, &u.format.v))) return c->no_dispatch_return_value ();
+    TRACE_DISPATCH (this, u.format.v);
+    switch (u.format.v) {
     case 1: hb_barrier (); return_trace (c->dispatch (u.format1, std::forward<Ts> (ds)...));
     case 2: hb_barrier (); return_trace (c->dispatch (u.format2, std::forward<Ts> (ds)...));
     case 3: hb_barrier (); return_trace (c->dispatch (u.format3, std::forward<Ts> (ds)...));
@@ -4236,7 +4243,7 @@ struct ChainContext
 
   protected:
   union {
-  HBUINT16				format;	/* Format identifier */
+  struct { HBUINT16 v; }		format;	/* Format identifier */
   ChainContextFormat1_4<SmallTypes>	format1;
   ChainContextFormat2_5<SmallTypes>	format2;
   ChainContextFormat3			format3;
@@ -4311,7 +4318,7 @@ struct Extension
 {
   unsigned int get_type () const
   {
-    switch (u.format) {
+    switch (u.format.v) {
     case 1: hb_barrier (); return u.format1.get_type ();
     default:return 0;
     }
@@ -4319,7 +4326,7 @@ struct Extension
   template <typename X>
   const X& get_subtable () const
   {
-    switch (u.format) {
+    switch (u.format.v) {
     case 1: hb_barrier (); return u.format1.template get_subtable<typename T::SubTable> ();
     default:return Null (typename T::SubTable);
     }
@@ -4331,7 +4338,7 @@ struct Extension
   template <typename ...Ts>
   typename hb_subset_context_t::return_t dispatch (hb_subset_context_t *c, Ts&&... ds) const
   {
-    switch (u.format) {
+    switch (u.format.v) {
     case 1: hb_barrier (); return u.format1.subset (c);
     default: return c->default_return_value ();
     }
@@ -4340,9 +4347,9 @@ struct Extension
   template <typename context_t, typename ...Ts>
   typename context_t::return_t dispatch (context_t *c, Ts&&... ds) const
   {
-    if (unlikely (!c->may_dispatch (this, &u.format))) return c->no_dispatch_return_value ();
-    TRACE_DISPATCH (this, u.format);
-    switch (u.format) {
+    if (unlikely (!c->may_dispatch (this, &u.format.v))) return c->no_dispatch_return_value ();
+    TRACE_DISPATCH (this, u.format.v);
+    switch (u.format.v) {
     case 1: hb_barrier (); return_trace (u.format1.dispatch (c, std::forward<Ts> (ds)...));
     default:return_trace (c->default_return_value ());
     }
@@ -4350,7 +4357,7 @@ struct Extension
 
   protected:
   union {
-  HBUINT16		format;		/* Format identifier */
+  struct { HBUINT16 v; }	format;		/* Format identifier */
   ExtensionFormat1<T>	format1;
   } u;
 };
