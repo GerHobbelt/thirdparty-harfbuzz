@@ -40,13 +40,22 @@ using rebase_tent_result_scratch_t = hb_pair_t<rebase_tent_result_t, rebase_tent
 struct TupleVariationHeader
 {
   friend struct tuple_delta_t;
-  unsigned get_size (unsigned axis_count) const
-  { return min_size + get_all_tuples (axis_count).get_size (); }
+  unsigned get_size (unsigned axis_count_times_2) const
+  {
+    // This function is super hot in mega-var-fonts with hundreds of masters.
+    unsigned ti = tupleIndex;
+    if (unlikely ((ti & (TupleIndex::EmbeddedPeakTuple | TupleIndex::IntermediateRegion))))
+    {
+      unsigned count = ((ti & TupleIndex::EmbeddedPeakTuple) != 0) + ((ti & TupleIndex::IntermediateRegion) != 0) * 2;
+      return min_size + count * axis_count_times_2;
+    }
+    return min_size;
+  }
 
   unsigned get_data_size () const { return varDataSize; }
 
-  const TupleVariationHeader &get_next (unsigned axis_count) const
-  { return StructAtOffset<TupleVariationHeader> (this, get_size (axis_count)); }
+  const TupleVariationHeader &get_next (unsigned axis_count_times_2) const
+  { return StructAtOffset<TupleVariationHeader> (this, get_size (axis_count_times_2)); }
 
   bool unpack_axis_tuples (unsigned axis_count,
                            const hb_array_t<const F2DOT14> shared_tuples,
@@ -895,15 +904,15 @@ struct TupleVariationData
     return_trace (c->check_struct (this));
   }
 
-  unsigned get_size (unsigned axis_count) const
+  unsigned get_size (unsigned axis_count_times_2) const
   {
     unsigned total_size = min_size;
     unsigned count = tupleVarCount.get_count ();
     const TupleVariationHeader *tuple_var_header = &(get_tuple_var_header());
     for (unsigned i = 0; i < count; i++)
     {
-      total_size += tuple_var_header->get_size (axis_count) + tuple_var_header->get_data_size ();
-      tuple_var_header = &tuple_var_header->get_next (axis_count);
+      total_size += tuple_var_header->get_size (axis_count_times_2) + tuple_var_header->get_data_size ();
+      tuple_var_header = &tuple_var_header->get_next (axis_count_times_2);
     }
 
     return total_size;
@@ -1398,6 +1407,7 @@ struct TupleVariationData
       var_data = var_data_bytes_.as<TupleVariationData> ();
       tuples_left = var_data->tupleVarCount.get_count ();
       axis_count = axis_count_;
+      axis_count_times_2 = axis_count_ * 2;
       current_tuple = &var_data->get_tuple_var_header ();
       data_offset = 0;
       table_base = table_base_;
@@ -1421,11 +1431,11 @@ struct TupleVariationData
 	return false;
 
       current_tuple_size = TupleVariationHeader::min_size;
-      if (unlikely (!var_data_bytes.check_range (current_tuple, current_tuple_size)))
+      if (unlikely (!var_data_bytes.check_end ((const char *) current_tuple + current_tuple_size)))
 	return false;
 
-      current_tuple_size = current_tuple->get_size (axis_count);
-      if (unlikely (!var_data_bytes.check_range (current_tuple, current_tuple_size)))
+      current_tuple_size = current_tuple->get_size (axis_count_times_2);
+      if (unlikely (!var_data_bytes.check_end ((const char *) current_tuple + current_tuple_size)))
 	return false;
 
       return true;
@@ -1448,6 +1458,7 @@ struct TupleVariationData
     signed tuples_left;
     const TupleVariationData *var_data;
     unsigned int axis_count;
+    unsigned int axis_count_times_2;
     unsigned int data_offset;
     unsigned int current_tuple_size;
     const void *table_base;
@@ -1523,6 +1534,7 @@ struct TupleVariationData
   }
 
   template <typename T>
+  HB_ALWAYS_INLINE
   static bool decompile_deltas (const HBUINT8 *&p /* IN/OUT */,
 				hb_vector_t<T> &deltas /* IN/OUT */,
 				const HBUINT8 *end,
