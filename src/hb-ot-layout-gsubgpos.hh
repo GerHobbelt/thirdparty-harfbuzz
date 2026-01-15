@@ -831,7 +831,7 @@ struct hb_ot_apply_context_t :
     if (glyph_props & match_props & LookupFlag::IgnoreFlags)
       return false;
 
-    if (unlikely (glyph_props & HB_OT_LAYOUT_GLYPH_PROPS_MARK))
+    if (glyph_props & HB_OT_LAYOUT_GLYPH_PROPS_MARK)
       return match_properties_mark (info, glyph_props, match_props);
 
     return true;
@@ -1994,7 +1994,6 @@ static inline bool context_would_apply_lookup (hb_would_apply_context_t *c,
 }
 
 template <typename HBUINT>
-HB_ALWAYS_INLINE
 static bool context_apply_lookup (hb_ot_apply_context_t *c,
 				  unsigned int inputCount, /* Including the first glyph (not matched) */
 				  const HBUINT input[], /* Array of input values--start with second glyph */
@@ -2276,7 +2275,7 @@ struct RuleSet
     skippy_iter.reset (c->buffer->idx);
     skippy_iter.set_match_func (match_always, nullptr);
     skippy_iter.set_glyph_data ((HBUINT16 *) nullptr);
-    unsigned unsafe_to = (unsigned) -1, unsafe_to1 = 0, unsafe_to2 = 0;
+    unsigned unsafe_to = (unsigned) -1, unsafe_to1, unsafe_to2 = 0;
     hb_glyph_info_t *first = nullptr, *second = nullptr;
     bool matched = skippy_iter.next ();
     if (likely (matched))
@@ -2289,7 +2288,7 @@ struct RuleSet
       }
 
       first = &c->buffer->info[skippy_iter.idx];
-      unsafe_to = skippy_iter.idx + 1;
+      unsafe_to1 = skippy_iter.idx + 1;
     }
     else
     {
@@ -3136,7 +3135,6 @@ static inline bool chain_context_would_apply_lookup (hb_would_apply_context_t *c
 }
 
 template <typename HBUINT>
-HB_ALWAYS_INLINE
 static bool chain_context_apply_lookup (hb_ot_apply_context_t *c,
 					unsigned int backtrackCount,
 					const HBUINT backtrack[],
@@ -3473,7 +3471,7 @@ struct ChainRuleSet
     skippy_iter.reset (c->buffer->idx);
     skippy_iter.set_match_func (match_always, nullptr);
     skippy_iter.set_glyph_data ((HBUINT16 *) nullptr);
-    unsigned unsafe_to = (unsigned) -1, unsafe_to1 = 0, unsafe_to2 = 0;
+    unsigned unsafe_to = (unsigned) -1, unsafe_to1, unsafe_to2 = 0;
     hb_glyph_info_t *first = nullptr, *second = nullptr;
     bool matched = skippy_iter.next ();
     if (likely (matched))
