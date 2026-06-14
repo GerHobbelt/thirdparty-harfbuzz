@@ -66,8 +66,10 @@ static bool custom_text;
 static void
 rebuild_buffer (const char *text)
 {
+  /* strdup first -- text may alias current_text. */
+  char *new_text = strdup (text);
   free (current_text);
-  current_text = strdup (text);
+  current_text = new_text;
 
   demo_font_clear_cache (current_demo_font);
   demo_atlas_clear (renderer->get_atlas ());
@@ -77,7 +79,11 @@ rebuild_buffer (const char *text)
   demo_buffer_move_to (buffer, &top_left);
   demo_buffer_add_text (buffer, text, current_demo_font, 1);
   demo_view_reset (vu);
-  demo_view_display (vu, buffer);
+  /* Don't call demo_view_display here: it may run from a
+   * microtask (e.g. the font-fetch .then() callback) where the
+   * canvas back-buffer won't swap to the front.  Leave
+   * needs_redraw=true (set by demo_view_reset) so the next
+   * main_loop_iter renders inside a proper rAF tick. */
 }
 
 extern "C" {
@@ -101,7 +107,7 @@ web_load_font (const char *data, int len)
 
   /* Flush old font state */
   demo_font_destroy (current_demo_font);
-  current_demo_font = demo_font_create (font, renderer->get_atlas ());
+  current_demo_font = demo_font_create (font, renderer->get_atlas (), false);
 
   rebuild_buffer (custom_text ? current_text : default_text_en);
   demo_font_print_stats (current_demo_font);
@@ -114,6 +120,58 @@ web_set_text (const char *utf8)
   rebuild_buffer (utf8);
 }
 
+/* Apply a comma-separated list of variation settings
+ * ("wght=400,wdth=100") to the current font, then rebuild
+ * the buffer so the new axis values take effect.  Cheap
+ * to call repeatedly: suitable for live slider updates. */
+EMSCRIPTEN_KEEPALIVE void
+web_set_variations (const char *settings)
+{
+  if (!current_font) return;
+
+  /* Caps the axis count: no font ships close to this. */
+  hb_variation_t vars[32];
+  unsigned n = 0;
+  const char *p = settings;
+  while (p && *p && n < (sizeof vars / sizeof vars[0]))
+  {
+    const char *end = strchr (p, ',');
+    int len = end ? (int) (end - p) : (int) strlen (p);
+    if (hb_variation_from_string (p, len, &vars[n]))
+      n++;
+    p = end ? end + 1 : nullptr;
+  }
+  hb_font_set_variations (current_font, vars, n);
+
+  rebuild_buffer (custom_text ? current_text : default_text_en);
+}
+
+EMSCRIPTEN_KEEPALIVE void
+web_set_features (const char *settings)
+{
+  hb_feature_t feats[64];
+  unsigned n = 0;
+  const char *p = settings;
+  while (p && *p && n < 64)
+  {
+    const char *end = strchr (p, ',');
+    int len = end ? (int) (end - p) : (int) strlen (p);
+    if (hb_feature_from_string (p, len, &feats[n]))
+      n++;
+    p = end ? end + 1 : nullptr;
+  }
+  demo_buffer_set_features (feats, n);
+  rebuild_buffer (custom_text ? current_text : default_text_en);
+}
+
+EMSCRIPTEN_KEEPALIVE void
+web_set_palette (unsigned palette_index)
+{
+  if (!current_demo_font) return;
+  demo_font_set_palette (current_demo_font, palette_index);
+  rebuild_buffer (custom_text ? current_text : default_text_en);
+}
+
 EMSCRIPTEN_KEEPALIVE const char *
 web_get_text ()
 {
@@ -124,6 +182,19 @@ EMSCRIPTEN_KEEPALIVE void
 web_toggle_animation ()
 {
   demo_view_key_func (vu, 32 /* GLFW_KEY_SPACE */, 0, 1, 0);
+}
+
+EMSCRIPTEN_KEEPALIVE void
+web_set_dark (int dark)
+{
+  /* Toggle dark mode via the key handler if the current
+   * state doesn't match the request.  We can't check
+   * vu->dark_mode directly (opaque type), so track it
+   * locally. */
+  static bool is_dark = false;
+  if ((!is_dark) == (!dark)) return;
+  is_dark = !is_dark;
+  demo_view_key_func (vu, 66 /* GLFW_KEY_B */, 0, 1, 0);
 }
 
 EMSCRIPTEN_KEEPALIVE void
@@ -187,9 +258,22 @@ static void
 cursor_func (GLFWwindow *window, double x, double y)
 { demo_view_motion_func (vu, x, y); }
 
+static const char *arg_text = nullptr;
+static const char *arg_font = nullptr;
+
 int
-main ()
+main (int argc, char **argv)
 {
+  /* Accept --text=... and --font=... so the JS shell can forward
+   * URL parameters.  Everything else is ignored. */
+  for (int i = 1; i < argc; i++)
+  {
+    if (!strncmp (argv[i], "--text=", 7))
+      arg_text = argv[i] + 7;
+    else if (!strncmp (argv[i], "--font=", 7))
+      arg_font = argv[i] + 7;
+  }
+
   if (!glfwInit ())
   {
     fprintf (stderr, "Failed to initialize GLFW\n");
@@ -226,7 +310,7 @@ main ()
     glViewport (0, 0, fb_width, fb_height);
   }
 
-  renderer = demo_renderer_create_gl (window);
+  renderer = demo_renderer_create_gl (window, false);
   vu = demo_view_create (renderer, window);
 
   current_blob = hb_blob_create ((const char *) default_font,
@@ -235,14 +319,21 @@ main ()
 				 NULL, NULL);
   current_face = hb_face_create (current_blob, 0);
   current_font = hb_font_create (current_face);
-  current_demo_font = demo_font_create (current_font, renderer->get_atlas ());
+  current_demo_font = demo_font_create (current_font, renderer->get_atlas (), false);
 
-  current_text = strdup (default_text_combined);
+  current_text = strdup (arg_text ? arg_text : default_text_combined);
+  if (arg_text)
+    custom_text = true;
 
   buffer = demo_buffer_create ();
   demo_point_t top_left = {0, 0};
   demo_buffer_move_to (buffer, &top_left);
-  demo_buffer_add_text (buffer, current_text, current_demo_font, 1);
+  /* When ?font= is pending, skip initial glyph upload -- the
+   * async font load will replace the font anyway, and we'd
+   * upload defaults-into-atlas just to throw them away.  Buffer
+   * stays empty until web_load_font's rebuild_buffer runs. */
+  if (!arg_font)
+    demo_buffer_add_text (buffer, current_text, current_demo_font, 1);
 
   demo_font_print_stats (current_demo_font);
 

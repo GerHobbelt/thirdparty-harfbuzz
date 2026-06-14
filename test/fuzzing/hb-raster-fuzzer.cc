@@ -20,6 +20,13 @@ extern "C" int LLVMFuzzerTestOneInput (const uint8_t *data, size_t size)
   }
   hb_raster_paint_set_foreground (paint, HB_COLOR (0, 0, 0, 255));
 
+  /* Cap font scale so malicious fonts don't produce huge surfaces. */
+  int x_scale, y_scale;
+  hb_font_get_scale (input.font, &x_scale, &y_scale);
+  if (x_scale > 1000 || x_scale < -1000) x_scale = 1000;
+  if (y_scale > 1000 || y_scale < -1000) y_scale = 1000;
+  hb_font_set_scale (input.font, x_scale, y_scale);
+
   unsigned glyph_count = hb_face_get_glyph_count (input.face);
   unsigned limit = glyph_count > 16 ? 16 : glyph_count;
 
@@ -29,8 +36,10 @@ extern "C" int LLVMFuzzerTestOneInput (const uint8_t *data, size_t size)
   {
     float x = (float) ((gid % 4) * 40);
     float y = (float) ((gid / 4) * 40);
-    hb_raster_draw_glyph (draw, input.font, gid, x, y);
-    hb_raster_paint_glyph (paint, input.font, gid, x, y, 0, HB_COLOR (0, 0, 0, 255));
+    hb_raster_draw_set_transform (draw, 1.f, 0.f, 0.f, 1.f, x, y);
+    hb_raster_draw_glyph (draw, input.font, gid);
+    hb_raster_paint_set_transform (paint, 1.f, 0.f, 0.f, 1.f, x, y);
+    hb_raster_paint_glyph (paint, input.font, gid);
   }
 
   hb_raster_image_t *draw_image = hb_raster_draw_render (draw);

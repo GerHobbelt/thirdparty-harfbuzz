@@ -39,7 +39,7 @@ jobs:
           zlib1g-dev \
           help2man
     - name: Setup Emscripten
-      uses: mymindstorm/setup-emsdk@6ab9eb1bda2574c4ddb79809fc9247783eaf9021 # v14
+      uses: mymindstorm/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984 # v16
       with:
         version: latest
     - name: Setup Python
@@ -60,6 +60,8 @@ jobs:
         meson compile -Cbuild
     - name: Generate Documentation
       run: ninja -Cbuild harfbuzz-doc
+    - name: Run Doc Tests
+      run: meson test -Cbuild --print-errorlogs harfbuzz-doc-check
     - name: Build Web Demos
       run: |
         bash util/gpu/web/build.sh

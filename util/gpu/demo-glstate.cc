@@ -10,12 +10,17 @@ struct demo_glstate_t {
 };
 
 demo_glstate_t *
-demo_glstate_create (void)
+demo_glstate_create (bool draw_only)
 {
   demo_glstate_t *st = (demo_glstate_t *) calloc (1, sizeof (demo_glstate_t));
 
-  st->program = demo_shader_create_program ();
+  st->program = demo_shader_create_program (draw_only);
   st->atlas = demo_atlas_create (1024 * 1024);
+
+  /* Bind the program so demo_font_t can upload the palette
+   * uniform during glyph upload (which happens before the first
+   * render, i.e. before demo_view_setup re-binds it). */
+  glUseProgram (st->program);
 
   return st;
 }
@@ -42,7 +47,7 @@ demo_glstate_setup (demo_glstate_t *st)
   demo_glstate_set_foreground (st, 0.f, 0.f, 0.f, 1.f);
 
   glEnable (GL_BLEND);
-  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glBlendFunc (GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 demo_atlas_t *

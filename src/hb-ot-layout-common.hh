@@ -637,7 +637,7 @@ struct FeatureParamsCharacterVariants
     return characters.len;
   }
 
-  unsigned get_size () const
+  size_t get_size () const
   { return min_size + characters.len * HBUINT24::static_size; }
 
   void collect_name_ids (hb_set_t *nameids_to_retain /* OUT */) const
@@ -1282,7 +1282,7 @@ struct Lookup
   TSubTable& get_subtable (unsigned int i)
   { return this+get_subtables<TSubTable> ()[i]; }
 
-  unsigned int get_size () const
+  size_t get_size () const
   {
     const HBUINT16 &markFilteringSet = StructAfter<const HBUINT16> (subTable);
     if (lookupFlag & LookupFlag::UseMarkFilteringSet)
@@ -2797,7 +2797,7 @@ struct VarRegionList
     return !regions.in_error ();
   }
 
-  unsigned int get_size () const { return min_size + VarRegionAxis::static_size * axisCount * regionCount; }
+  size_t get_size () const { return min_size + VarRegionAxis::static_size * axisCount * regionCount; }
 
   public:
   HBUINT16	axisCount;
@@ -2877,7 +2877,7 @@ struct VarData
   unsigned int get_row_size () const
   { return (wordCount () + regionIndices.len) * (longWords () ? 2 : 1); }
 
-  unsigned int get_size () const
+  size_t get_size () const
   { return min_size
 	 - regionIndices.min_size + regionIndices.get_size ()
 	 + itemCount * get_row_size ();
@@ -3250,7 +3250,7 @@ struct VarData
 
 struct MultiVarData
 {
-  unsigned int get_size () const
+  size_t get_size () const
   { return min_size
 	 - regionIndices.min_size + regionIndices.get_size ()
 	 + StructAfter<CFF2Index> (regionIndices).get_size ();
@@ -3645,7 +3645,7 @@ struct DeltaSetIndexMapFormat01
 {
   friend struct DeltaSetIndexMap;
 
-  unsigned get_size () const
+  size_t get_size () const
   { return min_size + mapCount * get_width (); }
 
   private:
@@ -4811,7 +4811,7 @@ struct HintingDevice
 
   public:
 
-  unsigned int get_size () const
+  size_t get_size () const
   {
     unsigned int f = deltaFormat;
     if (unlikely (f < 1 || f > 3 || startSize > endSize)) return 3 * HBUINT16::static_size;
