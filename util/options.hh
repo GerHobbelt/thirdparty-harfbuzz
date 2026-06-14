@@ -286,6 +286,27 @@ option_parser_t::parse (int *argc, char ***argv, bool ignore_error)
   return true;
 }
 
+struct iteration_options_t
+{
+  void add_options (option_parser_t *parser)
+  {
+    GOptionEntry entries[] =
+    {
+      {"num-iterations",	'n', G_OPTION_FLAG_IN_MAIN,
+				G_OPTION_ARG_INT,	&this->num_iterations,	"Run N iterations (default: 1)",	"N"},
+      {nullptr}
+    };
+    parser->add_group (entries,
+		       "iterations",
+		       "Iteration options:",
+		       "Options controlling repeated execution",
+		       this,
+		       false);
+  }
+
+  unsigned int num_iterations = 1;
+};
+
 #endif // HAVE_GLIB_H
 
 
@@ -323,12 +344,14 @@ parse_color (const char *s,
   sa = 255;
   if (sscanf (s, "%2x%2x%2x%2x", &sr, &sg, &sb, &sa) <= 2)
   {
-    if (sscanf (s, "%1x%1x%1x%1x", &sr, &sg, &sb, &sa) >= 3)
+    int n = sscanf (s, "%1x%1x%1x%1x", &sr, &sg, &sb, &sa);
+    if (n >= 3)
     {
       sr *= 17;
       sg *= 17;
       sb *= 17;
-      sa *= 17;
+      if (n >= 4)
+	sa *= 17;
       ret = true;
     }
   }
@@ -344,6 +367,30 @@ parse_color (const char *s,
   }
 
   return ret;
+}
+
+static inline bool
+parse_1to4_doubles (const char *arg,
+                    double *t,
+                    double *r,
+                    double *b,
+                    double *l)
+{
+  double tt, rr, bb, ll;
+  switch (sscanf (arg, "%lf%*[ ,]%lf%*[ ,]%lf%*[ ,]%lf", &tt, &rr, &bb, &ll))
+  {
+    case 1: rr = tt; HB_FALLTHROUGH;
+    case 2: bb = tt; HB_FALLTHROUGH;
+    case 3: ll = rr; HB_FALLTHROUGH;
+    case 4:
+      if (t) *t = tt;
+      if (r) *r = rr;
+      if (b) *b = bb;
+      if (l) *l = ll;
+      return true;
+    default:
+      return false;
+  }
 }
 
 

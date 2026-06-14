@@ -1958,6 +1958,7 @@ struct TupleValues
       return true;
     }
 
+    public:
     void skip (unsigned n)
     {
       while (n)
@@ -1971,6 +1972,7 @@ struct TupleValues
       }
     }
 
+    private:
     template <bool scaled>
     void _add_to (hb_array_t<float> out, float scale = 1.0f)
     {
@@ -2045,14 +2047,6 @@ struct TupleValues
     public:
     void add_to (hb_array_t<float> out, float scale = 1.0f)
     {
-      unsigned n = out.length;
-
-      if (scale == 0.0f)
-      {
-        skip (n);
-	return;
-      }
-
 #ifndef HB_OPTIMIZE_SIZE
       // The following branch is supposed to speed things up by avoiding
       // the multiplication in _add_to<> if scale is 1.0f.

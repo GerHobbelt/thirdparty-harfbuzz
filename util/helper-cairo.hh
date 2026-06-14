@@ -122,29 +122,19 @@ helper_cairo_create_scaled_font (const font_options_t *font_opts,
   cairo_font_options_set_color_palette (font_options, view_opts->palette);
 #endif
 #ifdef HAVE_CAIRO_FONT_OPTIONS_GET_CUSTOM_PALETTE_COLOR
-  if (view_opts->custom_palette)
+  if (view_opts->custom_palette_entries)
   {
-    char **entries = g_strsplit (view_opts->custom_palette, ",", -1);
-    unsigned idx = 0;
-    for (unsigned i = 0; entries[i]; i++)
+    for (unsigned i = 0; i < view_opts->custom_palette_entries->len; i++)
     {
-      const char *p = strchr (entries[i], '=');
-      if (!p)
-        p = entries[i];
-      else
-      {
-	sscanf (entries[i], "%u", &idx);
-        p++;
-      }
-
-      unsigned fr, fg, fb, fa;
-      fr = fg = fb = fa = 0;
-      if (parse_color (p, fr, fg,fb, fa))
-	cairo_font_options_set_custom_palette_color (font_options, idx, fr / 255., fg / 255., fb / 255., fa / 255.);
-
-      idx++;
+      auto &entry =
+        g_array_index (view_opts->custom_palette_entries,
+                       typename view_options_t::custom_palette_entry_t, i);
+      cairo_font_options_set_custom_palette_color (font_options, entry.index,
+                                                   entry.color.r / 255.,
+                                                   entry.color.g / 255.,
+                                                   entry.color.b / 255.,
+                                                   entry.color.a / 255.);
     }
-    g_strfreev (entries);
   }
 #endif
 
@@ -550,22 +540,61 @@ helper_cairo_create_context (double w, double h,
 
 
   unsigned int fr, fg, fb, fa, br, bg, bb, ba;
-  const char *color;
-  br = bg = bb = ba = 255;
-  color = view_opts->back ? view_opts->back : DEFAULT_BACK;
-  parse_color (color, br, bg, bb, ba);
-  fr = fg = fb = 0; fa = 255;
-  color = view_opts->fore ? view_opts->fore : DEFAULT_FORE;
-  parse_color (color, fr, fg, fb, fa);
+  br = view_opts->background_color.r;
+  bg = view_opts->background_color.g;
+  bb = view_opts->background_color.b;
+  ba = view_opts->background_color.a;
+  fr = view_opts->foreground_color.r;
+  fg = view_opts->foreground_color.g;
+  fb = view_opts->foreground_color.b;
+  fa = view_opts->foreground_color.a;
+  bool foreground_has_color = false;
+  bool foreground_has_alpha = false;
+  bool stroke_has_color = false;
+  bool stroke_has_alpha = false;
+  using rgba_color_t = typename view_options_t::rgba_color_t;
+
+  if (view_opts->foreground_use_palette &&
+      view_opts->foreground_palette &&
+      view_opts->foreground_palette->len)
+  {
+    auto &first = g_array_index (view_opts->foreground_palette,
+				 rgba_color_t, 0);
+    fr = first.r;
+    fg = first.g;
+    fb = first.b;
+    fa = first.a;
+    foreground_has_color = view_opts->foreground_palette->len > 1;
+    for (unsigned i = 0; i < view_opts->foreground_palette->len; i++)
+    {
+      auto &c = g_array_index (view_opts->foreground_palette,
+			       rgba_color_t, i);
+      foreground_has_color |= c.r != c.g || c.g != c.b;
+      foreground_has_alpha |= c.a != 255;
+    }
+  }
+  else
+  {
+    foreground_has_color = fr != fg || fg != fb;
+    foreground_has_alpha = fa != 255;
+  }
+
+  if (view_opts->stroke_enabled)
+  {
+    auto &stroke = view_opts->stroke_color;
+    stroke_has_color = stroke.r != stroke.g || stroke.g != stroke.b;
+    stroke_has_alpha = stroke.a != 255;
+  }
 
   if (content == CAIRO_CONTENT_ALPHA)
   {
     if (view_opts->show_extents ||
-	br != bg || bg != bb ||
-	fr != fg || fg != fb)
+			br != bg || bg != bb ||
+			foreground_has_color ||
+			stroke_has_color)
       content = CAIRO_CONTENT_COLOR;
   }
-  if (ba != 255)
+  if (ba != 255 || foreground_has_alpha || stroke_has_alpha)
     content = CAIRO_CONTENT_COLOR_ALPHA;
 
   cairo_surface_t *surface;
@@ -590,7 +619,7 @@ helper_cairo_create_context (double w, double h,
       cairo_set_source_rgba (cr, 1., 1., 1., br / 255.);
       cairo_paint (cr);
       cairo_set_source_rgba (cr, 1., 1., 1.,
-			     (fr / 255.) * (fa / 255.) + (br / 255) * (1 - (fa / 255.)));
+			     (fr / 255.) * (fa / 255.) + (br / 255.) * (1 - (fa / 255.)));
       break;
     default:
     case CAIRO_CONTENT_COLOR:
