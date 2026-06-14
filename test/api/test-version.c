@@ -70,6 +70,10 @@ test_version (void)
   g_assert_true (!hb_version_atleast (major, minor, micro+1));
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_version_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

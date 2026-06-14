@@ -81,6 +81,10 @@ test_subset_gpos_pairpos1_vf (void)
   hb_face_destroy (face_wa);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_gpos_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

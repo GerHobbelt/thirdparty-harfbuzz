@@ -206,6 +206,10 @@ test_hb_repack_with_cy_struct (void)
 }
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_repacker_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

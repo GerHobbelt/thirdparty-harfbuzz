@@ -28,6 +28,8 @@
 
 #include <hb-gpu.h>
 
+#ifdef HAVE_GLIB_H
+
 #include <glib.h>
 
 #define SUBSET_FONT_BASE_PATH "test/subset/data/fonts/"
@@ -114,8 +116,16 @@ static GOptionEntry entries[] =
   {nullptr}
 };
 
+#endif // HAVE_GLIB_H
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_benchmark_gpu_main (cnt, arr)
+#endif
+
 int main (int argc, char **argv)
 {
+#ifdef HAVE_GLIB_H
+
   benchmark::Initialize (&argc, argv);
 
   GOptionContext *context = g_option_context_new ("");
@@ -162,4 +172,15 @@ int main (int argc, char **argv)
 
   if (tests != default_tests)
     free (tests);
+
+  return EXIT_SUCCESS;
+
+#else // HAVE_GLIB_H
+
+  fprintf (
+      stderr,
+      "hb-benchmark-gpu utility is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+
+#endif // HAVE_GLIB_H
 }

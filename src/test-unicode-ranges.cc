@@ -58,6 +58,10 @@ test_get_unicode_range_bit ()
   test (0x110000, -1);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main() hb_test_unicode_ranges_main ()
+#endif
+
 int
 main ()
 {

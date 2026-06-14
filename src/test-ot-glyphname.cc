@@ -31,6 +31,10 @@
 #define hb_blob_create_from_file_or_fail(x)  hb_blob_get_empty ()
 #endif
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ot_glyphname_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

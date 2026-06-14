@@ -93,6 +93,10 @@ test_maxp_and_hmtx (void)
 }
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_be_glyph_advance_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

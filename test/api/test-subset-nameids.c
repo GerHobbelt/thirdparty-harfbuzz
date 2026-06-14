@@ -105,6 +105,10 @@ test_subset_name_overrides (void)
 }
 #endif
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_nameids_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

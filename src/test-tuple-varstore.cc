@@ -152,8 +152,14 @@ test_decompile_cvar ()
     hb_always_assert (tuple_variations.tuple_vars[1].compiled_deltas.arrayZ[i] == compiled_deltas_2[i]);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_tuple_varstore_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
   test_decompile_cvar ();
+
+  return 0;
 }

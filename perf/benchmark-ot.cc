@@ -36,4 +36,8 @@ BENCHMARK_CAPTURE (BM_hb_ot_tags_from_script_and_language, LATIN en_US, HB_SCRIP
 BENCHMARK_CAPTURE (BM_hb_ot_tags_from_script_and_language, COMMON none, HB_SCRIPT_LATIN, nullptr);
 BENCHMARK_CAPTURE (BM_hb_ot_tags_from_script_and_language, LATIN none, HB_SCRIPT_LATIN, nullptr);
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_benchmark_ot_main (cnt, arr)
+#endif
+
 BENCHMARK_MAIN();

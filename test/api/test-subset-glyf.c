@@ -388,6 +388,10 @@ test_subset_glyf_iftb_requirements (void)
 
 // TODO(grieger): test for long loca generation.
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_glyf_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

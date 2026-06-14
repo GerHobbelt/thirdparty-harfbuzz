@@ -1277,6 +1277,10 @@ test_set_next_many_out_of_order_pages (void) {
   hb_set_destroy(set);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_set_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

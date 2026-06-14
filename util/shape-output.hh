@@ -32,6 +32,8 @@
 #include "output-options.hh"
 
 
+#ifdef HAVE_GLIB_H
+
 struct shape_output_t : output_options_t<>
 {
   void add_options (option_parser_t *parser)
@@ -157,5 +159,6 @@ struct shape_output_t : output_options_t<>
   hb_buffer_serialize_flags_t serialize_flags = HB_BUFFER_SERIALIZE_FLAG_DEFAULT;
 };
 
+#endif // HAVE_GLIB_H
 
 #endif

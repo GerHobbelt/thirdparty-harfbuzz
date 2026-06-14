@@ -74,6 +74,10 @@ test_ot_meta_reference_entry (void)
   hb_face_destroy (face);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ot_meta_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

@@ -40,6 +40,8 @@
 #include <string>
 #include <vector>
 
+#ifdef HAVE_GLIB_H
+
 #define WINDOW_W 700
 #define WINDOW_H 700
 
@@ -439,5 +441,7 @@ struct gpu_output_t
   demo_font_t *demo_font_ = nullptr;
   demo_buffer_t *buf = nullptr;
 };
+
+#endif // HAVE_GLIB_H
 
 #endif /* GPU_OUTPUT_HH */

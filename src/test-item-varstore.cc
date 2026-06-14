@@ -129,9 +129,15 @@ test_item_variations_overflow ()
   hb_always_assert (varidx_map.get (131069) == 0x00037FFEu);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_item_varstore_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
   test_item_variations ();
   test_item_variations_overflow ();
+
+  return 0;
 }

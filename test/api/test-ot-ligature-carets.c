@@ -162,6 +162,10 @@ test_ot_layout_get_ligature_carets_empty (void)
   hb_face_destroy (face);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ot_ligature_carets_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

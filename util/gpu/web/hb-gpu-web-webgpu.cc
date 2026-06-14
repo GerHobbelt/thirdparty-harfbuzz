@@ -33,6 +33,8 @@
 
 #define HB_NO_PRAGMA_GCC_DIAGNOSTIC
 
+#if defined(__EMSCRIPTEN__)
+
 #include <emscripten.h>
 #include <emscripten/html5.h>
 #include <webgpu/webgpu.h>
@@ -1014,6 +1016,10 @@ init_demo ()
 }
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_gpu_web_webgpu_util_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
@@ -1075,3 +1081,5 @@ main (int argc, char **argv)
 
   return 0;
 }
+
+#endif // __EMSCRIPTEN__

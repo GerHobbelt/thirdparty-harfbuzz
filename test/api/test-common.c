@@ -321,6 +321,10 @@ test_types_feature (void)
   g_assert_true (0 == strcmp ("abcd[1:4]=2", buf));
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_common_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

@@ -2735,6 +2735,10 @@ test_dont_duplicate_virtual ()
 // TODO(garretrieger): update will_overflow tests to check the overflows array.
 // TODO(garretrieger): add tests for priority raising.
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_repacker_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
@@ -2782,4 +2786,6 @@ main (int argc, char **argv)
   // TODO(grieger): test with extensions already mixed in as well.
   // TODO(grieger): test two layer ext promotion setup.
   // TODO(grieger): test sorting by subtables per byte in ext. promotion.
+
+  return 0;
 }

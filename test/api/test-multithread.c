@@ -123,6 +123,10 @@ test_body (gconstpointer data)
   free (threads);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_multithread_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

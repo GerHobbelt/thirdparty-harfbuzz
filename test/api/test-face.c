@@ -75,6 +75,10 @@ test_create_from_blob_using (const void *user_data)
   hb_face_destroy (face);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_face_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

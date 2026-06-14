@@ -1,5 +1,7 @@
 #include "hb-benchmark.hh"
 
+#ifdef HAVE_GLIB_H
+
 #include <glib.h>
 
 #define SUBSET_FONT_BASE_PATH "test/subset/data/fonts/"
@@ -154,6 +156,8 @@ static void print_usage (const char *prgname)
   g_print ("Usage: %s [OPTIONS] [FONTFILE]\n", prgname);
 }
 
+#endif // HAVE_GLIB_H
+
 
 #if defined(BUILD_MONOLITHIC)
 #define main  harfbuzz_perf_shape_benchmark_main
@@ -162,6 +166,8 @@ static void print_usage (const char *prgname)
 extern "C"
 int main(int argc, const char** argv)
 {
+#ifdef HAVE_GLIB_H
+
   const char *prgname = g_path_get_basename (argv[0]);
 
   GOptionContext *context = g_option_context_new ("");
@@ -243,4 +249,12 @@ int main(int argc, const char** argv)
   benchmark::RunSpecifiedBenchmarks (BENCHMARK_FAMILY_ID, false);
   benchmark::Shutdown();
   return 0;
+
+#else // HAVE_GLIB_H
+
+  fprintf (stderr, "hb-benchmark-shape utility is not supported in this "
+		   "non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+
+#endif // HAVE_GLIB_H
 }

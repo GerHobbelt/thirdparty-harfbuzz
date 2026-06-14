@@ -41,6 +41,8 @@
 
 #define HB_NO_PRAGMA_GCC_DIAGNOSTIC
 
+#if defined(__EMSCRIPTEN__)
+
 #include <emscripten.h>
 #include <emscripten/html5.h>
 
@@ -263,6 +265,10 @@ cursor_func (GLFWwindow *window, double x, double y)
 static const char *arg_text = nullptr;
 static const char *arg_font = nullptr;
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_gpu_web_util_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
@@ -346,3 +352,5 @@ main (int argc, char **argv)
   /* Not reached */
   return 0;
 }
+
+#endif // __EMSCRIPTEN__

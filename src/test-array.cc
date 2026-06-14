@@ -67,6 +67,10 @@ test_reverse_invalid ()
   hb_always_assert (a == expected);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_array_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
@@ -76,4 +80,6 @@ main (int argc, char **argv)
   test_reverse ();
   test_reverse_range ();
   test_reverse_invalid ();
+
+  return 0;
 }

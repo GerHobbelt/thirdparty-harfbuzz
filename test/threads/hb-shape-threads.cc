@@ -14,7 +14,7 @@
 
 #define SUBSET_FONT_BASE_PATH "test/subset/data/fonts/"
 
-struct test_input_t
+static struct test_input_t
 {
   const char *font_path;
   const char *text_path;
@@ -145,6 +145,11 @@ static void test_backend (const char *backend,
   hb_font_destroy (font);
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_shape_threads_main (cnt, arr)
+#endif
+
 int main(int argc, char** argv)
 {
   if (argc > 1)
@@ -183,4 +188,6 @@ int main(int argc, char** argv)
 
   if (tests != default_tests)
     free (tests);
+
+  return 0;
 }

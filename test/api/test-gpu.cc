@@ -29,6 +29,8 @@
 #include <hb-ot.h>
 #include <cmath>
 
+#ifdef HAVE_GLIB_H
+
 #define FONT_FILE      "fonts/Roboto-Regular.abc.ttf"
 #define COLR_FONT_FILE "fonts/test_glyphs-glyf_colr_1.ttf"
 
@@ -606,10 +608,18 @@ test_shapes (void)
   hb_gpu_draw_destroy (draw);
 }
 
+#endif // HAVE_GLIB_H
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_gpu_main (cnt, arr)
+#endif
 
 int
 main (int argc, char **argv)
 {
+#ifdef HAVE_GLIB_H
+
   hb_test_init (&argc, &argv);
 
   hb_test_add (test_create_destroy);
@@ -635,4 +645,12 @@ main (int argc, char **argv)
   hb_test_add (test_paint_recycle_blob);
 
   return hb_test_run ();
+
+#else // HAVE_GLIB_H
+
+  fprintf (stderr, "hb-test-gpu utility is not supported in this "
+		   "non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+
+#endif // HAVE_GLIB_H
 }

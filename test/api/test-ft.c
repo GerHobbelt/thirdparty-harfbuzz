@@ -29,6 +29,8 @@
 
 #include "hb-ft.h"
 
+#ifdef HAVE_GLIB_H
+
 #include FT_FONT_FORMATS_H
 
 static FT_Library ft_library;
@@ -206,9 +208,18 @@ found:
   cleanup_freetype ();
 }
 
+#endif // HAVE_GLIB_H
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ft_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
+#ifdef HAVE_GLIB_H
+
   hb_test_init (&argc, &argv);
 
   hb_test_add (test_native_ft_basic);
@@ -216,4 +227,12 @@ main (int argc, char **argv)
   hb_test_add (test_native_ft_glyph_name_zero_size_probe);
 
   return hb_test_run ();
+
+#else
+  fprintf (stderr, "hb_test_ft tool is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+
+#endif
+
+
 }

@@ -481,6 +481,10 @@ test_ot_layout_lookup_collect_glyphs_qahiri (void)
   hb_set_destroy (output);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ot_collect_glyphs_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

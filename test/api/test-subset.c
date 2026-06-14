@@ -403,6 +403,10 @@ test_subset_cff2_get_charstring_data_lifetime (void)
 
 #endif
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

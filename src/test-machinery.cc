@@ -39,6 +39,10 @@ struct hb_void_lazy_loader_t : hb_lazy_loader_t<void, hb_void_lazy_loader_t>
   static void* get_null () { return nullptr; }
 };
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_machinery_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

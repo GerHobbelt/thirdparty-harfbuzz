@@ -215,6 +215,10 @@ test_ot_var_axis_on_zero_named_instance (void)
   hb_face_destroy (face);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ot_face_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

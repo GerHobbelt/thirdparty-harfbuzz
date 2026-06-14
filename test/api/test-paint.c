@@ -831,6 +831,10 @@ test_push_clip_path_round_trip (void)
 }
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_paint_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

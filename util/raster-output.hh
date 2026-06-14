@@ -38,6 +38,7 @@
 #include <math.h>
 #include <vector>
 
+
 static const char *raster_supported_formats[] = {
 #ifdef HAVE_PNG
   "png",
@@ -52,6 +53,9 @@ static const char *raster_supported_formats[] = {
 #else
 #define HB_RASTER_DEFAULT_OUTPUT_FORMAT "ppm"
 #endif
+
+
+#ifdef HAVE_GLIB_H
 
 struct raster_output_t : output_options_t<true>, view_options_t
 {
@@ -870,6 +874,8 @@ struct raster_output_t : output_options_t<true>, view_options_t
   hb_direction_t     direction     = HB_DIRECTION_INVALID;
   std::vector<line_t> lines;
 };
+
+#endif // HAVE_GLIB_H
 
 #undef HB_RASTER_DEFAULT_OUTPUT_FORMAT
 

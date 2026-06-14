@@ -27,6 +27,10 @@
 #include "hb-set.hh"
 #include <string>
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_map_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

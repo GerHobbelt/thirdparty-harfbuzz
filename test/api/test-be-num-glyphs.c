@@ -68,6 +68,10 @@ test_maxp_and_loca (void)
 }
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_be_num_glyphs_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

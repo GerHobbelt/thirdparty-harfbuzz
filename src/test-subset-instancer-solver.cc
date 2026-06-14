@@ -37,6 +37,10 @@ static inline bool approx (Triple a, Triple b)
 static inline bool approx (double a, double b)
 { return abs (a - b) < 0.000001; }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_instancer_solver_main (cnt, arr)
+#endif
+
 /* tests ported from
  * https://github.com/fonttools/fonttools/blob/main/Tests/varLib/instancer/solver_test.py */
 int
@@ -476,4 +480,6 @@ main (int argc, char **argv)
     hb_always_assert (out[0].first == 1.0);
     hb_always_assert (approx (out[0].second, Triple (0.5, 0.625, 0.75)));
   }
+
+  return 0;
 }

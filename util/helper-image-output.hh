@@ -29,6 +29,8 @@
 
 #include "hb.hh"
 
+#ifdef HAVE_GLIB_H
+
 #ifdef HAVE_CAIRO
 #include <cairo.h>
 #endif
@@ -327,5 +329,7 @@ helper_image_write_to_ansi_stream_rgb24 (const uint32_t        *data,
 
   return HELPER_IMAGE_STATUS_SUCCESS;
 }
+
+#endif // HAVE_GLIB_H
 
 #endif

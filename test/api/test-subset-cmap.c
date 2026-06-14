@@ -179,6 +179,10 @@ test_subset_cmap_noto_color_emoji_non_consecutive_glyphs (void)
 
 // TODO(rsheeter) test cmap to no codepoints
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_cmap_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

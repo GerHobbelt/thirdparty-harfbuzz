@@ -170,6 +170,10 @@ test_subset_invalid_hmtx (void)
   hb_face_destroy (face);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_hmtx_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

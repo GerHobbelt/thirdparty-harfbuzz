@@ -49,6 +49,8 @@
 #include <vector>
 
 
+#ifdef HAVE_GLIB_H
+
 const unsigned DEFAULT_FONT_SIZE = FONT_SIZE_UPEM;
 const unsigned SUBPIXEL_BITS = 6;
 
@@ -327,6 +329,8 @@ struct ft_raster_output_t : output_options_t<true>
   FT_Face    ft_face = nullptr;
 };
 
+#endif // HAVE_GLIB_H
+
 
 
 #if defined(BUILD_MONOLITHIC)
@@ -336,7 +340,17 @@ struct ft_raster_output_t : output_options_t<true>
 int
 main (int argc, char **argv)
 {
+
+#ifdef HAVE_GLIB_H
+
   using main_t = main_font_text_t<shape_consumer_t<ft_raster_output_t>, font_options_t, shape_text_options_t>;
   argv_t args (argc, argv);
   return batch_main<main_t, true> (args.argc, args.argv);
+
+#else
+
+  fprintf (stderr, "hb-ft-raster tool is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+
+#endif
 }

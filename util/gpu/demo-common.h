@@ -22,7 +22,19 @@
 #include <vector>
 
 #ifndef HB_GPU_NO_GLFW
+
+#if __has_include("GL/glew.h")
 #include <GL/glew.h>
+#endif
+#if __has_include("glad/gl.h")
+#include <glad/gl.h>
+#endif
+
+#if defined(__APPLE__)
+#include <OpenGL/glu.h>
+#else
+#include <GL/glu.h>
+#endif
 
 #ifdef __APPLE__
 #  define GL_SILENCE_DEPRECATION

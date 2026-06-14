@@ -172,6 +172,10 @@ test_subset_identity_HVAR_retaingids (void)
 }
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_hwar_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

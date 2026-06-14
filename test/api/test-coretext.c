@@ -102,6 +102,10 @@ test_native_coretext_variations (void)
   CFRelease (ctfont);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_context_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

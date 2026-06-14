@@ -31,6 +31,7 @@
 #include "shape-consumer.hh"
 #include "text-options.hh"
 
+
 const unsigned DEFAULT_FONT_SIZE = 256;
 const unsigned SUBPIXEL_BITS = 6;
 
@@ -41,7 +42,16 @@ const unsigned SUBPIXEL_BITS = 6;
 int
 main (int argc, char **argv)
 {
+#ifdef HAVE_GLIB_H
+
   using main_t = main_font_text_t<shape_consumer_t<raster_output_t>, font_options_t, shape_text_options_t>;
   argv_t args (argc, argv);
   return batch_main<main_t, true> (args.argc, args.argv);
+
+#else
+
+  fprintf (stderr, "hb-raster utility is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+
+#endif // HAVE_GLIB_H
 }

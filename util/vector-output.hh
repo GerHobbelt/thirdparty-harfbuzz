@@ -37,6 +37,8 @@
 #include "hb-ot.h"
 
 
+#ifdef HAVE_GLIB_H
+
 static const char *vector_supported_formats[] = {
   "svg",
   "pdf",
@@ -535,5 +537,7 @@ struct vector_output_t : output_options_t<>, view_options_t
   std::vector<hb_color_t> custom_palette_values;
   std::vector<bool> custom_palette_has_value;
 };
+
+#endif // HAVE_GLIB_H
 
 #endif

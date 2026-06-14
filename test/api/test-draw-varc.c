@@ -250,6 +250,10 @@ test_hb_draw_varc_conditional (void)
 }
 #endif
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_draw_var_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

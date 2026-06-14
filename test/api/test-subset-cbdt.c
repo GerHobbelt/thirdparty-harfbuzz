@@ -139,6 +139,10 @@ test_subset_cbdt_index_format_3 (void)
 // opaque blobs when subsetting so don't need to be tested separately).
 // TODO: add a test that keeps no codepoints.
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_cbdt_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

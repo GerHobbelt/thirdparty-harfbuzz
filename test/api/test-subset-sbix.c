@@ -69,6 +69,10 @@ test_subset_sbix_keep_one (void)
 // TODO: add a test that doesn't use contiguous codepoints.
 // TODO: add a test that keeps no codepoints.
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_sbix_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

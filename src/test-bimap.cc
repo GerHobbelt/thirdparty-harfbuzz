@@ -27,6 +27,10 @@
 #include "hb.hh"
 #include "hb-bimap.hh"
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_bimap_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

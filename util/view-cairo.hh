@@ -31,6 +31,8 @@
 #include "output-options.hh"
 #include "helper-cairo.hh"
 
+#ifdef HAVE_GLIB_H
+
 struct view_cairo_t : view_options_t, output_options_t<>
 {
   ~view_cairo_t ()
@@ -319,5 +321,7 @@ view_cairo_t::render (const font_options_t *font_opts)
   helper_cairo_destroy_context (cr);
   cairo_scaled_font_destroy (scaled_font);
 }
+
+#endif // HAVE_GLIB_H
 
 #endif

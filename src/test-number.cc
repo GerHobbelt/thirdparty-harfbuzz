@@ -27,6 +27,10 @@
 #include "hb-number.hh"
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_number_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

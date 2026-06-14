@@ -227,8 +227,12 @@ test_set_glyph_extents_with_transform (void)
 
 /* ── main ────────────────────────────────────────────────────────── */
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_raster_main (cnt, arr)
+#endif
+
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
   hb_test_init (&argc, &argv);
 

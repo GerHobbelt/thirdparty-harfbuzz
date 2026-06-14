@@ -1047,7 +1047,7 @@ int main(int argc, const char** argv)
   return batch_main<subset_main_t, true> (args.argc, args.argv);
 }
 
-#else
+#else // HAVE_GLIB_H
 
 
 #if defined(BUILD_MONOLITHIC)
@@ -1060,4 +1060,4 @@ int main(int argc, const char** argv)
   return EXIT_FAILURE;
 }
 
-#endif
+#endif // HAVE_GLIB_H

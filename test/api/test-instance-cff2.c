@@ -64,6 +64,10 @@ test_instance_cff2 (void)
 
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_instance_cff2_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

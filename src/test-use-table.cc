@@ -1,5 +1,9 @@
 #include "hb-ot-shaper-use-table.hh"
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_use_table_main (cnt, arr)
+#endif
+
 int main (int argc, char **argv)
 {
   if (argc != 2)

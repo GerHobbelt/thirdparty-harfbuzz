@@ -30,6 +30,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_gsub_get_alternates_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

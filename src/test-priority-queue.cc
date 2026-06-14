@@ -73,9 +73,15 @@ test_extract ()
   hb_always_assert (queue.is_empty ());
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_priority_queue_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
   test_insert ();
   test_extract ();
+
+  return 0;
 }

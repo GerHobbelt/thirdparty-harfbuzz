@@ -523,7 +523,7 @@ int main(int argc, const char** argv)
   {
     fprintf (stderr, "usage: %s font-file.ttf\n\n"
 		     "This tools is unsupported and crashes on bad data.\nDon't use it.\n", argv[0]);
-    exit (1);
+    return EXIT_FAILURE;
   }
 
   hb_blob_t *blob = hb_blob_create_from_file_or_fail (argv[1]);
@@ -537,5 +537,5 @@ int main(int argc, const char** argv)
 #endif
   hb_blob_destroy (blob);
 
-  return 0;
+  return EXIT_SUCCESS;
 }

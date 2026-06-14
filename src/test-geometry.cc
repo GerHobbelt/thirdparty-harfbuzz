@@ -27,6 +27,10 @@
 #include "hb-geometry.hh"
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_geometry_main (cnt, arr)
+#endif
+
 int
 main (int argc HB_UNUSED, char **argv HB_UNUSED)
 {

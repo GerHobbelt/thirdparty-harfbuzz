@@ -193,6 +193,10 @@ test_shape_list (void)
   g_assert_true (!strcmp (shapers[i - 1], "fallback"));
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_shape_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

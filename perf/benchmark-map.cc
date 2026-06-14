@@ -100,4 +100,8 @@ BENCHMARK(BM_MapLookupHit)
     ->Range(1 << 4, 1 << 20); // Map size
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_benchmark_map_main (cnt, arr)
+#endif
+
 BENCHMARK_MAIN();

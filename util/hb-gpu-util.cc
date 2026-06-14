@@ -32,6 +32,9 @@
 
 #include <hb-ot.h>
 
+
+#ifdef HAVE_GLIB_H
+
 const unsigned DEFAULT_FONT_SIZE = FONT_SIZE_UPEM;
 const unsigned SUBPIXEL_BITS = 0;
 
@@ -180,6 +183,8 @@ struct gpu_main_t : base_t
   }
 };
 
+#endif // HAVE_GLIB_H
+
 #if defined(BUILD_MONOLITHIC)
 #define main(cnt, arr) hb_gpu_util_main (cnt, arr)
 #endif
@@ -187,7 +192,16 @@ struct gpu_main_t : base_t
 int
 main (int argc, char **argv)
 {
+#ifdef HAVE_GLIB_H
+
   argv_t args (argc, argv);
   gpu_main_t driver;
   return driver (args.argc, args.argv);
+
+#else
+
+  fprintf (stderr, "hb-gpu-util utility is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+
+#endif // HAVE_GLIB_H
 }

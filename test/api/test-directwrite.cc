@@ -133,6 +133,10 @@ test_native_directwrite_variations (void)
 }
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_directwrite_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

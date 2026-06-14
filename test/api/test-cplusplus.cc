@@ -107,6 +107,10 @@ test_smart_ptrs (void)
   g_assert_true (pb != pb2);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_cplusplus_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

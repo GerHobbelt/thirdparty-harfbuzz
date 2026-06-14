@@ -244,6 +244,10 @@ test_advance_tt_var_gvar_infer (void)
   hb_font_destroy (font);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ot_metrics_tt_var_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

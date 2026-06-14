@@ -208,6 +208,10 @@ test_extents_cff2_vsindex_named_instance (void)
   hb_font_destroy (font);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ot_extents_cff_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

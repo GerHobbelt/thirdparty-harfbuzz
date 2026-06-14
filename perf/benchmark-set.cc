@@ -141,4 +141,8 @@ BENCHMARK(BM_SetCopy)
         {{1 << 10, 1 << 16}, // Set Size
          {2, 512}});          // Density
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_benchmark_set_main (cnt, arr)
+#endif
+
 BENCHMARK_MAIN();

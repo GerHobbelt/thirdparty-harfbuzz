@@ -562,6 +562,10 @@ test_ot_tag_full (void)
   test_tags (HB_SCRIPT_INVALID, "xy", HB_OT_MAX_TAGS_PER_SCRIPT, HB_OT_MAX_TAGS_PER_LANGUAGE, 0, 0);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ot_tag_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

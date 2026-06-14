@@ -185,6 +185,10 @@ static void test_concat ()
   hb_always_assert (it6.len () == 2);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_iter_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

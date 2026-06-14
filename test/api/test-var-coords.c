@@ -76,6 +76,10 @@ test_get_var_get_axis_infos (void)
   hb_face_destroy (face);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_var_Coords_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

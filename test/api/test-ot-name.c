@@ -106,6 +106,10 @@ test_ot_name (void)
   g_assert_cmpuint (0, ==, hb_ot_name_get_utf8 (face, name_id, hb_language_from_string ("fa_IR", -1), &text_size, text));
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ot_name_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

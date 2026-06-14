@@ -29,6 +29,10 @@
 
 using OT::Layout::Common::Coverage;
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_serialize_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

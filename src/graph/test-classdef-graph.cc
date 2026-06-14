@@ -287,10 +287,16 @@ static void test_running_class_size_estimates_with_locally_consecutive_glyphs ()
   hb_always_assert(check_add_class_def_size(estimator, map, 3, {2, 3}));
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_classdef_graph_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
   test_class_and_coverage_size_estimates ();
   test_running_class_and_coverage_size_estimates ();
   test_running_class_size_estimates_with_locally_consecutive_glyphs ();
+
+  return 0;
 }

@@ -480,6 +480,10 @@ test_hb_ot_color_png (void)
   hb_font_destroy (cbdt_font);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_ot_color_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

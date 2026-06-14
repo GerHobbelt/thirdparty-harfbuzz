@@ -22,6 +22,12 @@
  * PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  */
 
+#include <hb.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#ifdef HAVE_GLIB_H
+
 #include "batch.hh"
 #include "vector-output.hh"
 #include "font-options.hh"
@@ -32,6 +38,8 @@
 const unsigned DEFAULT_FONT_SIZE = FONT_SIZE_UPEM;
 const unsigned SUBPIXEL_BITS = 6;
 
+#endif // HAVE_GLIB_H
+
 #if defined(BUILD_MONOLITHIC)
 #define main(cnt, arr) hb_vector_main (cnt, arr)
 #endif
@@ -39,7 +47,17 @@ const unsigned SUBPIXEL_BITS = 6;
 int
 main (int argc, char **argv)
 {
+#ifdef HAVE_GLIB_H
+
   using main_t = main_font_text_t<shape_consumer_t<vector_output_t>, font_options_t, shape_text_options_t>;
   argv_t args (argc, argv);
   return batch_main<main_t, true> (args.argc, args.argv);
+
+#else // HAVE_GLIB_H
+
+  fprintf (stderr, "hb-vector-all utility is not supported in this non-GNU-Glib build.\n");
+  return EXIT_FAILURE;
+
+#endif // HAVE_GLIB_H
+
 }

@@ -1,3 +1,6 @@
+
+#if !defined(BUILD_MONOLITHIC)
+
 #ifdef HB_FEATURES_H
 #include HB_FEATURES_H
 #endif
@@ -182,4 +185,6 @@
 #ifdef HB_HAS_WASM
 #include "hb-wasm-api.cc"
 #include "hb-wasm-shape.cc"
+#endif
+
 #endif

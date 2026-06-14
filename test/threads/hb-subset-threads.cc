@@ -20,7 +20,7 @@ enum operation_t
 
 #define SUBSET_FONT_BASE_PATH "test/subset/data/fonts/"
 
-struct test_input_t
+static struct test_input_t
 {
   const char *font_path;
   const unsigned max_subset_size;
@@ -152,6 +152,11 @@ static void test_operation (operation_t operation,
   hb_face_destroy (face);
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_subset_threads_main (cnt, arr)
+#endif
+
 int main(int argc, char** argv)
 {
   if (argc > 1)
@@ -179,4 +184,6 @@ int main(int argc, char** argv)
 
   if (tests != default_tests)
     free (tests);
+
+  return 0;
 }

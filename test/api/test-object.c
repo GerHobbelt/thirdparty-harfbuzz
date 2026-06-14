@@ -351,6 +351,10 @@ OBJECT_WITH_IMMUTABILITY (font)
 OBJECT_WITH_IMMUTABILITY (font_funcs)
 OBJECT_WITH_IMMUTABILITY (unicode_funcs)
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_object_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
