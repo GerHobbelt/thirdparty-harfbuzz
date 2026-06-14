@@ -76,6 +76,10 @@ write_ppm (const std::vector<uint8_t> &pixels,
   fclose (f);
 }
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_ft_raster_all_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

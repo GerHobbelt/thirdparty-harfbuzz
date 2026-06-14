@@ -3,7 +3,7 @@
  * Copyright 2026 Behdad Esfahbod. All Rights Reserved.
  */
 
-#ifdef _WIN32
+#ifndef _USE_MATH_DEFINES
 #define _USE_MATH_DEFINES
 #endif
 

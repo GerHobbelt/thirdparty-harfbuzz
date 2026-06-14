@@ -32,6 +32,10 @@
 const unsigned DEFAULT_FONT_SIZE = FONT_SIZE_UPEM;
 const unsigned SUBPIXEL_BITS = 6;
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_vector_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

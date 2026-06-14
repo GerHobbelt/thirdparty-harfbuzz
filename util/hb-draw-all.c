@@ -3,6 +3,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_draw_all_main (cnt, arr)
+#endif
+
 int main (int argc, char **argv)
 {
   if (argc < 2)

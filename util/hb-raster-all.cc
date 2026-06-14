@@ -79,6 +79,11 @@ write_ppm (hb_raster_image_t *img, const char *dir, unsigned gid)
   fclose (f);
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_raster_all_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

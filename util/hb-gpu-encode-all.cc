@@ -33,6 +33,11 @@
 #include <cinttypes>
 #include <chrono>
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_gpu_encode_all_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

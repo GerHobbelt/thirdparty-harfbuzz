@@ -34,6 +34,10 @@
 const unsigned DEFAULT_FONT_SIZE = 256;
 const unsigned SUBPIXEL_BITS = 6;
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_raster_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

@@ -328,6 +328,11 @@ struct ft_raster_output_t : output_options_t<true>
 };
 
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_ft_raster_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {

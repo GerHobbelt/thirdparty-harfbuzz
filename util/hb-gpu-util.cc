@@ -180,6 +180,10 @@ struct gpu_main_t : base_t
   }
 };
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_gpu_util_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
