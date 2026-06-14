@@ -29,7 +29,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Setup Ccache
-      uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1.2.20
+      uses: hendrikmuhs/ccache-action@33522472633dbd32578e909b315f5ee43ba878ce # v1.2.22
       with:
         variant: sccache
         key: ${{ github.job }}-${{ matrix.os }}-${{ matrix.ARCH }}
@@ -53,7 +53,8 @@ jobs:
             -Dglib=enabled `
             -Dfreetype=enabled `
             -Dgdi=enabled `
-            -Ddirectwrite=enabled
+            -Ddirectwrite=enabled `
+            -Dgpu_demo=disabled
     - name: Build
       run: meson compile -Cbuild
     - name: Test
