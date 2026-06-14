@@ -47,7 +47,8 @@ static const unsigned SUBPIXEL_BITS = 0;
 int main(int argc, const char** argv)
 {
   using main_t = main_font_text_t<shape_consumer_t<shape_output_t>, font_options_t, shape_text_options_t>;
-  return batch_main<main_t> (argc, argv);
+  argv_t args (argc, argv);
+  return batch_main<main_t> (args.argc, args.argv);
 }
 
 #else

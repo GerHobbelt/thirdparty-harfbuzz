@@ -1028,7 +1028,7 @@ subset_main_t::add_options ()
 
   GOptionEntry entries[] =
   {
-    {G_OPTION_REMAINING,	0, G_OPTION_FLAG_IN_MAIN,
+    {G_OPTION_REMAINING,	0, G_OPTION_FLAG_IN_MAIN | G_OPTION_FLAG_FILENAME,
 			      G_OPTION_ARG_CALLBACK,	(gpointer) &collect_rest,	nullptr,	"[FONT-FILE] [TEXT]"},
     {nullptr}
   };
@@ -1043,7 +1043,8 @@ subset_main_t::add_options ()
 
 int main(int argc, const char** argv)
 {
-  return batch_main<subset_main_t, true> (argc, argv);
+  argv_t args (argc, argv);
+  return batch_main<subset_main_t, true> (args.argc, args.argv);
 }
 
 #else
