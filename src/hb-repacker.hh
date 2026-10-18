@@ -238,7 +238,7 @@ bool _try_isolating_subgraphs (const hb_vector_t<graph::overflow_record_t>& over
              roots_to_isolate.get_population (),
              sorted_graph.next_space ());
 
-  sorted_graph.isolate_subgraph (roots_to_isolate);
+  if (!sorted_graph.isolate_subgraph (roots_to_isolate)) return false;
   sorted_graph.move_to_new_space (roots_to_isolate);
 
   return true;
@@ -303,8 +303,7 @@ bool _process_overflows (const hb_vector_t<graph::overflow_record_t>& overflows,
   for (int i = overflows.length - 1; i >= 0; i--)
   {
     const graph::overflow_record_t& r = overflows[i];
-    const auto& child = sorted_graph.vertices_[r.child];
-    if (child.is_shared ())
+    if (sorted_graph.vertices_[r.child].is_shared ())
     {
       // The child object is shared, we may be able to eliminate the overflow
       // by duplicating it.
@@ -315,7 +314,7 @@ bool _process_overflows (const hb_vector_t<graph::overflow_record_t>& overflows,
       // (eg. all links from the same parent) in this case continue on to other resolution options.
     }
 
-    if (child.is_leaf () && !priority_bumped_parents.has (r.parent))
+    if (sorted_graph.vertices_[r.child].is_leaf () && !priority_bumped_parents.has (r.parent))
     {
       // This object is too far from it's parent, attempt to move it closer.
       //
@@ -421,6 +420,12 @@ hb_resolve_graph_overflows (hb_tag_t table_tag,
         DEBUG_MSG (SUBSET_REPACK, nullptr, "No resolution available :(");
         break;
       }
+    }
+
+    if (sorted_graph.in_error ())
+    {
+      DEBUG_MSG (SUBSET_REPACK, nullptr, "Sorted graph in error state.");
+      return false;
     }
 
     sorted_graph.sort_shortest_distance ();

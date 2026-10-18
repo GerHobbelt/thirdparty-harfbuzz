@@ -66,6 +66,7 @@ struct ClassDef : public OT::ClassDef
                              unsigned max_size)
   {
     unsigned class_def_prime_id = c.graph.new_node (nullptr, nullptr);
+    if (class_def_prime_id == HB_GRAPH_INVALID) return false;
     auto& class_def_prime_vertex = c.graph.vertices_[class_def_prime_id];
     if (!make_class_def (c, glyph_and_class, class_def_prime_id, max_size))
       return false;
@@ -96,10 +97,16 @@ struct ClassDef : public OT::ClassDef
     }
 
     hb_bytes_t class_def_copy = serializer.copy_bytes ();
-    if (!class_def_copy.arrayZ) return false;
+    if (!class_def_copy.arrayZ)
+    {
+      hb_free (buffer);
+      return false;
+    }
+
     // Give ownership to the context, it will cleanup the buffer.
     if (!c.add_buffer ((char *) class_def_copy.arrayZ))
     {
+      hb_free (buffer);
       hb_free ((char *) class_def_copy.arrayZ);
       return false;
     }
@@ -183,16 +190,15 @@ struct class_def_size_estimator_t
   void reset() {
     class_def_1_size = class_def_format1_base_size;
     class_def_2_size = class_def_format2_base_size;
+    coverage_size_val = coverage_base_size;
     included_glyphs.clear();
     included_classes.clear();
   }
 
-  // Compute the size of coverage for all glyphs added via 'add_class_def_size'.
+  // Size of coverage for all glyphs added via 'add_class_def_size'.
   unsigned coverage_size () const
   {
-    unsigned format1_size = coverage_base_size + bytes_per_glyph * included_glyphs.get_population();
-    unsigned format2_size = coverage_base_size + bytes_per_range * num_glyph_ranges();
-    return hb_min(format1_size, format2_size);
+    return coverage_size_val;
   }
 
   // Compute the new size of the ClassDef table if all glyphs associated with 'klass' were added.
@@ -201,7 +207,10 @@ struct class_def_size_estimator_t
     if (!included_classes.has(klass)) {
       hb_set_t* glyphs = nullptr;
       if (glyphs_per_class.has(klass, &glyphs)) {
+        unsigned num_glyphs = included_glyphs.get_population();
         included_glyphs.union_(*glyphs);
+        if (num_glyphs != included_glyphs.get_population())
+          coverage_size_val = compute_coverage_size ();
       }
 
       class_def_1_size = class_def_format1_base_size;
@@ -243,12 +252,20 @@ struct class_def_size_estimator_t
   }
 
  private:
+  unsigned compute_coverage_size () const
+  {
+    unsigned format1_size = coverage_base_size + bytes_per_glyph * included_glyphs.get_population();
+    unsigned format2_size = coverage_base_size + bytes_per_range * num_glyph_ranges();
+    return hb_min(format1_size, format2_size);
+  }
+
   hb_hashmap_t<unsigned, unsigned> num_ranges_per_class;
   hb_hashmap_t<unsigned, hb_set_t> glyphs_per_class;
   hb_set_t included_classes;
   hb_set_t included_glyphs;
   unsigned class_def_1_size;
   unsigned class_def_2_size;
+  unsigned coverage_size_val;
 };
 
 

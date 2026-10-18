@@ -1129,7 +1129,6 @@ struct hb_ot_apply_context_t :
   recurse_func_t recurse_func = nullptr;
   const GDEF &gdef;
   const GDEF::accelerator_t &gdef_accel;
-  const hb_ot_layout_lookup_accelerator_t *lookup_accel = nullptr;
   const ItemVariationStore &var_store;
   hb_scalar_cache_t *var_store_cache;
 
@@ -2892,7 +2891,7 @@ static inline void context_depend_lookup (hb_depend_context_t *c,
     }
 
     /* Positions 1+ (Input array) */
-    for (unsigned i = 0; i < inputCount - 1; i++)
+    for (unsigned i = 0; i + 1 < inputCount; i++)
     {
       const hb_set_t *pos_glyphs = depend_position_glyphs (
 	c, lookup_context.context_format, lookup_context.intersects_data,
@@ -4300,7 +4299,7 @@ static inline void chain_context_depend_lookup (hb_depend_context_t *c,
     }
 
     /* Positions 1+ (Input array) */
-    for (unsigned i = 0; i < inputCount - 1; i++)
+    for (unsigned i = 0; i + 1 < inputCount; i++)
     {
       const hb_set_t *pos_glyphs = depend_position_glyphs (
 	c, lookup_context.context_format, lookup_context.intersects_data[1],
@@ -5871,45 +5870,57 @@ struct hb_ot_layout_lookup_accelerator_t
   bool may_have (hb_codepoint_t g) const
   { return digest.may_have (g); }
 
-#ifndef HB_OPTIMIZE_SIZE
-  HB_ALWAYS_INLINE
-#endif
-  bool apply (hb_ot_apply_context_t *c, bool use_cache) const
+  typedef bool (*apply_func_t) (const hb_ot_layout_lookup_accelerator_t *accel,
+				hb_ot_apply_context_t                   *c);
+
+  static bool apply_one (const hb_ot_layout_lookup_accelerator_t *accel,
+			 hb_ot_apply_context_t                   *c)
   {
-    c->lookup_accel = this;
-    if (count == 1)
-    {
-      /* The accelerator digest is the union of the subtable digests, so
-       * for a single subtable it equals that subtable's digest, which the
-       * caller has already tested; skip the redundant retest. Zeroed
-       * invalid entries were trimmed at create time, so the subtable is
-       * always valid here. */
+    /* The accelerator digest is the union of the subtable digests, so
+     * for a single subtable it equals that subtable's digest, which the
+     * caller has already tested; skip the redundant retest. Zeroed
+     * invalid entries were trimmed at create time, so the subtable is
+     * always valid here. */
+    return accel->subtables[0].apply_no_digest (c);
+  }
+
+  static bool apply_many (const hb_ot_layout_lookup_accelerator_t *accel,
+			  hb_ot_apply_context_t                   *c)
+  {
+    return
+    + hb_iter (hb_iter (accel->subtables, accel->count))
+    | hb_map ([&c] (const hb_accelerate_subtables_context_t::hb_applicable_t &_) { return _.apply (c); })
+    | hb_any
+    ;
+  }
+
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
-      if (use_cache)
-	return subtables[0].apply_cached_no_digest (c);
+  static bool apply_cached_one (const hb_ot_layout_lookup_accelerator_t *accel,
+				hb_ot_apply_context_t                   *c)
+  { return accel->subtables[0].apply_cached_no_digest (c); }
+
+  static bool apply_cached_many (const hb_ot_layout_lookup_accelerator_t *accel,
+				 hb_ot_apply_context_t                   *c)
+  {
+    return
+    + hb_iter (hb_iter (accel->subtables, accel->count))
+    | hb_map ([&c] (const hb_accelerate_subtables_context_t::hb_applicable_t &_) { return _.apply_cached (c); })
+    | hb_any
+    ;
+  }
 #endif
-      return subtables[0].apply_no_digest (c);
-    }
+
+  apply_func_t get_apply_func (bool use_cache HB_UNUSED) const
+  {
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
     if (use_cache)
-    {
-      return
-      + hb_iter (hb_iter (subtables, count))
-      | hb_map ([&c] (const hb_accelerate_subtables_context_t::hb_applicable_t &_) { return _.apply_cached (c); })
-      | hb_any
-      ;
-    }
-    else
+      return count == 1 ? apply_cached_one : apply_cached_many;
 #endif
-    {
-      return
-      + hb_iter (hb_iter (subtables, count))
-      | hb_map ([&c] (const hb_accelerate_subtables_context_t::hb_applicable_t &_) { return _.apply (c); })
-      | hb_any
-      ;
-    }
-    return false;
+    return count == 1 ? apply_one : apply_many;
   }
+
+  bool apply (hb_ot_apply_context_t *c, bool use_cache) const
+  { return get_apply_func (use_cache) (this, c); }
 
   bool cache_enter (hb_ot_apply_context_t *c) const
   {

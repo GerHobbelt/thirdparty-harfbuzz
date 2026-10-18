@@ -88,6 +88,8 @@ struct Coverage : public OT::Layout::Common::Coverage
                                  unsigned max_size)
   {
     unsigned coverage_prime_id = c.graph.new_node (nullptr, nullptr);
+    if (coverage_prime_id == HB_GRAPH_INVALID)
+      return nullptr;
     auto& coverage_prime_vertex = c.graph.vertices_[coverage_prime_id];
     if (!make_coverage (c, glyphs, coverage_prime_id, max_size))
       return nullptr;
@@ -140,10 +142,15 @@ struct Coverage : public OT::Layout::Common::Coverage
     }
 
     hb_bytes_t coverage_copy = serializer.copy_bytes ();
-    if (!coverage_copy.arrayZ) return false;
+    if (!coverage_copy.arrayZ) {
+      hb_free (buffer);
+      return false;
+    }
+
     // Give ownership to the context, it will cleanup the buffer.
     if (!c.add_buffer ((char *) coverage_copy.arrayZ))
     {
+      hb_free (buffer);
       hb_free ((char *) coverage_copy.arrayZ);
       return false;
     }
