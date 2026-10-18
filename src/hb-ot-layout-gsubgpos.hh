@@ -6498,6 +6498,27 @@ struct GSUBGPOS
 #endif
     return get_feature_variations ().find_index (coords, num_coords, index, instancer);
   }
+  bool get_feature_variations_state (const int *coords,
+				     unsigned int num_coords,
+				     unsigned int *index,
+				     ItemVarStoreInstancer *instancer,
+				     hb_vector_t<unsigned> *lookup_variations) const
+  {
+    lookup_variations->reset ();
+#ifdef HB_NO_VAR
+    *index = FeatureVariations::NOT_FOUND_INDEX;
+    return true;
+#else
+    find_variations_index (coords, num_coords, index, instancer);
+    return get_feature_variations ().resolve_lookup_variations (
+	coords,
+	num_coords,
+	instancer,
+	[this, index] (unsigned feature_index) -> const Feature &
+	{ return get_feature_variation (feature_index, *index); },
+	lookup_variations);
+#endif
+  }
   const Feature& get_feature_variation (unsigned int feature_index,
 					unsigned int variations_index) const
   {
@@ -6520,6 +6541,13 @@ struct GSUBGPOS
   {
 #ifndef HB_NO_VAR
     get_feature_variations ().collect_lookups (feature_indexes, feature_record_cond_idx_map, lookup_indexes);
+#endif
+  }
+
+  void collect_feature_variation_indices (hb_collect_variation_indices_context_t *c) const
+  {
+#ifndef HB_NO_VAR
+    get_feature_variations ().collect_variation_indices (c);
 #endif
   }
 
@@ -6769,11 +6797,7 @@ struct GSUBGPOS
 		featureList2;	/* 32-bit offset to FeatureList table.
 				 * Introduced in version 0x00010002. */
   Offset32To<LookupList2T>
-		lookupList2;	/* 32-bit offset to LookupList table with
-				 * 32-bit lookup offsets.
-				 * The June 2026 proposed spec points this to
-				 * a LookupList instead; that was not suitable
-				 * for beyond-64k fonts.
+		lookupList2;	/* 32-bit offset to LookupList2 table.
 				 * Introduced in version 0x00010002. */
 #endif
   public:

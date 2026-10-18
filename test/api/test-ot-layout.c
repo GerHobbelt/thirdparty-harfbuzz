@@ -293,8 +293,42 @@ test_ot_layout_language_get_feature_tags (void)
   hb_face_destroy (face);
 }
 
+#ifndef HB_NO_VAR
+static void
+test_ot_layout_collect_lookup_variations (void)
+{
+  hb_face_t *face = hb_test_open_font_file (
+      "../shape/data/in-house/fonts/4e9f0bc6a8f25b5fd3547bbc17423ce8cedb915f.ttf");
+  const hb_tag_t features[] = {HB_TAG ('l','i','g','a'), HB_TAG_NONE};
+  hb_set_t *lookups = hb_set_create ();
+
+  hb_ot_layout_collect_lookups (face, HB_OT_TAG_GSUB,
+				NULL, NULL, features, lookups);
+
+  g_assert_cmpuint (hb_set_get_population (lookups), ==, 4);
+  g_assert_true (hb_set_has (lookups, 0));
+  g_assert_true (hb_set_has (lookups, 1));
+  g_assert_true (hb_set_has (lookups, 2));
+  g_assert_true (hb_set_has (lookups, 5));
+
+  const hb_tag_t gpos_features[] = {HB_TAG ('k','e','r','n'), HB_TAG_NONE};
+  hb_set_clear (lookups);
+  hb_ot_layout_collect_lookups (face, HB_OT_TAG_GPOS,
+				NULL, NULL, gpos_features, lookups);
+
+  g_assert_cmpuint (hb_set_get_population (lookups), ==, 2);
+  g_assert_true (hb_set_has (lookups, 0));
+  g_assert_true (hb_set_has (lookups, 1));
+
+  hb_set_destroy (lookups);
+  hb_face_destroy (face);
+}
+#endif
+
+
+
 #if defined(BUILD_MONOLITHIC)
-#define main(cnt, arr) hb_test_ot_layout_main (cnt, arr)
+#define main(cnt, arr)     hb_test_ot_layout_main (cnt, arr)
 #endif
 
 int
@@ -312,5 +346,8 @@ main (int argc, char **argv)
   hb_test_add (test_ot_layout_script_get_language_tags);
   hb_test_add (test_ot_layout_table_get_feature_tags);
   hb_test_add (test_ot_layout_language_get_feature_tags);
+#ifndef HB_NO_VAR
+  hb_test_add (test_ot_layout_collect_lookup_variations);
+#endif
   return hb_test_run ();
 }

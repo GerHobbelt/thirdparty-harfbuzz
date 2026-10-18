@@ -92,6 +92,115 @@ test_subset_crash (void)
   hb_face_destroy (face);
 }
 
+#ifndef HB_NO_VAR
+static void
+assert_lookup_variations_shape (hb_face_t *face,
+				const int *coords,
+				unsigned coord_count,
+				const hb_codepoint_t *expected)
+{
+  hb_font_t *font = hb_font_create (face);
+  hb_font_set_var_coords_normalized (font, coords, coord_count);
+
+  hb_buffer_t *buffer = hb_buffer_create ();
+  hb_buffer_add_utf8 (buffer, "ABCDEF", -1, 0, -1);
+  hb_buffer_guess_segment_properties (buffer);
+  hb_shape (font, buffer, NULL, 0);
+
+  unsigned length;
+  const hb_glyph_info_t *info = hb_buffer_get_glyph_infos (buffer, &length);
+  g_assert_cmpuint (length, ==, 6);
+  for (unsigned i = 0; i < length; i++)
+    g_assert_cmpuint (info[i].codepoint, ==, expected[i]);
+
+  hb_buffer_destroy (buffer);
+  hb_font_destroy (font);
+}
+
+static void
+test_subset_lookup_variations (void)
+{
+  hb_face_t *face = hb_test_open_font_file (
+      "../shape/data/in-house/fonts/4e9f0bc6a8f25b5fd3547bbc17423ce8cedb915f.ttf");
+  const hb_codepoint_t expected_all[] = {2, 4, 6, 8, 9, 10};
+  const hb_codepoint_t expected_test_08_dumy_08[] = {2, 3, 6, 8, 9, 10};
+  const hb_codepoint_t expected_test_03_dumy_0[] = {2, 4, 5, 7, 8, 11};
+  const hb_codepoint_t expected_test_03_dumy_08[] = {2, 3, 6, 7, 8, 11};
+  hb_subset_input_t *input = hb_subset_input_create_or_fail ();
+
+  hb_set_add_range (hb_subset_input_unicode_set (input), 'A', 'F');
+  hb_set_t *features = hb_subset_input_set (input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
+  hb_set_clear (features);
+  hb_set_add (features, HB_TAG ('l', 'i', 'g', 'a'));
+
+  hb_face_t *subset = hb_subset_or_fail (face, input);
+  g_assert_nonnull (subset);
+  int coords[] = {13107}; /* 0.8 */
+  assert_lookup_variations_shape (subset, coords, 1, expected_all);
+
+  hb_face_destroy (subset);
+  hb_subset_input_destroy (input);
+
+  input = hb_subset_input_create_or_fail ();
+  hb_set_add_range (hb_subset_input_unicode_set (input), 'A', 'F');
+  features = hb_subset_input_set (input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
+  hb_set_clear (features);
+  hb_set_add (features, HB_TAG ('l', 'i', 'g', 'a'));
+  g_assert_true (hb_subset_input_pin_axis_location (
+	input, face, HB_TAG ('T', 'E', 'S', 'T'), 0.8f));
+  g_assert_true (hb_subset_input_pin_axis_location (
+	input, face, HB_TAG ('D', 'U', 'M', 'Y'), 0.f));
+
+  subset = hb_subset_or_fail (face, input);
+  g_assert_nonnull (subset);
+  assert_lookup_variations_shape (subset, NULL, 0, expected_all);
+
+  hb_face_destroy (subset);
+  hb_subset_input_destroy (input);
+
+  input = hb_subset_input_create_or_fail ();
+  hb_set_add_range (hb_subset_input_unicode_set (input), 'A', 'F');
+  features = hb_subset_input_set (input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
+  hb_set_clear (features);
+  hb_set_add (features, HB_TAG ('l', 'i', 'g', 'a'));
+  g_assert_true (hb_subset_input_pin_axis_location (
+	input, face, HB_TAG ('T', 'E', 'S', 'T'), 0.8f));
+
+  subset = hb_subset_or_fail (face, input);
+  g_assert_nonnull (subset);
+  coords[0] = 0;
+  assert_lookup_variations_shape (subset, coords, 1, expected_all);
+  coords[0] = 13107; /* DUMY=0.8 */
+  assert_lookup_variations_shape (
+	subset, coords, 1, expected_test_08_dumy_08);
+
+  hb_face_destroy (subset);
+  hb_subset_input_destroy (input);
+
+  input = hb_subset_input_create_or_fail ();
+  hb_set_add_range (hb_subset_input_unicode_set (input), 'A', 'F');
+  features = hb_subset_input_set (input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
+  hb_set_clear (features);
+  hb_set_add (features, HB_TAG ('l', 'i', 'g', 'a'));
+  hb_set_add (features, HB_TAG ('r', 'l', 'i', 'g'));
+  g_assert_true (hb_subset_input_pin_axis_location (
+	input, face, HB_TAG ('T', 'E', 'S', 'T'), 0.3f));
+
+  subset = hb_subset_or_fail (face, input);
+  g_assert_nonnull (subset);
+  coords[0] = 0;
+  assert_lookup_variations_shape (
+	subset, coords, 1, expected_test_03_dumy_0);
+  coords[0] = 13107; /* DUMY=0.8 */
+  assert_lookup_variations_shape (
+	subset, coords, 1, expected_test_03_dumy_08);
+
+  hb_face_destroy (subset);
+  hb_subset_input_destroy (input);
+  hb_face_destroy (face);
+}
+#endif
+
 static void
 test_subset_set_flags (void)
 {
@@ -647,6 +756,9 @@ main (int argc, char **argv)
   hb_test_add (test_subset_32_tables);
   hb_test_add (test_subset_no_inf_loop);
   hb_test_add (test_subset_crash);
+#ifndef HB_NO_VAR
+  hb_test_add (test_subset_lookup_variations);
+#endif
   hb_test_add (test_subset_set_flags);
   hb_test_add (test_subset_sets);
   hb_test_add (test_subset_plan);
