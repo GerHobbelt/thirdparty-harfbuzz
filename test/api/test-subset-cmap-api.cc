@@ -251,7 +251,7 @@ test_subset_DMAP (void)
     0, 0, 0, 0, 0, 0, 0, 1,
     0, 0, 0, 'A', 0, 0, 0, 'B', 0, 0, 0, 1, /* format 12 group */
     0, 14, 0, 0, 0, 40, 0, 0, 0, 1,         /* format 14 header */
-    0, 0xFE, 0x0F, 0, 0, 0, 0, 0, 0, 0, 21, /* variation selector */
+    0, (char)0xFE, 0x0F, 0, 0, 0, 0, 0, 0, 0, 21, /* variation selector */
     0, 0, 0, 3,                               /* non-default UVS count */
     0, 0, 'A', 0, 3,
     0, 0, 'B', 0, 3,
@@ -266,7 +266,7 @@ test_subset_DMAP (void)
     0, 0, 0, 'A', 0, 0, 0, 'A', 0, 0, 0, 4, /* format 12 groups */
     0, 0, 0, 'C', 0, 0, 0, 'C', 0, 0, 0, 5,
     0, 14, 0, 0, 0, 38, 0, 0, 0, 1,         /* format 14 header */
-    0, 0xFE, 0x0F, 0, 0, 0, 21, 0, 0, 0, 29, /* variation selector */
+    0, (char)0xFE, 0x0F, 0, 0, 0, 21, 0, 0, 0, 29, /* variation selector */
     0, 0, 0, 1, 0, 0, 'B', 0,               /* default UVS */
     0, 0, 0, 1, 0, 0, 'A', 0, 6,            /* non-default UVS */
   };

@@ -29,7 +29,7 @@
  * as well as test the C++ API. */
 
 #define NO_MAIN
-#include "test-c.c"
+#include "test-c-api.c"
 #undef NO_MAIN
 
 #include <hb-config.hh>
