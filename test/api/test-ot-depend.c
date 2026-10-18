@@ -624,9 +624,14 @@ main (int argc, char **argv)
 int
 main (int argc, char **argv)
 {
+#ifdef HAVE_GLIB_H
   g_test_init (&argc, &argv, NULL);
   g_test_skip ("HB_DEPEND_API not enabled");
   return 0;
+#else
+  fprintf(stderr, "%s: test is not supported in this non-GNU-Glib build.\n", __FILE__);
+  return EXIT_FAILURE;
+#endif
 }
 
 #endif

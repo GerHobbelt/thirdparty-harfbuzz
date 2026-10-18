@@ -317,6 +317,7 @@ typedef bool gboolean;
 #define g_assert_true(expr)	      LIBASSERT_DEBUG_ASSERT(expr)
 #define g_assert_cmphex(a, op, b)     LIBASSERT_DEBUG_ASSERT(a op b)
 #define g_assert_cmpuint(a, op, b)    LIBASSERT_DEBUG_ASSERT(a op b)
+#define g_assert_cmpfloat(a, op, b)   LIBASSERT_DEBUG_ASSERT(a op b)
 #define g_assert_cmpstr(a, op, b)     LIBASSERT_DEBUG_ASSERT(a op b)
 
 /* This is too ugly to be public API, but quite handy. */

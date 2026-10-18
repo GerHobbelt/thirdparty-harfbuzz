@@ -1,7 +1,7 @@
 #ifndef MATRIX4X4_HH
 #define MATRIX4X4_HH
 
-#ifdef _USE_MATH_DEFINES
+#ifndef _USE_MATH_DEFINES
 #define _USE_MATH_DEFINES
 #endif
 #include <cmath>

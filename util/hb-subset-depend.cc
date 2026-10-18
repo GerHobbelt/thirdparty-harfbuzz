@@ -33,6 +33,8 @@
 #include <string>
 #include <vector>
 
+#ifdef HAVE_GLIB_H
+
 struct depend_t : option_parser_t, face_options_t
 {
   gboolean flagged_only = false;
@@ -352,8 +354,21 @@ struct depend_t : option_parser_t, face_options_t
   }
 };
 
+#endif // HAVE_GLIB_H
+
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_subset_depend_util_main (cnt, arr)
+#endif
+
 int
 main (int argc, char **argv)
 {
+#ifdef HAVE_GLIB_H
   return batch_main<depend_t> (argc, argv);
+#else
+  fprintf(stderr, "%s: utility is not supported in this non-GNU-Glib build.\n", __FILE__);
+  return EXIT_FAILURE;
+#endif
 }

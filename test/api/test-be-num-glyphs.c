@@ -26,6 +26,8 @@
 
 #include <hb.h>
 
+#ifdef HAVE_GLIB_H
+
 static void
 write_u16 (char *data, unsigned offset, unsigned value)
 {
@@ -480,6 +482,8 @@ test_GLYF_composite_gid (void)
 }
 #endif
 
+#endif // HAVE_GLIB_H
+
 
 #if defined(BUILD_MONOLITHIC)
 #define main(cnt, arr) hb_test_be_num_glyphs_main (cnt, arr)
@@ -488,6 +492,7 @@ test_GLYF_composite_gid (void)
 int
 main (int argc, char **argv)
 {
+#ifdef HAVE_GLIB_H
   hb_test_init (&argc, &argv);
 
   hb_test_add (test_maxp_and_loca);
@@ -501,4 +506,8 @@ main (int argc, char **argv)
 #endif
 
   return hb_test_run();
+#else
+  fprintf(stderr, "%s: test is not supported in this non-GNU-Glib build.\n", __FILE__);
+  return EXIT_FAILURE;
+#endif
 }
