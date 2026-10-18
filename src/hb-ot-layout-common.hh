@@ -706,7 +706,7 @@ struct FeatureParams
     return true;
 #endif
     TRACE_SANITIZE (this);
-    if (tag == HB_TAG ('s','i','z','e'))
+    if (tag == HB_TAG ('s','i','z','e') && hb_barrier ())
       return_trace (u.size.sanitize (c));
     if ((tag & 0xFFFF0000u) == HB_TAG ('s','s','\0','\0')) /* ssXX */
       return_trace (u.stylisticSet.sanitize (c));
@@ -720,7 +720,7 @@ struct FeatureParams
 #ifdef HB_NO_LAYOUT_FEATURE_PARAMS
     return;
 #endif
-    if (tag == HB_TAG ('s','i','z','e'))
+    if (tag == HB_TAG ('s','i','z','e') && hb_barrier ())
       return (u.size.collect_name_ids (nameids_to_retain));
     if ((tag & 0xFFFF0000u) == HB_TAG ('s','s','\0','\0')) /* ssXX */
       return (u.stylisticSet.collect_name_ids (nameids_to_retain));
@@ -732,7 +732,7 @@ struct FeatureParams
   {
     TRACE_SUBSET (this);
     if (!tag) return_trace (false);
-    if (*tag == HB_TAG ('s','i','z','e'))
+    if (*tag == HB_TAG ('s','i','z','e') && hb_barrier ())
       return_trace (u.size.subset (c));
     if ((*tag & 0xFFFF0000u) == HB_TAG ('s','s','\0','\0')) /* ssXX */
       return_trace (u.stylisticSet.subset (c));
@@ -744,7 +744,7 @@ struct FeatureParams
 #ifndef HB_NO_LAYOUT_FEATURE_PARAMS
   const FeatureParamsSize& get_size_params (hb_tag_t tag) const
   {
-    if (tag == HB_TAG ('s','i','z','e'))
+    if (tag == HB_TAG ('s','i','z','e') && hb_barrier ())
       return u.size;
     return Null (FeatureParamsSize);
   }
@@ -2813,6 +2813,35 @@ struct VarRegionList
   DEFINE_SIZE_ARRAY (4, axesZ);
 };
 
+/* Whether a variation region is unreachable given per-axis reachable
+ * final-coordinate ranges, in F2Dot14 units (avar2 partial-instancing
+ * culling; see hb_subset_plan_t::avar2_reachable_ranges). A region is dead
+ * if some axis's tent evaluates to zero over the axis's entire reachable
+ * range. Mirrors the runtime evaluation: invalid tents evaluate as
+ * constant 1 and never kill a region. */
+static inline bool
+_hb_avar2_region_is_dead (const hb_hashmap_t<hb_tag_t, Triple> &axis_tuples,
+			  const hb_hashmap_t<hb_tag_t, Triple> &reachable_ranges)
+{
+  for (auto _ : axis_tuples)
+  {
+    Triple *range;
+    if (!reachable_ranges.has (_.first, &range)) continue;
+    const Triple &tent = _.second;
+    int start = (int) roundf ((float) tent.minimum * 16384.f);
+    int peak  = (int) roundf ((float) tent.middle * 16384.f);
+    int end   = (int) roundf ((float) tent.maximum * 16384.f);
+    if (!peak) continue;
+    if (start > peak || peak > end) continue;
+    if (start < 0 && end > 0) continue;
+    int lo = (int) roundf ((float) range->minimum * 16384.f);
+    int hi = (int) roundf ((float) range->maximum * 16384.f);
+    if (hi <= start || lo >= end)
+      return true;
+  }
+  return false;
+}
+
 struct SparseVariationRegion : Array16Of<SparseVarRegionAxis>
 {
   float evaluate (const int *coords, unsigned int coord_len) const
@@ -3053,7 +3082,8 @@ struct VarData
   bool serialize (hb_serialize_context_t *c,
 		  const VarData *src,
 		  const hb_inc_bimap_t &inner_map,
-		  const hb_inc_bimap_t &region_map)
+		  const hb_inc_bimap_t &region_map,
+		  const hb_set_t *culled_regions = nullptr)
   {
     TRACE_SERIALIZE (this);
     if (unlikely (!c->extend_min (this))) return_trace (false);
@@ -3099,6 +3129,8 @@ struct VarData
       bool short_circuit = (!!src_long_words == has_long && src_word_count <= r);
 
       delta_sz[r] = kZero;
+      if (culled_regions && culled_regions->has (src->regionIndices[r]))
+	continue; /* unreachable region: drop its column */
       for (unsigned old_gid : inner_map.keys())
       {
 	int32_t delta = src->get_item_delta_fast (old_gid, r, src_delta_bytes, src_row_size);
@@ -3407,7 +3439,8 @@ struct ItemVariationStore
 
   bool serialize (hb_serialize_context_t *c,
 		  const ItemVariationStore *src,
-		  const hb_array_t <const hb_inc_bimap_t> &inner_maps)
+		  const hb_array_t <const hb_inc_bimap_t> &inner_maps,
+		  const hb_set_t *culled_regions = nullptr)
   {
     TRACE_SERIALIZE (this);
 #ifdef HB_NO_VAR
@@ -3434,6 +3467,9 @@ struct ItemVariationStore
 
     region_indices.del_range ((src_regions).regionCount, hb_set_t::INVALID);
 
+    if (culled_regions)
+      region_indices.subtract (*culled_regions);
+
     /* TODO use constructor when our data-structures support that. */
     hb_inc_bimap_t region_map;
     + hb_iter (region_indices)
@@ -3455,7 +3491,8 @@ struct ItemVariationStore
     {
       if (!inner_maps[i].get_population ()) continue;
       if (unlikely (!dataSets[set_index++]
-		     .serialize_serialize (c, &(src+src->dataSets[i]), inner_maps[i], region_map)))
+		     .serialize_serialize (c, &(src+src->dataSets[i]), inner_maps[i], region_map,
+					   culled_regions)))
 	return_trace (false);
     }
 
@@ -3487,6 +3524,30 @@ struct ItemVariationStore
     return_trace (out);
   }
 
+  /* Collect regions that a partial avar2 instance can never reach, per the
+   * plan's reachable final-coordinate ranges. */
+  bool collect_dead_regions (const hb_map_t &axes_old_index_tag_map,
+			     const hb_hashmap_t<hb_tag_t, Triple> &reachable_ranges,
+			     hb_set_t &dead_regions /* OUT */) const
+  {
+#ifndef HB_NO_VAR
+    if (!reachable_ranges.get_population ()) return true;
+    const VarRegionList &region_list = this+regions;
+    unsigned count = region_list.regionCount;
+    for (unsigned i = 0; i < count; i++)
+    {
+      hb_hashmap_t<hb_tag_t, Triple> axis_tuples;
+      if (!region_list.get_var_region (i, axes_old_index_tag_map, axis_tuples))
+	return false;
+      if (_hb_avar2_region_is_dead (axis_tuples, reachable_ranges))
+	dead_regions.add (i);
+    }
+    return !dead_regions.in_error ();
+#else
+    return true;
+#endif
+  }
+
   bool subset (hb_subset_context_t *c, const hb_array_t<const hb_inc_bimap_t> &inner_maps) const
   {
     TRACE_SUBSET (this);
@@ -3497,7 +3558,16 @@ struct ItemVariationStore
     ItemVariationStore *varstore_prime = c->serializer->start_embed<ItemVariationStore> ();
     if (unlikely (!varstore_prime)) return_trace (false);
 
-    varstore_prime->serialize (c->serializer, this, inner_maps);
+    /* avar2 partial instancing: cull unreachable regions. */
+    hb_set_t dead_regions;
+    if (c->plan->has_avar2)
+      if (!collect_dead_regions (c->plan->axes_old_index_tag_map,
+				 c->plan->avar2_reachable_ranges,
+				 dead_regions))
+	return_trace (false);
+
+    varstore_prime->serialize (c->serializer, this, inner_maps,
+			       dead_regions.get_population () ? &dead_regions : nullptr);
 
     return_trace (
         !c->serializer->in_error()
@@ -4034,6 +4104,7 @@ struct ConditionAxisRange
     return filterRangeMinValue.to_int () <= coord && coord <= filterRangeMaxValue.to_int ();
   }
 
+  public:
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
@@ -4079,6 +4150,7 @@ struct ConditionValue
     return_trace (false);
   }
 
+  public:
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
@@ -4127,6 +4199,7 @@ struct ConditionAnd
     return_trace (false);
   }
 
+  public:
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
@@ -4174,6 +4247,7 @@ struct ConditionOr
     return_trace (false);
   }
 
+  public:
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
@@ -4217,6 +4291,7 @@ struct ConditionNegate
     return_trace (false);
   }
 
+  public:
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
@@ -4274,16 +4349,11 @@ struct Condition
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    if (!u.format.v.sanitize (c)) return_trace (false);
-    hb_barrier ();
-    switch (u.format.v) {
-    case 1: hb_barrier (); return_trace (u.format1.sanitize (c));
-    case 2: hb_barrier (); return_trace (u.format2.sanitize (c));
-    case 3: hb_barrier (); return_trace (u.format3.sanitize (c));
-    case 4: hb_barrier (); return_trace (u.format4.sanitize (c));
-    case 5: hb_barrier (); return_trace (u.format5.sanitize (c));
-    default:return_trace (true);
-    }
+
+    if (unlikely (!c->check_start_recursion (HB_MAX_NESTING_LEVEL)))
+      return_trace (c->no_dispatch_return_value ());
+
+    return_trace (c->end_recursion (this->dispatch (c)));
   }
 
   protected:
@@ -4666,6 +4736,11 @@ struct FeatureVariations
 {
   static constexpr unsigned NOT_FOUND_INDEX = 0xFFFFFFFFu;
 
+  unsigned record_count () const
+  {
+    return varRecords.len;
+  }
+
   bool find_index (const int *coords, unsigned int coord_len,
 		   unsigned int *index,
 		   ItemVarStoreInstancer *instancer) const
@@ -4962,10 +5037,12 @@ struct Device
     {
 #ifndef HB_NO_HINTING
     case 1: case 2: case 3:
+      hb_barrier ();
       return u.hinting.get_x_delta (font);
 #endif
 #ifndef HB_NO_VAR
     case 0x8000:
+      hb_barrier ();
       return u.variation.get_x_delta (font, store, store_cache);
 #endif
     default:
@@ -4980,10 +5057,12 @@ struct Device
     {
     case 1: case 2: case 3:
 #ifndef HB_NO_HINTING
+      hb_barrier ();
       return u.hinting.get_y_delta (font);
 #endif
 #ifndef HB_NO_VAR
     case 0x8000:
+      hb_barrier ();
       return u.variation.get_y_delta (font, store, store_cache);
 #endif
     default:
@@ -4998,10 +5077,12 @@ struct Device
     switch (u.b.format) {
 #ifndef HB_NO_HINTING
     case 1: case 2: case 3:
+      hb_barrier ();
       return_trace (u.hinting.sanitize (c));
 #endif
 #ifndef HB_NO_VAR
     case 0x8000:
+      hb_barrier ();
       return_trace (u.variation.sanitize (c));
 #endif
     default:
@@ -5018,10 +5099,12 @@ struct Device
     case 1:
     case 2:
     case 3:
+      hb_barrier ();
       return_trace (reinterpret_cast<Device *> (u.hinting.copy (c)));
 #endif
 #ifndef HB_NO_VAR
     case 0x8000:
+      hb_barrier ();
       return_trace (reinterpret_cast<Device *> (u.variation.copy (c, layout_variation_idx_delta_map)));
 #endif
     default:
@@ -5040,6 +5123,7 @@ struct Device
 #endif
 #ifndef HB_NO_VAR
     case 0x8000:
+      hb_barrier ();
       u.variation.collect_variation_index (c);
       return;
 #endif
@@ -5053,6 +5137,7 @@ struct Device
     switch (u.b.format) {
 #ifndef HB_NO_VAR
     case 0x8000:
+      hb_barrier ();
       return u.variation.varIdx;
 #endif
     default:

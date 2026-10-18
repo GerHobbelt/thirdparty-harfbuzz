@@ -219,6 +219,7 @@ set (subset_project_sources
      ${PROJECT_SOURCE_DIR}/src/graph/split-helpers.hh
      ${PROJECT_SOURCE_DIR}/src/graph/serialize.hh
      ${PROJECT_SOURCE_DIR}/src/OT/Color/COLR/colrv1-closure.hh
+     ${PROJECT_SOURCE_DIR}/src/OT/Color/COLR/colrv1-depend.hh
 )
 set (project_extra_sources)
 set (project_headers
@@ -235,6 +236,7 @@ set (project_headers
      ${PROJECT_SOURCE_DIR}/src/hb-map.h
      ${PROJECT_SOURCE_DIR}/src/hb-ot-color.h
      ${PROJECT_SOURCE_DIR}/src/hb-ot-deprecated.h
+     ${PROJECT_SOURCE_DIR}/src/hb-ot-fetch.h
      ${PROJECT_SOURCE_DIR}/src/hb-ot-font.h
      ${PROJECT_SOURCE_DIR}/src/hb-ot-layout.h
      ${PROJECT_SOURCE_DIR}/src/hb-ot-math.h

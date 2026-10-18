@@ -92,6 +92,7 @@ hb_base_sources = files(
   'hb-ot-face-table-list.hh',
   'hb-ot-face.cc',
   'hb-ot-face.hh',
+  'hb-ot-fetch.cc',
   'hb-ot-font.cc',
   'hb-ot-gasp-table.hh',
   'hb-ot-glyf-table.hh',
@@ -314,6 +315,7 @@ hb_base_headers = files(
   'hb-map.h',
   'hb-ot-color.h',
   'hb-ot-deprecated.h',
+  'hb-ot-fetch.h',
   'hb-ot-font.h',
   'hb-ot-layout.h',
   'hb-ot-math.h',
@@ -426,12 +428,16 @@ hb_subset_sources = files(
   'graph/split-helpers.hh',
   'hb-subset.cc',
   'hb-subset.hh',
+  'hb-depend.cc',
+  'hb-depend.hh',
+  'hb-depend-data.hh',
 )
 hb_subset_sources += hb_version_h
 
 hb_subset_headers = files(
   'hb-subset.h',
-  'hb-subset-serialize.h'
+  'hb-subset-serialize.h',
+  'hb-subset-depend.h',
 )
 
 hb_gobject_sources = files(
@@ -627,7 +633,6 @@ gen_def_cmd = [gen_def, '@OUTPUT@', '@INPUT@']
 if get_option('experimental_api')
   gen_def_cmd += '--experimental-api'
 endif
-
 # harfbuzz
 harfbuzz_def = custom_target('harfbuzz.def',
     command: gen_def_cmd,
@@ -645,6 +650,10 @@ if cpp_is_microsoft_compiler
   hb_so_version = ''
 else
   hb_so_version = '0'
+endif
+
+if host_machine.system() == 'aix'
+  version = '0'
 endif
 
 if get_option('fuzzer_ldflags') != ''

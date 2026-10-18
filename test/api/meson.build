@@ -30,6 +30,7 @@ tests = [
   'test-ot-collect-glyphs.c',
   'test-ot-color.c',
   'test-ot-face.c',
+  'test-ot-fetch.c',
   'test-ot-glyphname.c',
   'test-ot-layout.c',
   'test-ot-ligature-carets.c',
@@ -48,6 +49,7 @@ tests = [
   'test-shape-plan.c',
   'test-style.c',
   'test-subset.c',
+  'test-subset-avar2.c',
   'test-subset-cmap.c',
   'test-subset-drop-tables.c',
   'test-subset-glyf.c',
@@ -93,6 +95,10 @@ if conf.get('HAVE_PTHREAD', 0) == 1
   tests += 'test-multithread.c'
 endif
 
+if conf.get('HB_EXPERIMENTAL_API', 0) == 1
+  tests += 'test-ot-depend.c'
+endif
+
 # Default test running environment
 env = environment()
 env.set('MALLOC_CHECK_', '1')
@@ -108,7 +114,7 @@ foreach source : tests
           libharfbuzz_cairo_dep,
           libharfbuzz_icu_dep]
   suite = ['api']
-  if test_name.contains('-subset') or test_name.contains('-instance')
+  if test_name.contains('-subset') or test_name.contains('-instance') or test_name.contains('-depend')
     if get_option('subset').disabled()
       continue
     endif

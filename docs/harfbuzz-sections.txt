@@ -193,6 +193,7 @@ hb_free
 HB_H_IN
 HB_OT_H_IN
 HB_AAT_H_IN
+HB_SUBSET_H_IN
 </SECTION>
 
 <SECTION>
@@ -834,6 +835,14 @@ hb_ot_var_axis_info_t
 </SECTION>
 
 <SECTION>
+<FILE>hb-ot-fetch</FILE>
+hb_ot_bits_tag_t
+hb_ot_fetch_bits
+hb_ot_number_tag_t
+hb_ot_fetch_number
+</SECTION>
+
+<SECTION>
 <FILE>hb-set</FILE>
 hb_set_create
 hb_set_allocation_successful
@@ -999,11 +1008,25 @@ hb_subset_serialize_link_t
 hb_subset_serialize_object_t
 hb_subset_serialize_or_fail
 <SUBSECTION Private>
+hb_subset_input_to_string_or_fail
 hb_subset_input_override_name_table
 hb_subset_cff_get_charstring_data
 hb_subset_cff_get_charstrings_index
 hb_subset_cff2_get_charstring_data
 hb_subset_cff2_get_charstrings_index
+</SECTION>
+
+<SECTION>
+<FILE>hb-subset-depend</FILE>
+hb_subset_depend_t
+hb_subset_depend_entry_t
+hb_subset_depend_edge_flags_t
+hb_subset_depend_from_face_or_fail
+hb_subset_depend_lookup_glyph
+hb_subset_depend_lookup_set
+hb_subset_depend_destroy
+<SUBSECTION Private>
+HB_SUBSET_DEPEND_EDGE_FLAGS_T_DEFINED
 </SECTION>
 
 <SECTION>

@@ -433,10 +433,14 @@ hb_raster_paint_push_clip_rectangle (hb_paint_funcs_t *pfuncs HB_UNUSED,
     fmax_x = hb_max (fmax_x, cx[i]); fmax_y = hb_max (fmax_y, cy[i]);
   }
 
-  int px0 = (int) floorf (fmin_x) - surf->extents.x_origin;
-  int py0 = (int) floorf (fmin_y) - surf->extents.y_origin;
-  int px1 = (int) ceilf (fmax_x) - surf->extents.x_origin;
-  int py1 = (int) ceilf (fmax_y) - surf->extents.y_origin;
+  /* A spec-legal but very large transform can push these bounds past the int
+     range or to non-finite values; a bare float->int conversion would then be
+     undefined.  Saturate through hb_clamp_to<> (which also maps NaN to
+     INT32_MIN); the subtraction is done in double to avoid overflow. */
+  int px0 = hb_clamp_to<int32_t> ((double) floorf (fmin_x) - surf->extents.x_origin);
+  int py0 = hb_clamp_to<int32_t> ((double) floorf (fmin_y) - surf->extents.y_origin);
+  int px1 = hb_clamp_to<int32_t> ((double) ceilf  (fmax_x) - surf->extents.x_origin);
+  int py1 = hb_clamp_to<int32_t> ((double) ceilf  (fmax_y) - surf->extents.y_origin);
 
   /* Clamp to surface bounds */
   px0 = hb_max (px0, 0);
@@ -946,7 +950,8 @@ hb_raster_paint_image (hb_paint_funcs_t *pfuncs HB_UNUSED,
 	float ix = (gx - img_x) / img_sx;
 	float iy = (float) (src_height - 1) - (gy - img_y) / img_sy;
 
-	if (ix < 0.f || iy < 0.f ||
+	if (unlikely (!std::isfinite (ix) || !std::isfinite (iy)) ||
+	    ix < 0.f || iy < 0.f ||
 	    ix > (float) (src_width - 1) || iy > (float) (src_height - 1))
 	{
 	  gx += inv_xx;
@@ -984,7 +989,8 @@ hb_raster_paint_image (hb_paint_funcs_t *pfuncs HB_UNUSED,
 	float ix = (gx - img_x) / img_sx;
 	float iy = (float) (src_height - 1) - (gy - img_y) / img_sy;
 
-	if (ix < 0.f || iy < 0.f ||
+	if (unlikely (!std::isfinite (ix) || !std::isfinite (iy)) ||
+	    ix < 0.f || iy < 0.f ||
 	    ix > (float) (src_width - 1) || iy > (float) (src_height - 1))
 	{
 	  gx += inv_xx;
@@ -2079,10 +2085,10 @@ hb_raster_paint_set_glyph_extents (hb_raster_paint_t        *paint,
     ty_max = hb_max (ty_max, py[i]);
   }
 
-  int ex0 = (int) floorf (tx_min);
-  int ey0 = (int) floorf (ty_min);
-  int ex1 = (int) ceilf  (tx_max);
-  int ey1 = (int) ceilf  (ty_max);
+  int32_t ex0 = hb_clamp_to<int32_t> (floorf (tx_min));
+  int32_t ey0 = hb_clamp_to<int32_t> (floorf (ty_min));
+  int32_t ex1 = hb_clamp_to<int32_t> (ceilf  (tx_max));
+  int32_t ey1 = hb_clamp_to<int32_t> (ceilf  (ty_max));
 
   if (ex1 <= ex0 || ey1 <= ey0)
   {
@@ -2093,8 +2099,8 @@ hb_raster_paint_set_glyph_extents (hb_raster_paint_t        *paint,
 
   paint->fixed_extents = {
     ex0, ey0,
-    (unsigned) (ex1 - ex0),
-    (unsigned) (ey1 - ey0),
+    (unsigned) ((int64_t) ex1 - ex0),
+    (unsigned) ((int64_t) ey1 - ey0),
     0
   };
   paint->has_extents = true;

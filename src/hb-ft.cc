@@ -1185,8 +1185,8 @@ _hb_ft_get_table_tags (const hb_face_t *face HB_UNUSED,
 
 /**
  * hb_ft_face_create:
- * @ft_face: (destroy destroy) (scope notified): FT_Face to work upon
- * @destroy: (nullable): A callback to call when the face object is not needed anymore
+ * @ft_face: FT_Face to work upon
+ * @destroy: (nullable) (scope async): A callback to call when the face object is not needed anymore
  *
  * Creates an #hb_face_t face object from the specified FT_Face.
  *
@@ -1309,8 +1309,8 @@ hb_ft_face_create_cached (FT_Face ft_face)
 
 /**
  * hb_ft_font_create:
- * @ft_face: (destroy destroy) (scope notified): FT_Face to work upon
- * @destroy: (nullable): A callback to call when the font object is not needed anymore
+ * @ft_face: FT_Face to work upon
+ * @destroy: (nullable) (scope async): A callback to call when the font object is not needed anymore
  *
  * Creates an #hb_font_t font object from the specified FT_Face.
  *
@@ -1621,7 +1621,7 @@ _destroy_blob (void *p)
  * Creates an #hb_face_t face object from the specified
  * font blob and face index.
  *
- * This is similar in functionality to hb_face_create_from_blob_or_fail(),
+ * This is similar in functionality to hb_face_create_or_fail(),
  * but uses the FreeType library for loading the font blob. This can
  * be useful, for example, to load WOFF and WOFF2 font data.
  *
