@@ -27,7 +27,9 @@
 #ifndef HB_CAIRO_H
 #define HB_CAIRO_H
 
-#include "hb.h"
+#include "hb.hh"
+
+#ifdef HAVE_CAIRO
 
 #include <cairo.h>
 
@@ -95,5 +97,7 @@ hb_cairo_glyphs_from_buffer (hb_buffer_t *buffer,
 			     cairo_text_cluster_flags_t *cluster_flags);
 
 HB_END_DECLS
+
+#endif // HAVE_CAIRO
 
 #endif /* HB_CAIRO_H */
