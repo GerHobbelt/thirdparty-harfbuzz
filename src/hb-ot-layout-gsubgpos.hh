@@ -1453,6 +1453,10 @@ struct hb_accelerate_subtables_context_t :
     {
       return digest.may_have (c->buffer->cur().codepoint) && apply_func (obj, c, nullptr);
     }
+    bool apply_no_digest (hb_ot_apply_context_t *c) const
+    {
+      return apply_func (obj, c, nullptr);
+    }
 #else
     bool apply (hb_ot_apply_context_t *c) const
     {
@@ -1461,6 +1465,14 @@ struct hb_accelerate_subtables_context_t :
     bool apply_cached (hb_ot_apply_context_t *c) const
     {
       return digest.may_have (c->buffer->cur().codepoint) &&  apply_cached_func (obj, c, external_cache);
+    }
+    bool apply_no_digest (hb_ot_apply_context_t *c) const
+    {
+      return apply_func (obj, c, external_cache);
+    }
+    bool apply_cached_no_digest (hb_ot_apply_context_t *c) const
+    {
+      return apply_cached_func (obj, c, external_cache);
     }
 
     bool cache_enter (hb_ot_apply_context_t *c) const
@@ -2387,7 +2399,13 @@ static void context_depend_recurse_lookups (hb_depend_context_t *c,
    * - Sequential accumulation: Not done. We want ALL possible edges, so we don't
    *   limit later lookups based on outputs from earlier lookups in the same rule. */
 
-  /* HB_MAX_CONTEXT_LENGTH positions fit in one allocation-free bit page. */
+  /* Sequence positions are tracked in one allocation-free bit page below.
+   * A rule longer than HB_MAX_CONTEXT_LENGTH never applies during shaping
+   * (the apply path rejects it), so skip it here instead of running past
+   * the fixed page in add_range(). */
+  if (unlikely (inputCount > HB_MAX_CONTEXT_LENGTH))
+    return;
+
   hb_bit_page_t covered_seq_indices;
   hb_set_t &pos_glyphs = scratch->pos_glyphs;
   hb_set_t &position_context = scratch->position_context;
@@ -5819,6 +5837,12 @@ struct hb_ot_layout_lookup_accelerator_t
     hb_accelerate_subtables_context_t c_accelerate_subtables (thiz->subtables);
     lookup.dispatch (&c_accelerate_subtables);
 
+    /* Invalid subtables do not collect and leave zeroed tail entries
+     * (see the calloc note above); trim them so the apply paths never
+     * see a null apply func. */
+    while (count && !thiz->subtables[count - 1].apply_func)
+      count--;
+
     thiz->digest.init ();
     for (auto& subtable : hb_iter (thiz->subtables, count))
       thiz->digest.union_ (subtable.digest);
@@ -5853,6 +5877,19 @@ struct hb_ot_layout_lookup_accelerator_t
   bool apply (hb_ot_apply_context_t *c, bool use_cache) const
   {
     c->lookup_accel = this;
+    if (count == 1)
+    {
+      /* The accelerator digest is the union of the subtable digests, so
+       * for a single subtable it equals that subtable's digest, which the
+       * caller has already tested; skip the redundant retest. Zeroed
+       * invalid entries were trimmed at create time, so the subtable is
+       * always valid here. */
+#ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
+      if (use_cache)
+	return subtables[0].apply_cached_no_digest (c);
+#endif
+      return subtables[0].apply_no_digest (c);
+    }
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
     if (use_cache)
     {
