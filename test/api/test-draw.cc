@@ -1248,7 +1248,7 @@ test_hb_draw_funcs (const void* user_data)
 static void
 test_hb_draw_compare_ot_funcs (const void *user_data)
 {
-  const char* font_funcs_name = user_data;
+  const char* font_funcs_name = (const char *)user_data;
   char str[1024];
   draw_data_t draw_data = {
     .str = str,

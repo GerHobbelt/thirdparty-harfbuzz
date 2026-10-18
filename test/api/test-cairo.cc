@@ -26,6 +26,8 @@
 
 #include <hb-cairo.h>
 
+#ifdef HAVE_CAIRO
+
 #if defined(__has_feature)
 #if __has_feature(thread_sanitizer)
 #define HB_TEST_CAIRO_TSAN 1
@@ -67,11 +69,18 @@ test_hb_cairo_budget (void)
   hb_face_destroy (face);
 }
 
+#endif // HAVE_CAIRO
+
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
+#ifdef HAVE_CAIRO
   hb_test_init (&argc, &argv);
   hb_test_add (test_hb_cairo_budget);
 
   return hb_test_run ();
+#else
+  fprintf(stderr, "%s: test is not supported in this non-GNU-Glib build.\n", __FILE__);
+  return EXIT_FAILURE;
+#endif
 }
