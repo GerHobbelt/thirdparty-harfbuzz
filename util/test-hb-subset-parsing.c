@@ -108,13 +108,24 @@ test_parse_instancing_spec (void)
   hb_face_destroy(roboto);
 }
 
+#endif // defined(DO_HB_TESTS)
+
+
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)     hb_subset_parsing_test_main(cnt, arr)
+#endif
 
 int
 main (int argc, char **argv)
 {
+#if defined(DO_HB_TESTS)
   test_parse_instancing_spec();
-
+  
   return 0;
+#else
+  fprintf(stderr, "%s: test is not supported in this non-GNU-Glib build.\n", __FILE__);
+  return EXIT_FAILURE;
+#endif
 }
-
-#endif // defined(DO_HB_TESTS)
