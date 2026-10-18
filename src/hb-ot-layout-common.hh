@@ -2836,7 +2836,12 @@ _hb_avar2_region_is_dead (const hb_hashmap_t<hb_tag_t, Triple> &axis_tuples,
     if (start < 0 && end > 0) continue;
     int lo = (int) roundf ((float) range->minimum * 16384.f);
     int hi = (int) roundf ((float) range->maximum * 16384.f);
-    if (hi <= start || lo >= end)
+    /* Strict comparisons: the scalar is 1 (not 0) at v == peak, so a tent
+     * whose peak sits exactly on the range boundary is still live there.
+     * (Reachable ranges are padded by one F2Dot14 unit at their producer,
+     * which already covers this; strictness keeps the predicate correct on
+     * its own terms.) */
+    if (hi < start || lo > end)
       return true;
   }
   return false;
@@ -3376,6 +3381,18 @@ struct ItemVariationStore
   }
 
   public:
+  bool has_delta_set (unsigned int index) const
+  {
+#ifdef HB_NO_VAR
+    return false;
+#endif
+
+    unsigned int outer = index >> 16;
+    unsigned int inner = index & 0xFFFF;
+    return outer < dataSets.len &&
+	   inner < (this+dataSets[outer]).get_item_count ();
+  }
+
   float get_delta (unsigned int index,
 		   const int *coords, unsigned int coord_count,
 		   hb_scalar_cache_t *cache = nullptr) const

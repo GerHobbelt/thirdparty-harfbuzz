@@ -41,7 +41,7 @@
 static hb_position_t
 hb_directwrite_scale_x (hb_font_t *font, int64_t value)
 {
-  if (hb_in_range<int64_t> (value, INT16_MIN, INT16_MAX))
+  if (value >= INT16_MIN && value <= INT16_MAX)
     return font->em_scale_x ((int16_t) value);
   return font->em_scalef_x ((float) value);
 }
@@ -49,7 +49,7 @@ hb_directwrite_scale_x (hb_font_t *font, int64_t value)
 static hb_position_t
 hb_directwrite_scale_y (hb_font_t *font, int64_t value)
 {
-  if (hb_in_range<int64_t> (value, INT16_MIN, INT16_MAX))
+  if (value >= INT16_MIN && value <= INT16_MAX)
     return font->em_scale_y ((int16_t) value);
   return font->em_scalef_y ((float) value);
 }
@@ -150,7 +150,7 @@ hb_directwrite_get_glyph_h_advances (hb_font_t* font,
     {
       // https://github.com/harfbuzz/harfbuzz/issues/5319
       auto advance = gids[j] < num_glyphs ? advances[j] : 0;
-      *first_advance = font->em_scale_x (advance);
+      *first_advance = hb_directwrite_scale_x (font, advance);
       first_advance = &StructAtOffset<hb_position_t> (first_advance, advance_stride);
     }
 
@@ -192,7 +192,7 @@ hb_directwrite_get_glyph_v_advances (hb_font_t* font,
     dw_face1->GetDesignGlyphAdvances (n, gids, advances, true);
     for (unsigned j = 0; j < n; j++)
     {
-      *first_advance = -font->em_scale_y (advances[j]);
+      *first_advance = hb_saturate_neg (hb_directwrite_scale_y (font, advances[j]));
       first_advance = &StructAtOffset<hb_position_t> (first_advance, advance_stride);
     }
 
@@ -265,8 +265,6 @@ public:
 	       void *draw_data)
     : font (font), drawing ({draw_funcs, draw_data}) {}
 
-  virtual ~GeometrySink() {}
-
   HRESULT STDMETHODCALLTYPE Close() override { return S_OK; }
   void STDMETHODCALLTYPE SetFillMode(D2D1_FILL_MODE) override {}
   void STDMETHODCALLTYPE SetSegmentFlags(D2D1_PATH_SEGMENT) override {}
@@ -277,21 +275,21 @@ public:
 
   void STDMETHODCALLTYPE BeginFigure(D2D1_POINT_2F startPoint, D2D1_FIGURE_BEGIN) override
   {
-    drawing.move_to (font->em_scalef_x (startPoint.x), -font->em_scalef_y (startPoint.y));
+    drawing.move_to (font->em_scalef_x (startPoint.x), -(float) font->em_scalef_y (startPoint.y));
   }
 
   void STDMETHODCALLTYPE AddBeziers(const D2D1_BEZIER_SEGMENT *beziers, UINT beziersCount) override
   {
     for (unsigned i = 0; i < beziersCount; ++i)
-      drawing.cubic_to (font->em_scalef_x (beziers[i].point1.x), -font->em_scalef_y (beziers[i].point1.y),
-			font->em_scalef_x (beziers[i].point2.x), -font->em_scalef_y (beziers[i].point2.y),
-			font->em_scalef_x (beziers[i].point3.x), -font->em_scalef_y (beziers[i].point3.y));
+      drawing.cubic_to (font->em_scalef_x (beziers[i].point1.x), -(float) font->em_scalef_y (beziers[i].point1.y),
+			font->em_scalef_x (beziers[i].point2.x), -(float) font->em_scalef_y (beziers[i].point2.y),
+			font->em_scalef_x (beziers[i].point3.x), -(float) font->em_scalef_y (beziers[i].point3.y));
   }
 
   void STDMETHODCALLTYPE AddLines(const D2D1_POINT_2F *points, UINT pointsCount) override
   {
     for (unsigned i = 0; i < pointsCount; ++i)
-      drawing.line_to (font->em_scalef_x (points[i].x), -font->em_scalef_y (points[i].y));
+      drawing.line_to (font->em_scalef_x (points[i].x), -(float) font->em_scalef_y (points[i].y));
   }
 
   void STDMETHODCALLTYPE EndFigure(D2D1_FIGURE_END) override
