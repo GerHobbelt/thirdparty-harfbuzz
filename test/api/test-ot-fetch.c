@@ -55,11 +55,11 @@ test_ot_bits_fs_selection (void)
   hb_face_t *abc = hb_test_open_font_file ("fonts/SourceSansPro-Regular.abc.otf");
 
   g_assert_cmpuint (hb_ot_fetch_bits (adwaita, HB_OT_BITS_TAG_FS_SELECTION), ==,
-		    0x0040u | 0x0080u);
+		    (0x0040u | 0x0080u));
   g_assert_cmpuint (hb_ot_fetch_bits (bold, HB_OT_BITS_TAG_FS_SELECTION), ==,
-		    0x0020u | 0x0080u);
+		    (0x0020u | 0x0080u));
   g_assert_cmpuint (hb_ot_fetch_bits (italic, HB_OT_BITS_TAG_FS_SELECTION), ==,
-		    0x0001u | 0x0100u);
+		    (0x0001u | 0x0100u));
 
   /* USE_TYPO_METRICS */
   g_assert_true (hb_ot_fetch_bits (adwaita, HB_OT_BITS_TAG_FS_SELECTION)
