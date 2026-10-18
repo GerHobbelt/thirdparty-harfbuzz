@@ -396,7 +396,7 @@ hb_ot_get_glyph_h_advances (hb_font_t* font, void* font_data,
   if (unlikely (!hmtx.has_data ()))
   {
     hb_position_t advance = font->face->get_upem () / 2;
-    advance = font->em_scale_x (advance);
+    advance = font->em_scale_x_full (advance);
     for (unsigned int i = 0; i < count; i++)
     {
       *first_advance = advance;
@@ -415,7 +415,8 @@ hb_ot_get_glyph_h_advances (hb_font_t* font, void* font_data,
     // Just plain htmx data. No need to cache.
     for (unsigned int i = 0; i < count; i++)
     {
-      *first_advance = font->em_scale_x (hmtx.get_advance_without_var_unscaled (*first_glyph));
+      *first_advance = font->em_scale_x_full (hb_clamp_to<int32_t> (
+	  (int64_t) hmtx.get_advance_without_var_unscaled (*first_glyph)));
       first_glyph = &StructAtOffsetUnaligned<hb_codepoint_t> (first_glyph, glyph_stride);
       first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
     }
@@ -451,7 +452,7 @@ hb_ot_get_glyph_h_advances (hb_font_t* font, void* font_data,
         v = hmtx.get_advance_with_var_unscaled (*first_glyph, font, varStore_cache);
 	advance_cache->set (*first_glyph, v);
       }
-      *first_advance = font->em_scale_x (v);
+      *first_advance = font->em_scale_x_full (v);
       first_glyph = &StructAtOffsetUnaligned<hb_codepoint_t> (first_glyph, glyph_stride);
       first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
     }
@@ -484,7 +485,7 @@ hb_ot_get_glyph_h_advances (hb_font_t* font, void* font_data,
         v = glyf.get_advance_with_var_unscaled (*first_glyph, font, false, *scratch, gvar_cache);
 	advance_cache->set (*first_glyph, v);
       }
-      *first_advance = font->em_scale_x (v);
+      *first_advance = font->em_scale_x_full (v);
       first_glyph = &StructAtOffsetUnaligned<hb_codepoint_t> (first_glyph, glyph_stride);
       first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
     }
@@ -521,7 +522,7 @@ hb_ot_get_glyph_v_advances (hb_font_t* font, void* font_data,
   {
     hb_font_extents_t font_extents;
     font->get_h_extents_with_fallback (&font_extents);
-    hb_position_t advance = font_extents.descender - font_extents.ascender;
+    hb_position_t advance = hb_saturate_sub (font_extents.descender, font_extents.ascender);
     for (unsigned int i = 0; i < count; i++)
     {
       *first_advance = advance;
@@ -540,7 +541,8 @@ hb_ot_get_glyph_v_advances (hb_font_t* font, void* font_data,
     // Just plain vtmx data. No need to cache.
     for (unsigned int i = 0; i < count; i++)
     {
-      *first_advance = font->em_scale_y (- (int) vmtx.get_advance_without_var_unscaled (*first_glyph));
+      *first_advance = font->em_scale_y_full (hb_clamp_to<int32_t> (
+	  -(int64_t) vmtx.get_advance_without_var_unscaled (*first_glyph)));
       first_glyph = &StructAtOffsetUnaligned<hb_codepoint_t> (first_glyph, glyph_stride);
       first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
     }
@@ -576,7 +578,7 @@ hb_ot_get_glyph_v_advances (hb_font_t* font, void* font_data,
         v = vmtx.get_advance_with_var_unscaled (*first_glyph, font, varStore_cache);
 	advance_cache->set (*first_glyph, v);
       }
-      *first_advance = font->em_scale_y (- (int) v);
+      *first_advance = font->em_scale_y_full (hb_saturate_neg (v));
       first_glyph = &StructAtOffsetUnaligned<hb_codepoint_t> (first_glyph, glyph_stride);
       first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
     }
@@ -609,7 +611,7 @@ hb_ot_get_glyph_v_advances (hb_font_t* font, void* font_data,
         v = glyf.get_advance_with_var_unscaled (*first_glyph, font, true, *scratch, gvar_cache);
 	advance_cache->set (*first_glyph, v);
       }
-      *first_advance = font->em_scale_y (- (int) v);
+      *first_advance = font->em_scale_y_full (hb_saturate_neg (v));
       first_glyph = &StructAtOffsetUnaligned<hb_codepoint_t> (first_glyph, glyph_stride);
       first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
     }
@@ -628,6 +630,12 @@ hb_ot_get_glyph_v_advances (hb_font_t* font, void* font_data,
 #endif
 
 #ifndef HB_NO_VERTICAL
+static inline hb_position_t
+hb_ot_apply_y_scale_sign (hb_font_t *font, hb_position_t value)
+{
+  return font->y_scale < 0 ? hb_saturate_neg (value) : value;
+}
+
 HB_HOT
 static hb_bool_t
 hb_ot_get_glyph_v_origins (hb_font_t *font,
@@ -676,11 +684,11 @@ hb_ot_get_glyph_v_origins (hb_font_t *font,
 	hb_position_t origin;
 	unsigned cv;
 	if (origin_cache->get (*first_glyph, &cv))
-	  origin = font->y_scale < 0 ? -static_cast<hb_position_t>(cv) : static_cast<hb_position_t>(cv);
+	  origin = hb_ot_apply_y_scale_sign (font, static_cast<hb_position_t> (cv));
 	else
 	{
 	  origin = font->em_scalef_y (VORG.get_y_origin (*first_glyph));
-	  origin_cache->set (*first_glyph, font->y_scale < 0 ? -origin : origin);
+	  origin_cache->set (*first_glyph, hb_ot_apply_y_scale_sign (font, origin));
 	}
 
 	*first_y = origin;
@@ -700,14 +708,14 @@ hb_ot_get_glyph_v_origins (hb_font_t *font,
 	hb_position_t origin;
 	unsigned cv;
 	if (origin_cache->get (*first_glyph, &cv))
-	  origin = font->y_scale < 0 ? -static_cast<hb_position_t>(cv) : static_cast<hb_position_t>(cv);
+	  origin = hb_ot_apply_y_scale_sign (font, static_cast<hb_position_t> (cv));
 	else
 	{
 	  origin = font->em_scalef_y (VORG.get_y_origin (*first_glyph) +
 				      VVAR.get_vorg_delta_unscaled (*first_glyph,
 								    font->coords, font->num_coords,
 								    varStore_cache));
-	  origin_cache->set (*first_glyph, font->y_scale < 0 ? -origin : origin);
+	  origin_cache->set (*first_glyph, hb_ot_apply_y_scale_sign (font, origin));
 	}
 
 	*first_y = origin;
@@ -743,11 +751,11 @@ hb_ot_get_glyph_v_origins (hb_font_t *font,
       hb_position_t origin;
       unsigned cv;
       if (origin_cache->get (*first_glyph, &cv))
-	origin = font->y_scale < 0 ? -static_cast<hb_position_t>(cv) : static_cast<hb_position_t>(cv);
+	origin = hb_ot_apply_y_scale_sign (font, static_cast<hb_position_t> (cv));
       else
       {
 	origin = font->em_scalef_y (glyf.get_v_origin_with_var_unscaled (*first_glyph, font, *scratch, gvar_cache));
-	origin_cache->set (*first_glyph, font->y_scale < 0 ? -origin : origin);
+	origin_cache->set (*first_glyph, hb_ot_apply_y_scale_sign (font, origin));
       }
 
       *first_y = origin;
@@ -769,7 +777,7 @@ hb_ot_get_glyph_v_origins (hb_font_t *font,
   {
     hb_font_extents_t font_extents;
     font->get_h_extents_with_fallback (&font_extents);
-    hb_position_t font_advance = font_extents.ascender - font_extents.descender;
+    hb_position_t font_advance = hb_saturate_sub (font_extents.ascender, font_extents.descender);
 
     for (unsigned i = 0; i < count; i++)
     {
@@ -777,16 +785,17 @@ hb_ot_get_glyph_v_origins (hb_font_t *font,
       unsigned cv;
 
       if (origin_cache->get (*first_glyph, &cv))
-	origin = font->y_scale < 0 ? -static_cast<hb_position_t>(cv) : static_cast<hb_position_t>(cv);
+	origin = hb_ot_apply_y_scale_sign (font, static_cast<hb_position_t> (cv));
       else
       {
 	hb_glyph_extents_t extents = {0};
 	if (likely (font->get_glyph_extents (*first_glyph, &extents)))
-	  origin = extents.y_bearing + ((font_advance - -extents.height) >> 1);
+	  origin = hb_clamp_to<hb_position_t> ((int64_t) extents.y_bearing +
+						 (((int64_t) font_advance + extents.height) >> 1));
 	else
 	  origin = font_extents.ascender;
 
-	origin_cache->set (*first_glyph, font->y_scale < 0 ? -origin : origin);
+	origin_cache->set (*first_glyph, hb_ot_apply_y_scale_sign (font, origin));
       }
 
       *first_y = origin;
