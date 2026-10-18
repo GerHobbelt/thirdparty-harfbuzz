@@ -1526,7 +1526,7 @@ test_set_self_assignment (void)
 
 
 #if defined(BUILD_MONOLITHIC)
-#define main(cnt, arr)     hb_test_set_main (cnt, arr)
+#define main(cnt, arr)     hb_test_set_api_main (cnt, arr)
 #endif
 
 int

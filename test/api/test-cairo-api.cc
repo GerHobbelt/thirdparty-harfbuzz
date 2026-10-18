@@ -71,6 +71,12 @@ test_hb_cairo_budget (void)
 
 #endif // HAVE_CAIRO
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_cairo_main
+#endif
+
 int
 main (int argc, const char **argv)
 {

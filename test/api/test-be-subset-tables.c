@@ -182,6 +182,12 @@ test_vorg_versions (void)
 
 #endif
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_be_subset_tables_main
+#endif
+
 int
 main (int argc, char **argv)
 {

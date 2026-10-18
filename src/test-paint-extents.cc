@@ -44,6 +44,12 @@ draw_budget_probe (hb_font_t *, void *font_data, hb_codepoint_t,
   return true;
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_paint_extents_main
+#endif
+
 int
 main (int argc HB_UNUSED, char **argv HB_UNUSED)
 {

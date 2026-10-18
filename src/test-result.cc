@@ -627,7 +627,13 @@ static void test_from_move()
   }
 }
 
-int main ()
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_result_main
+#endif
+
+int main (void)
 {
   test_ok_basic ();
   test_err_basic ();

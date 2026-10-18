@@ -36,6 +36,12 @@ create_face (const char *data, unsigned length)
   return face;
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_jstf_main
+#endif
+
 int
 main (int argc, char **argv)
 {

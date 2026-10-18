@@ -225,7 +225,7 @@ test_map_get_population (void)
 }
 
 #if defined(BUILD_MONOLITHIC)
-#define main(cnt, arr) hb_test_map_main (cnt, arr)
+#define main(cnt, arr) hb_test_map_api_main (cnt, arr)
 #endif
 
 int

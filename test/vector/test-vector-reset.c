@@ -239,6 +239,12 @@ test_pdf_clear (void)
   hb_vector_draw_destroy (fresh);
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_vector_reset_main
+#endif
+
 int
 main (void)
 {

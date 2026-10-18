@@ -93,6 +93,12 @@ test_required_allocations (const OT::BitmapSizeTable &strike,
   return count;
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_cbdt_cache_main
+#endif
+
 int
 main (int argc, char **argv)
 {

@@ -37,12 +37,10 @@
 
 /* Unit tests for hb-font.h */
 
+#if defined(HAVE_GLIB)
 
 static const char test_data[] = "test\0data";
 
-
-
-#if defined(HAVE_GLIB)
 
 static void
 test_face_empty (void)

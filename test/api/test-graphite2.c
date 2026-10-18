@@ -66,6 +66,12 @@ test_graphite2_repeated_clusters (void)
   hb_font_destroy (font);
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_graphite2_main
+#endif
+
 int
 main (int argc, char **argv)
 {

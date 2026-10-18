@@ -129,6 +129,12 @@ test_document_cap (void)
   hb_vector_paint_destroy (paint);
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_vector_budget_main
+#endif
+
 int
 main (int argc, char **argv)
 {

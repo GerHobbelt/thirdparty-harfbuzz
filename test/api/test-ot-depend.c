@@ -28,6 +28,12 @@
 #include <hb-ot.h>
 #include <hb-subset.h>
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main hb_test_ot_depend_main
+#endif
+
+
 #ifndef HB_NO_SUBSET_DEPEND
 
 /*

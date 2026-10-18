@@ -185,6 +185,12 @@ test_ot_number_invalid (void)
   hb_face_destroy (face);
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_ot_fetch_main
+#endif
+
 int
 main (int argc, char **argv)
 {

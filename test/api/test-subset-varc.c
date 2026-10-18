@@ -528,6 +528,12 @@ test_subset_varc_passthrough_requires_retained_gids (void)
 
 #endif // HAVE_GLIB_H
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_subset_varc_main
+#endif
+
 int
 main (int argc, char **argv)
 {

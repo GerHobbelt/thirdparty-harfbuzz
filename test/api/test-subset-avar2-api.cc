@@ -631,6 +631,12 @@ test_avar2_restrict_steep_no_varidx (void)
   hb_face_destroy (face);
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main     hb_test_subset_avar2_main
+#endif
+
 int
 main (int argc, const char **argv)
 {

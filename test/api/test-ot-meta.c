@@ -75,7 +75,7 @@ test_ot_meta_reference_entry (void)
 }
 
 #if defined(BUILD_MONOLITHIC)
-#define main(cnt, arr) hb_test_ot_meta_main (cnt, arr)
+#define main(cnt, arr) hb_test_ot_meta_api_main (cnt, arr)
 #endif
 
 int
