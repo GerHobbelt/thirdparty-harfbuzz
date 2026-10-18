@@ -318,12 +318,23 @@ typedef bool gboolean;
 #define g_assert_cmphex(a, op, b)     LIBASSERT_DEBUG_ASSERT(a op b)
 #define g_assert_cmpuint(a, op, b)    LIBASSERT_DEBUG_ASSERT(a op b)
 #define g_assert_cmpfloat(a, op, b)   LIBASSERT_DEBUG_ASSERT(a op b)
-#define g_assert_cmpstr(a, op, b)     LIBASSERT_DEBUG_ASSERT(a op b)
+#define g_assert_cmpstr(a, op, b)     LIBASSERT_DEBUG_ASSERT(std::string(a) op std::string(b))     // fix warning C4130: '==': logical operation on address of string constant
 
 /* This is too ugly to be public API, but quite handy. */
 #define HB_TAG_CHAR4(s)                                  \
   (HB_TAG(((const char *) s)[0], ((const char *) s)[1],  \
 	   ((const char *) s)[2], ((const char *) s)[3]))
+
+#define G_N_ELEMENTS(arr)	      (sizeof (arr) / sizeof ((arr)[0]))
+
+template<typename T>
+static inline
+T ABS(T value) {
+  if (value >= 0)
+    return value;
+  else
+    return -value;
+}
 
 #if defined(__GCC__)
 #define G_GNUC_UNUSED __attribute__((__unused__))

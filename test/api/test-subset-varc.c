@@ -27,6 +27,8 @@
 
 #include <math.h>
 
+#ifdef HAVE_GLIB_H
+
 static void
 draw_move_to (hb_draw_funcs_t *funcs HB_UNUSED, void *data,
 	      hb_draw_state_t *state HB_UNUSED, float x, float y,
@@ -524,9 +526,12 @@ test_subset_varc_passthrough_requires_retained_gids (void)
   hb_face_destroy (face);
 }
 
+#endif // HAVE_GLIB_H
+
 int
 main (int argc, char **argv)
 {
+#ifdef HAVE_GLIB_H
   hb_test_init (&argc, &argv);
   hb_test_add (test_subset_varc_closure_and_remap);
   hb_test_add (test_subset_varc_draw_equivalence);
@@ -541,4 +546,8 @@ main (int argc, char **argv)
   hb_test_add (test_subset_varc_can_be_explicitly_dropped_when_instancing);
   hb_test_add (test_subset_varc_passthrough_requires_retained_gids);
   return hb_test_run ();
+#else
+  fprintf(stderr, "%s: test is not supported in this non-GNU-Glib build.\n", __FILE__);
+  return EXIT_FAILURE;
+#endif
 }
