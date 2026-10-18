@@ -185,8 +185,26 @@ static void test_concat ()
   hb_always_assert (it6.len () == 2);
 }
 
+static void
+test_backward_filter ()
+{
+  hb_vector_t<int> V = {2, 4, 5, 7, 8, 9, 10};
+  auto it = hb_iter (V) | hb_filter ([] (int x) { return x % 2 != 0; });
+  it += 2;
+  hb_always_assert (*it == 9);
+  --it;
+  hb_always_assert (*it == 7);
+  --it;
+  hb_always_assert (*it == 5);
+  --it;
+  hb_always_assert (*it == 5);
+}
+
+
+
+
 #if defined(BUILD_MONOLITHIC)
-#define main(cnt, arr) hb_test_iter_main (cnt, arr)
+#define main(cnt, arr)     hb_test_iter_main (cnt, arr)
 #endif
 
 int
@@ -381,6 +399,7 @@ main (int argc, char **argv)
   hb_always_assert (hb_range (-2, -7, -3).len () == 2);
 
   test_concat ();
+  test_backward_filter ();
 
   return 0;
 }

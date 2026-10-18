@@ -93,7 +93,7 @@
 #endif
 
 #ifndef HB_MAX_GRAPH_EDGE_COUNT
-#define HB_MAX_GRAPH_EDGE_COUNT 2048
+#define HB_MAX_GRAPH_EDGE_COUNT 16384
 #endif
 
 #ifndef HB_VAR_COMPOSITE_MAX_AXES
@@ -176,6 +176,12 @@
 #define HB_GPU_PAINT_MAX_WORK ((int64_t) 1 << 20)
 #endif
 
+/* One vector (SVG/PDF) draw session, in bytes of generated outline
+ * path data. */
+#ifndef HB_VECTOR_MAX_DRAW_WORK
+#define HB_VECTOR_MAX_DRAW_WORK ((int64_t) 16 << 20)
+#endif
+
 /* One vector (SVG/PDF) paint session, in bytes of generated outline
  * path and sweep-gradient patch data. */
 #ifndef HB_VECTOR_MAX_PAINT_WORK
@@ -202,6 +208,11 @@
  * budget above is charged instead. */
 #ifndef HB_RASTER_MAX_DRAW_WORK
 #define HB_RASTER_MAX_DRAW_WORK ((int64_t) 1 << 24)
+#endif
+
+/* One raster draw session, in accumulated non-horizontal edges. */
+#ifndef HB_RASTER_MAX_DRAW_EDGES
+#define HB_RASTER_MAX_DRAW_EDGES ((int64_t) 1 << 20)
 #endif
 
 
