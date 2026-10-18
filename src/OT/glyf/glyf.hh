@@ -25,6 +25,7 @@ namespace OT {
  * https://docs.microsoft.com/en-us/typography/opentype/spec/glyf
  */
 #define HB_OT_TAG_glyf HB_TAG('g','l','y','f')
+#define HB_OT_TAG_GLYF HB_TAG('G','L','Y','F')
 
 struct glyf
 {
@@ -36,6 +37,20 @@ struct glyf
   {
     const OT::head &head = *face->table.head;
     return head.indexToLocFormat <= 1 && head.glyphDataFormat <= 1;
+  }
+
+  static bool has_extended_glyf (hb_face_t *face)
+  {
+#ifndef HB_NO_BEYOND_64K
+    hb_blob_ptr_t<glyf> GLYF_table = hb_sanitize_context_t ().reference_table<glyf> (face, HB_OT_TAG_GLYF);
+    hb_blob_ptr_t<loca> LOCA_table = hb_sanitize_context_t ().reference_table<loca> (face, HB_OT_TAG_LOCA);
+    bool ret = GLYF_table.get_length () && LOCA_table.get_length ();
+    GLYF_table.destroy ();
+    LOCA_table.destroy ();
+    return ret;
+#else
+    return false;
+#endif
   }
 
   bool sanitize (hb_sanitize_context_t *c HB_UNUSED) const
@@ -78,6 +93,12 @@ struct glyf
   bool subset (hb_subset_context_t *c) const
   {
     TRACE_SUBSET (this);
+
+    bool extended = has_extended_glyf (c->plan->source);
+#ifndef HB_NO_BEYOND_64K
+    if (extended != (c->table_tag == HB_OT_TAG_GLYF))
+      return_trace (false);
+#endif
 
     if (!has_valid_glyf_format (c->plan->source)) {
       // glyf format is unknown don't attempt to subset it.
@@ -138,7 +159,8 @@ struct glyf
 
     if (unlikely (!c->serializer->check_success (glyf_impl::_add_loca_and_head (c,
 						 padded_offsets.iter (),
-						 use_short_loca))))
+						 use_short_loca,
+						 extended))))
       return_trace (false);
 
     return result;
@@ -178,19 +200,24 @@ struct glyf
 #endif
 };
 
+#ifndef HB_NO_BEYOND_64K
+struct GLYF : glyf
+{
+  static constexpr hb_tag_t tableTag = HB_OT_TAG_GLYF;
+};
+#endif
+
 struct glyf_accelerator_t
 {
   glyf_accelerator_t (hb_face_t *face)
   {
+    extended = false;
     short_offset = false;
     num_glyphs = 0;
     loca_table = nullptr;
     glyf_table = nullptr;
 #ifndef HB_NO_VAR
     gvar = nullptr;
-#ifndef HB_NO_BEYOND_64K
-    GVAR = nullptr;
-#endif
 #endif
     hmtx = nullptr;
 #ifndef HB_NO_VERTICAL
@@ -202,13 +229,28 @@ struct glyf_accelerator_t
       return;
     short_offset = 0 == head.indexToLocFormat;
 
-    loca_table = face->table.loca.get_blob (); // Needs no destruct!
-    glyf_table = hb_sanitize_context_t ().reference_table<glyf> (face);
+#ifndef HB_NO_BEYOND_64K
+    hb_blob_ptr_t<glyf> GLYF_table = hb_sanitize_context_t ().reference_table<glyf> (face, HB_OT_TAG_GLYF);
+    hb_blob_ptr_t<loca> LOCA_table = hb_sanitize_context_t ().reference_table<loca> (face, HB_OT_TAG_LOCA);
+    extended = GLYF_table.get_length () && LOCA_table.get_length ();
+    if (extended)
+    {
+      glyf_table = std::move (GLYF_table);
+      loca_table = std::move (LOCA_table);
+    }
+    else
+    {
+      GLYF_table.destroy ();
+      LOCA_table.destroy ();
+    }
+#endif
+    if (!extended)
+    {
+      glyf_table = hb_sanitize_context_t ().reference_table<glyf> (face);
+      loca_table = hb_sanitize_context_t ().reference_table<loca> (face);
+    }
 #ifndef HB_NO_VAR
     gvar = face->table.gvar;
-#ifndef HB_NO_BEYOND_64K
-    GVAR = face->table.GVAR;
-#endif
 #endif
     hmtx = face->table.hmtx;
 #ifndef HB_NO_VERTICAL
@@ -228,9 +270,11 @@ struct glyf_accelerator_t
     }
 
     glyf_table.destroy ();
+    loca_table.destroy ();
   }
 
   bool has_data () const { return num_glyphs; }
+  bool is_extended () const { return extended; }
 
   void depend (hb_depend_data_builder_t *builder) const
   {
@@ -239,7 +283,9 @@ struct glyf_accelerator_t
     {
       auto glyph = glyph_for_gid (gid);
       for (auto &item : glyph.get_composite_iterator ())
-        builder->add_depend (gid, HB_OT_TAG_glyf, item.get_gid ());
+        builder->add_depend (gid,
+                             extended ? HB_OT_TAG_GLYF : HB_OT_TAG_glyf,
+                             item.get_gid (extended));
     }
   }
 
@@ -521,8 +567,8 @@ struct glyf_accelerator_t
       return glyf_impl::Glyph ();
 
     glyf_impl::Glyph glyph (hb_bytes_t ((const char *) this->glyf_table + start_offset,
-			     end_offset - start_offset), gid);
-    return needs_padding_removal ? glyf_impl::Glyph (glyph.trim_padding (), gid) : glyph;
+			     end_offset - start_offset), gid, extended);
+    return needs_padding_removal ? glyf_impl::Glyph (glyph.trim_padding (), gid, extended) : glyph;
   }
 
   bool
@@ -593,9 +639,6 @@ struct glyf_accelerator_t
 
 #ifndef HB_NO_VAR
   const gvar_accelerator_t *gvar;
-#ifndef HB_NO_BEYOND_64K
-  const GVAR_accelerator_t *GVAR;
-#endif
 #endif
   const hmtx_accelerator_t *hmtx;
 #ifndef HB_NO_VERTICAL
@@ -603,6 +646,7 @@ struct glyf_accelerator_t
 #endif
 
   private:
+  bool extended;
   bool short_offset;
   unsigned int num_glyphs;
   hb_blob_ptr_t<loca> loca_table;

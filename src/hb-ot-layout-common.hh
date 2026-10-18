@@ -35,9 +35,15 @@
 #include "hb-set.hh"
 #include "hb-bimap.hh"
 #include "hb-cache.hh"
+#include "hb-ot-dual.hh"
+
+using hb_ot_layout_mapping_cache_t = hb_cache_t<16, 8, 8>;
+static_assert (sizeof (hb_ot_layout_mapping_cache_t) == 512, "");
+
+using hb_ot_layout_binary_cache_t = hb_cache_t<14, 1, 8>;
+static_assert (sizeof (hb_ot_layout_binary_cache_t) == 256, "");
 
 #include "OT/Layout/Common/Coverage.hh"
-#include "OT/Layout/types.hh"
 
 // TODO(garretrieger): cleanup these after migration.
 using OT::Layout::Common::Coverage;
@@ -1436,7 +1442,7 @@ struct Lookup
 };
 
 template <typename Types>
-using LookupList = List16OfOffsetTo<Lookup, typename Types::HBUINT>;
+using LookupList = List16OfOffsetTo<Lookup, typename Types::HBLUINT>;
 
 template <typename TLookup, typename OffsetType>
 struct LookupOffsetList : List16OfOffsetTo<TLookup, OffsetType>
@@ -1459,7 +1465,7 @@ struct LookupOffsetList : List16OfOffsetTo<TLookup, OffsetType>
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    return_trace (List16OfOffset16To<TLookup>::sanitize (c, this));
+    return_trace ((List16OfOffsetTo<TLookup, OffsetType>::sanitize (c, this)));
   }
 };
 
@@ -1532,7 +1538,7 @@ struct ClassDefFormat1_3
 
     if (unlikely (!it))
     {
-      classFormat = 1;
+      classFormat = Types::size == 2 ? 1 : 3;
       startGlyph = 0;
       classValue.len = 0;
       return_trace (true);
@@ -1647,7 +1653,7 @@ struct ClassDefFormat1_3
       if (classValue[iter - start]) return true;
     return false;
   }
-  bool intersects_class (const hb_set_t *glyphs, uint16_t klass) const
+  bool intersects_class (const hb_set_t *glyphs, unsigned klass) const
   {
     unsigned int count = classValue.len;
     if (klass == 0)
@@ -1662,7 +1668,7 @@ struct ClassDefFormat1_3
     }
     /* TODO Speed up, using set overlap first? */
     /* TODO(iter) Rewrite as dagger. */
-    const HBUINT16 *arr = classValue.arrayZ;
+    const typename Types::HBUINT *arr = classValue.arrayZ;
     for (unsigned int i = 0; i < count; i++)
       if (arr[i] == klass && glyphs->has (startGlyph + i))
 	return true;
@@ -1733,7 +1739,7 @@ struct ClassDefFormat1_3
   HBUINT16	classFormat;	/* Format identifier--format = 1 */
   typename Types::HBGlyphID
 		 startGlyph;	/* First GlyphID of the classValueArray */
-  typename Types::template ArrayOf<HBUINT16>
+  typename Types::template ArrayOf<typename Types::HBUINT>
 		classValue;	/* Array of Class Values--one per GlyphID */
   public:
   DEFINE_SIZE_ARRAY (2 + 2 * Types::size, classValue);
@@ -1768,7 +1774,7 @@ struct ClassDefFormat2_4
 
     if (unlikely (!it))
     {
-      classFormat = 2;
+      classFormat = Types::size == 2 ? 2 : 4;
       rangeRecord.len = 0;
       return_trace (true);
     }
@@ -1928,7 +1934,7 @@ struct ClassDefFormat2_4
     return hb_any (+ hb_iter (rangeRecord)
                    | hb_map ([glyphs] (const RangeRecord<Types> &range) { return range.intersects (*glyphs) && range.value; }));
   }
-  bool intersects_class (const hb_set_t *glyphs, uint16_t klass) const
+  bool intersects_class (const hb_set_t *glyphs, unsigned klass) const
   {
     if (klass == 0)
     {
@@ -2110,25 +2116,25 @@ struct ClassDef
     TRACE_SERIALIZE (this);
     if (unlikely (!c->extend_min (this))) return_trace (false);
 
-    auto it = + it_with_class_zero | hb_filter (hb_second);
+    auto glyphs = + it_with_class_zero | hb_filter (hb_second);
 
     unsigned format = 2;
     hb_codepoint_t glyph_max = 0;
-    if (likely (it))
+    unsigned class_max = 0;
+    if (likely (glyphs))
     {
-      hb_codepoint_t glyph_min = (*it).first;
+      hb_codepoint_t glyph_min = (*glyphs).first;
       glyph_max = glyph_min;
 
-      unsigned num_glyphs = 0;
       unsigned num_ranges = 1;
       hb_codepoint_t prev_gid = glyph_min;
-      unsigned prev_klass = (*it).second;
+      unsigned prev_klass = (*glyphs).second;
 
-      for (const auto gid_klass_pair : it)
+      for (const auto gid_klass_pair : + glyphs)
       {
 	hb_codepoint_t cur_gid = gid_klass_pair.first;
 	unsigned cur_klass = gid_klass_pair.second;
-        num_glyphs++;
+	if (cur_klass > class_max) class_max = cur_klass;
 	if (cur_gid == glyph_min) continue;
         if (cur_gid > glyph_max) glyph_max = cur_gid;
 	if (cur_gid != prev_gid + 1 ||
@@ -2139,31 +2145,43 @@ struct ClassDef
 	prev_klass = cur_klass;
       }
 
-      if (num_glyphs && 1 + (glyph_max - glyph_min + 1) <= num_ranges * 3)
-	format = 1;
-    }
+      uint64_t best_size = UINT64_MAX;
+      unsigned glyph_span = glyph_max - glyph_min + 1;
+      auto consider = [&] (unsigned candidate, uint64_t size)
+      {
+	if (size >= best_size) return;
+	best_size = size;
+	format = candidate;
+      };
 
+      if (glyph_max <= 0xFFFFu && glyph_span <= 0xFFFFu && class_max <= 0xFFFFu)
+	consider (1, 6 + (uint64_t) HBUINT16::static_size * glyph_span);
+      if (glyph_max <= 0xFFFFu && num_ranges <= 0xFFFFu && class_max <= 0xFFFFu)
+	consider (2, 4 + (uint64_t) num_ranges *
+		     (2 * HBGlyphID16::static_size + HBUINT16::static_size));
 #ifndef HB_NO_BEYOND_64K
-    if (glyph_max > 0xFFFFu)
-      u.format.v += 2;
-    if (unlikely (glyph_max > 0xFFFFFFu))
-#else
-    if (unlikely (glyph_max > 0xFFFFu))
+      if (glyph_max <= 0xFFFFFFu && glyph_span <= 0xFFFFFFu && class_max <= 0xFFFFFFu)
+	consider (3, 8 + (uint64_t) HBUINT24::static_size * glyph_span);
+      if (glyph_max <= 0xFFFFFFu && num_ranges <= 0xFFFFFFu && class_max <= 0xFFFFu)
+	consider (4, 5 + (uint64_t) num_ranges *
+		     (2 * HBGlyphID24::static_size + HBUINT16::static_size));
 #endif
-    {
-      c->check_success (false, HB_SERIALIZE_ERROR_INT_OVERFLOW);
-      return_trace (false);
+      if (unlikely (best_size == UINT64_MAX))
+      {
+	c->check_success (false, HB_SERIALIZE_ERROR_INT_OVERFLOW);
+	return_trace (false);
+      }
     }
 
     u.format.v = format;
 
     switch (u.format.v)
     {
-    case 1: hb_barrier (); return_trace (u.format1.serialize (c, it));
-    case 2: hb_barrier (); return_trace (u.format2.serialize (c, it));
+    case 1: hb_barrier (); return_trace (u.format1.serialize (c, + it_with_class_zero | hb_filter (hb_second)));
+    case 2: hb_barrier (); return_trace (u.format2.serialize (c, + it_with_class_zero | hb_filter (hb_second)));
 #ifndef HB_NO_BEYOND_64K
-    case 3: hb_barrier (); return_trace (u.format3.serialize (c, it));
-    case 4: hb_barrier (); return_trace (u.format4.serialize (c, it));
+    case 3: hb_barrier (); return_trace (u.format3.serialize (c, + it_with_class_zero | hb_filter (hb_second)));
+    case 4: hb_barrier (); return_trace (u.format4.serialize (c, + it_with_class_zero | hb_filter (hb_second)));
 #endif
     default:return_trace (false);
     }
@@ -5297,6 +5315,11 @@ struct VariationDevice
 
     hb_pair_t<unsigned, int> *v;
     if (!layout_variation_idx_delta_map->has (varIdx, &v))
+      return_trace (nullptr);
+    /* The varidx was mapped to "no variations" during instancing (e.g. the
+     * instantiated row is all zeros). Drop the device instead of emitting one
+     * with an out-of-range varidx. */
+    if (hb_first (*v) == HB_OT_LAYOUT_NO_VARIATIONS_INDEX)
       return_trace (nullptr);
 
     c->start_zerocopy (this->static_size);

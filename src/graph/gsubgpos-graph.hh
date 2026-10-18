@@ -421,13 +421,7 @@ struct GSTAR : public OT::GSUBGPOS
 
   const void* get_lookup_list_field_offset () const
   {
-    switch (u.version.major) {
-    case 1: hb_barrier (); return u.version1.get_lookup_list_offset ();
-#ifndef HB_NO_BEYOND_64K
-    case 2: hb_barrier (); return u.version2.get_lookup_list_offset ();
-#endif
-    default: return 0;
-    }
+    return OT::GSUBGPOS::get_lookup_list_field_offset ();
   }
 
   graph_result_t<void> sanitize (const graph_t::vertex_t& vertex) const
@@ -435,13 +429,7 @@ struct GSTAR : public OT::GSUBGPOS
     size_t len = vertex.table_size ();
     if (unlikely (len < OT::GSUBGPOS::min_size)) return Err(SANITIZE_FAILURE);
     hb_barrier ();
-    switch (u.version.major) {
-    case 1: break;
-#ifndef HB_NO_BEYOND_64K
-    case 2: break;
-#endif
-    default: return Err(SANITIZE_FAILURE);
-    }
+    if (unlikely (version.major != 1)) return Err(SANITIZE_FAILURE);
     if (unlikely (len < get_size ())) return Err(SANITIZE_FAILURE);
     return Ok();
   }
@@ -449,17 +437,15 @@ struct GSTAR : public OT::GSUBGPOS
   graph_result_t<void> find_lookups (graph_t& graph,
                                      hb_hashmap_t<unsigned, Lookup*>& lookups /* OUT */) const
   {
-    switch (u.version.major) {
-      case 1: TRY(find_lookups<SmallTypes> (graph, lookups)); break;
-#ifndef HB_NO_BEYOND_64K
-      case 2: TRY(find_lookups<MediumTypes> (graph, lookups)); break;
-#endif
-    }
+    TRY(find_lookups<SmallTypes> (graph, lookups));
     return Ok();
   }
 
   graph_result_t<unsigned> get_lookup_list_index (graph_t& graph) const
   {
+    if (version.to_int () >= 0x00010002u)
+      return Err(INVALID_ARGUMENT);
+
     const void* offset = get_lookup_list_field_offset ();
     if (unlikely (!offset)) return Err(INVALID_ARGUMENT);
     return graph.index_for_offset (graph.root_idx (), offset);
@@ -469,6 +455,9 @@ struct GSTAR : public OT::GSUBGPOS
   graph_result_t<void> find_lookups (graph_t& graph,
                                      hb_hashmap_t<unsigned, Lookup*>& lookups /* OUT */) const
   {
+    if (version.to_int () >= 0x00010002u)
+      return Ok();
+
     TRY_ASSIGN (unsigned lookup_list_idx, get_lookup_list_index (graph));
     const LookupList<Types>* lookupList =
         (const LookupList<Types>*) graph.object (lookup_list_idx).head;
