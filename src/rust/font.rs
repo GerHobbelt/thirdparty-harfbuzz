@@ -670,12 +670,12 @@ extern "C" fn _hb_fontations_get_glyph_extents(
                 return false as hb_bool_t;
             };
 
-            let x_bearing = (glyph_extents.x_min * data.x_mult).round() as hb_position_t;
-            let width = ((glyph_extents.x_max * data.x_mult).round() as hb_position_t)
-                .saturating_sub(x_bearing);
-            let y_bearing = (glyph_extents.y_max * data.y_mult).round() as hb_position_t;
-            let height = ((glyph_extents.y_min * data.y_mult).round() as hb_position_t)
-                .saturating_sub(y_bearing);
+            let x_bearing = round_to_position(glyph_extents.x_min * data.x_mult);
+            let width =
+                round_to_position(glyph_extents.x_max * data.x_mult).saturating_sub(x_bearing);
+            let y_bearing = round_to_position(glyph_extents.y_max * data.y_mult);
+            let height =
+                round_to_position(glyph_extents.y_min * data.y_mult).saturating_sub(y_bearing);
 
             unsafe {
                 *extents = hb_glyph_extents_t {
@@ -1220,17 +1220,16 @@ fn paint_bitmap_glyph(
     paint_funcs: *mut hb_paint_funcs_t,
     paint_data: *mut ::std::os::raw::c_void,
 ) -> hb_bool_t {
-    let size = bitmap_size(font);
     let bitmap_glyph = data
         .skrifa
         .cbdt_strikes
         .as_ref()
-        .and_then(|strikes| strikes.glyph_for_size(size, glyph_id))
+        .and_then(|strikes| strikes.glyph_for_size(bitmap_size(font), glyph_id))
         .or_else(|| {
             data.skrifa
                 .sbix_strikes
                 .as_ref()
-                .and_then(|strikes| strikes.glyph_for_size(size, glyph_id))
+                .and_then(|strikes| strikes.glyph_for_size(bitmap_size(font), glyph_id))
         });
     let Some(bitmap_glyph) = bitmap_glyph else {
         return false as hb_bool_t;
