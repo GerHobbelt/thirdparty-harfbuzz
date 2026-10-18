@@ -87,21 +87,28 @@ static result<void> try_callee_void (bool fail,  error_code_t e)
 
 static result<int> try_caller (bool fail1, bool fail2)
 {
-  int index = TRY (try_callee (fail1, 10, ERR_A));
-  int index2 = TRY (try_callee (fail2, 20, ERR_B));
+  TRY_ASSIGN (int index, try_callee (fail1, 10, ERR_A));
+  TRY_ASSIGN (int index2, try_callee (fail2, 20, ERR_B));
   return Ok(index + index2);
 }
 
 static result<void> try_caller_void (bool fail)
 {
   TRY (try_callee_void (fail, ERR_C));
-  return Ok ();
+  return Ok();
 }
 
 static result<float> try_caller_type_change (bool fail)
 {
-  int index = TRY (try_callee (fail, 100, ERR_A));
+  TRY_ASSIGN (int index, try_callee (fail, 100, ERR_A));
   return Ok((float) index * 1.5f);
+}
+
+static result<int> try_assign_existing (bool fail)
+{
+  int val = 1;
+  TRY_ASSIGN (val, try_callee (fail, 42, ERR_A));
+  return Ok(val);
 }
 
 static void test_ok_basic ()
@@ -114,8 +121,8 @@ static void test_ok_basic ()
   hb_always_assert (*r == 42);
   hb_always_assert (r.value_or (0) == 42);
   hb_always_assert (r.value_or_default () == 42);
-  hb_always_assert (r == Ok (42));
-  hb_always_assert (Ok (42) == r);
+  hb_always_assert (r == Ok(42));
+  hb_always_assert (Ok(42) == r);
 }
 
 static void test_err_basic ()
@@ -127,19 +134,19 @@ static void test_err_basic ()
   hb_always_assert (r.error () == ERR_A);
   hb_always_assert (r.value_or (99) == 99);
   hb_always_assert (r.value_or_default () == 0);
-  hb_always_assert (r == Err (ERR_A));
-  hb_always_assert (Err (ERR_A) == r);
-  hb_always_assert (r != Err (ERR_B));
-  hb_always_assert (Err (ERR_B) != r);
+  hb_always_assert (r == Err(ERR_A));
+  hb_always_assert (Err(ERR_A) == r);
+  hb_always_assert (r != Err(ERR_B));
+  hb_always_assert (Err(ERR_B) != r);
 }
 
 static void test_explicit_ok_err ()
 {
-  result<unsigned> r1 = Ok (100u);
+  result<unsigned> r1 = Ok(100u);
   hb_always_assert (r1.is_ok ());
   hb_always_assert (r1.value () == 100u);
 
-  result<unsigned> r2 = Err (ERR_A);
+  result<unsigned> r2 = Err(ERR_A);
   hb_always_assert (r2.is_err ());
   hb_always_assert (r2.error () == ERR_A);
 }
@@ -157,26 +164,26 @@ static void test_pointers ()
 
 static void test_void ()
 {
-  result<void> r1 = Ok ();
+  result<void> r1 = Ok();
   hb_always_assert (r1.is_ok ());
   hb_always_assert (!r1.is_err ());
   hb_always_assert ((bool) r1);
-  hb_always_assert (r1 == Ok ());
-  hb_always_assert (r1 != Err (ERR_A));
+  hb_always_assert (r1 == Ok());
+  hb_always_assert (r1 != Err(ERR_A));
   hb_always_assert (Ok() == r1);
-  hb_always_assert (Err (ERR_A) != r1);
+  hb_always_assert (Err(ERR_A) != r1);
 
-  result<void> r2 = Err (ERR_A);
+  result<void> r2 = Err(ERR_A);
   hb_always_assert (!r2.is_ok ());
   hb_always_assert (r2.is_err ());
   hb_always_assert (!r2);
   hb_always_assert (r2.error () == ERR_A);
-  hb_always_assert (r2 == Err (ERR_A));
-  hb_always_assert (r2 != Err (ERR_B));
-  hb_always_assert (r2 != Ok ());
-  hb_always_assert (Err (ERR_A) == r2);
-  hb_always_assert (Err (ERR_B) != r2);
-  hb_always_assert (Ok () != r2);
+  hb_always_assert (r2 == Err(ERR_A));
+  hb_always_assert (r2 != Err(ERR_B));
+  hb_always_assert (r2 != Ok());
+  hb_always_assert (Err(ERR_A) == r2);
+  hb_always_assert (Err(ERR_B) != r2);
+  hb_always_assert (Ok() != r2);
 }
 
 static void test_resource_cleanup ()
@@ -203,7 +210,7 @@ static void test_resource_cleanup ()
   {
     result<resource_t> r = resource_t (3);
     hb_always_assert (live_instances == 1);
-    r = Err (ERR_A);
+    r = Err(ERR_A);
     hb_always_assert (live_instances == 0);
     hb_always_assert (r.is_err ());
   }
@@ -243,6 +250,15 @@ static void test_try_macro ()
   result<float> f_err = try_caller_type_change (true);
   hb_always_assert (f_err.is_err ());
   hb_always_assert (f_err.error () == ERR_A);
+
+  // Test TRY_ASSIGN into existing variable
+  result<int> a_ok = try_assign_existing (false);
+  hb_always_assert (a_ok.is_ok ());
+  hb_always_assert (a_ok.value () == 42);
+
+  result<int> a_err = try_assign_existing (true);
+  hb_always_assert (a_err.is_err ());
+  hb_always_assert (a_err.error () == ERR_A);
 }
 
 template <typename T, typename U, typename = void>
@@ -284,19 +300,19 @@ static void test_same_or_convertible_types ()
   static_assert (std::is_constructible<hb_result_t<resource_t, error_code_t>, resource_t>::value, "");
   static_assert (std::is_constructible<hb_result_t<resource_t, error_code_t>, error_code_t>::value, "");
 
-  hb_result_t<int64_t, int32_t> r_ok = Ok (1);
+  hb_result_t<int64_t, int32_t> r_ok = Ok(1);
   hb_always_assert (r_ok.is_ok ());
   hb_always_assert (r_ok.value () == 1);
 
-  hb_result_t<int64_t, int32_t> r_err = Err (2);
+  hb_result_t<int64_t, int32_t> r_err = Err(2);
   hb_always_assert (r_err.is_err ());
   hb_always_assert (r_err.error () == 2);
 
-  hb_result_t<int, int> same_ok = Ok (42);
+  hb_result_t<int, int> same_ok = Ok(42);
   hb_always_assert (same_ok.is_ok ());
   hb_always_assert (same_ok.value () == 42);
 
-  hb_result_t<int, int> same_err = Err (99);
+  hb_result_t<int, int> same_err = Err(99);
   hb_always_assert (same_err.is_err ());
   hb_always_assert (same_err.error () == 99);
 }
@@ -311,10 +327,10 @@ static void test_error_interception() {
   // Checks that U&& constructor does not intercept mismatched error tags as a success value.
   static_assert (!std::is_constructible<hb_result_t<any_value_t, error_code_t>, hb_result_err_t<const char*>>::value, "");
 
-  hb_result_t<any_value_t, error_code_t> r = Err (ERR_A);
+  hb_result_t<any_value_t, error_code_t> r = Err(ERR_A);
   hb_always_assert (r.is_err ());
 
-  hb_result_t<any_value_t, error_code_t> r_ok = Ok (123);
+  hb_result_t<any_value_t, error_code_t> r_ok = Ok(123);
   hb_always_assert (r_ok.is_ok ());
 }
 
@@ -350,7 +366,7 @@ static void test_move_only_types ()
 {
   // Test hb_result_t<T, move_only_err_t> with Err(...)
   {
-    hb_result_t<int, move_only_err_t> r = Err (move_only_err_t (123));
+    hb_result_t<int, move_only_err_t> r = Err(move_only_err_t (123));
     hb_always_assert (r.is_err ());
     hb_always_assert (r.error ().code == 123);
 
@@ -367,7 +383,7 @@ static void test_move_only_types ()
 
   // Test hb_result_t<void, move_only_err_t> with Err(...) and direct construction
   {
-    hb_result_t<void, move_only_err_t> v1 = Err (move_only_err_t (789));
+    hb_result_t<void, move_only_err_t> v1 = Err(move_only_err_t (789));
     hb_always_assert (v1.is_err ());
     hb_always_assert (v1.error ().code == 789);
 
@@ -378,11 +394,11 @@ static void test_move_only_types ()
 
   // Test value_or with move-only value types
   {
-    hb_result_t<move_only_val_t, error_code_t> r_ok = Ok (move_only_val_t (42));
+    hb_result_t<move_only_val_t, error_code_t> r_ok = Ok(move_only_val_t (42));
     move_only_val_t v = std::move (r_ok).value_or (move_only_val_t (0));
     hb_always_assert (v.val == 42);
 
-    hb_result_t<move_only_val_t, error_code_t> r_err = Err (ERR_A);
+    hb_result_t<move_only_val_t, error_code_t> r_err = Err(ERR_A);
     move_only_val_t v_fallback = std::move (r_err).value_or (move_only_val_t (99));
     hb_always_assert (v_fallback.val == 99);
   }
@@ -400,6 +416,10 @@ struct copy_move_counter_t
   }
 
   int val;
+
+  bool in_error() const {
+    return val == -1;
+  }
 
   explicit copy_move_counter_t (int v) : val (v) {}
   copy_move_counter_t (const copy_move_counter_t& o) : val (o.val) { copy_count++; }
@@ -584,6 +604,29 @@ static void test_value_or_default ()
   }
 }
 
+static void test_from_move()
+{
+  {
+    copy_move_counter_t::reset();
+    copy_move_counter_t ok (24);
+    result<copy_move_counter_t> r_ok = result<copy_move_counter_t>::from(std::move(ok), ERR_B);
+    hb_always_assert (r_ok.is_ok());
+    hb_always_assert (r_ok->val == 24);
+    hb_always_assert (copy_move_counter_t::copy_count == 0);
+    hb_always_assert (copy_move_counter_t::move_count == 1);
+  }
+
+  {
+    copy_move_counter_t::reset();
+    copy_move_counter_t fail (-1);
+    result<copy_move_counter_t> r_fail = result<copy_move_counter_t>::from(std::move(fail), ERR_B);
+    hb_always_assert (r_fail.is_err());
+    hb_always_assert (r_fail.error() == ERR_B);
+    hb_always_assert (copy_move_counter_t::copy_count == 0);
+    hb_always_assert (copy_move_counter_t::move_count == 0);
+  }
+}
+
 int main ()
 {
   test_ok_basic ();
@@ -599,6 +642,7 @@ int main ()
   test_return_moves_from_local ();
   test_from();
   test_value_or_default ();
+  test_from_move ();
 
   return 0;
 }

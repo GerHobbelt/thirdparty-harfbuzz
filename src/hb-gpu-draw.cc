@@ -52,8 +52,7 @@ acc_emit (hb_gpu_draw_t *g,
 	  double p3x, double p3y)
 {
   int64_t *budget = g->get_budget_remaining ();
-  if (unlikely (*budget <= 0 ||
-		!hb_budget_spend (*budget, HB_BUDGET_1)))
+  if (unlikely (!hb_budget_spend (*budget, HB_BUDGET_1)))
     return;
 
   if (unlikely (g->num_curves >= HB_GPU_DRAW_MAX_CURVES))
@@ -247,8 +246,6 @@ hb_gpu_draw_set_budget (hb_draw_funcs_t *, void *draw_data,
   auto *draw = (hb_gpu_draw_t *) draw_data;
   draw->budget = budget;
   draw->recharge_budget ();
-  if (draw->external_budget)
-    *draw->external_budget = draw->budget_remaining;
   return true;
 }
 
@@ -1131,7 +1128,6 @@ hb_gpu_draw_clear (hb_gpu_draw_t *draw)
   draw->ext_max_x = -HUGE_VAL;
   draw->ext_max_y = -HUGE_VAL;
 
-  draw->external_budget = nullptr;
   draw->recharge_budget ();
 }
 

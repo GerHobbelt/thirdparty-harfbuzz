@@ -27,8 +27,6 @@
 
 #include "hb.hh"
 
-#include <stdint.h>
-
 
 #ifndef HB_BUFFER_MAX_LEN_FACTOR
 #define HB_BUFFER_MAX_LEN_FACTOR 256
@@ -135,6 +133,16 @@
 #define HB_SVG_MAX_DOCUMENT_SIZE ((size_t) 16 << 20)
 #endif
 
+/* Maximum size of one serialized vector document (SVG or PDF) produced by
+ * the vector backends.  Bounds output that is not outline-derived -- most
+ * of a path, but especially sweep-gradient meshes and embedded bitmaps --
+ * which the outline work budget cannot see.  vector is one glyph per
+ * context, so a flat cap suffices.  Unsigned (not size_t like the SVG-table
+ * limit above) to match hb_vector_buf_t's unsigned length arithmetic. */
+#ifndef HB_VECTOR_MAX_DOCUMENT_SIZE
+#define HB_VECTOR_MAX_DOCUMENT_SIZE ((unsigned) 16 << 20)
+#endif
+
 #ifndef HB_RASTER_MAX_BUFFER_SIZE
 #define HB_RASTER_MAX_BUFFER_SIZE ((size_t) 1 << 30)
 #endif
@@ -162,7 +170,7 @@
  */
 
 /* Fixed relative weights.  Keep the value in the name so charge sites are
- * easy to audit; tune the session caps below, not these values. */
+ * easy to audit; tune the common session cap, not these values. */
 #define HB_BUDGET_1	1u
 #define HB_BUDGET_2	2u
 #define HB_BUDGET_4	4u
@@ -175,10 +183,10 @@
 #define HB_BUDGET_512	512u
 #define HB_BUDGET_1024	1024u
 
-/* A generous per-glyph fallback.  Paint backends use their session cap so
- * repeated outline traversals consume one aggregate budget. */
+/* The common finite default for one top-level glyph rendering session.
+ * Nested outline and paint work shares the same live counter. */
 #ifndef HB_BUDGET_GLYPH
-#define HB_BUDGET_GLYPH ((int64_t) 1 << 26)
+#define HB_BUDGET_GLYPH ((int64_t) 1 << 24)
 #endif
 
 /* Precharge COST * MULT.  Callers bound COST and MULT structurally, and live
@@ -186,72 +194,20 @@
 static HB_ALWAYS_INLINE bool
 hb_budget_spend (int64_t &budget, unsigned int cost, unsigned int mult = 1)
 {
-  budget -= cost * mult;
+  budget -= (int64_t) cost * mult;
   return budget >= 0;
 }
 
-/* One standalone VARC extents session, shared by all leaf glyphs loaded
- * from glyf/CFF/CFF2.  Draw sessions use the renderer's live budget. */
-#ifndef HB_BUDGET_VARC
-#define HB_BUDGET_VARC ((int64_t) 1 << 20)
+/* The flat pixel-work floor for one raster paint session.  Pixel and
+ * outline work use separate live counters, so keep this independent of
+ * the common outline budget above. */
+#ifndef HB_BUDGET_RASTER_PIXELS
+#define HB_BUDGET_RASTER_PIXELS ((int64_t) 1 << 26)
 #endif
 
-/* One paint-extents session, in outline points consumed by
- * clip-glyph draws. */
-#ifndef HB_BUDGET_PAINT_EXTENTS
-#define HB_BUDGET_PAINT_EXTENTS ((int64_t) 16 << 20)
-#endif
-
-/* One GPU draw session, shared by outline traversal and generated
- * quadratic curves. */
-#ifndef HB_BUDGET_GPU_DRAW
-#define HB_BUDGET_GPU_DRAW ((int64_t) 16 << 20)
-#endif
-
-/* One GPU paint session, shared by paint-driven outline traversal and
- * generated quadratic curves. */
-#ifndef HB_BUDGET_GPU_PAINT
-#define HB_BUDGET_GPU_PAINT ((int64_t) 16 << 20)
-#endif
-
-/* One vector (SVG/PDF) draw session, shared by outline traversal and
- * generated path data. */
-#ifndef HB_BUDGET_VECTOR_DRAW
-#define HB_BUDGET_VECTOR_DRAW ((int64_t) 16 << 20)
-#endif
-
-/* One vector (SVG/PDF) paint session, shared by outline traversal,
- * generated path data, and sweep-gradient patch data. */
-#ifndef HB_BUDGET_VECTOR_PAINT
-#define HB_BUDGET_VECTOR_PAINT ((int64_t) 16 << 20)
-#endif
-
-/* One raster paint session (everything painted between two
- * render/clear calls), in pixel-op units; pixel loops charge their
- * area, consumed outline segments are charged with a fixed weight.
- * The session budget is the larger of this flat value and
- * HB_BUDGET_RASTER_PAINT_PASSES full-surface passes, so very large
- * surfaces still get a few full-surface operations. */
-#ifndef HB_BUDGET_RASTER_PAINT
-#define HB_BUDGET_RASTER_PAINT ((int64_t) 1 << 26)
-#endif
-
+/* Very large raster surfaces still get a few full-surface operations. */
 #ifndef HB_BUDGET_RASTER_PAINT_PASSES
 #define HB_BUDGET_RASTER_PAINT_PASSES 4
-#endif
-
-/* One raster draw session (everything drawn between two render/clear
- * calls) through the standalone hb-raster-draw API, in Bézier
- * subdivision steps.  When driven by raster-paint, the paint session
- * budget above is charged instead. */
-#ifndef HB_BUDGET_RASTER_DRAW
-#define HB_BUDGET_RASTER_DRAW ((int64_t) 1 << 24)
-#endif
-
-/* One cairo glyph-rendering session, shared by nested color-glyph
- * callbacks and outline traversal. */
-#ifndef HB_BUDGET_CAIRO_PAINT
-#define HB_BUDGET_CAIRO_PAINT ((int64_t) 16 << 20)
 #endif
 
 /* One raster draw session, in accumulated non-horizontal edges. */

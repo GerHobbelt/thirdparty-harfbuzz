@@ -46,22 +46,19 @@ struct hb_vector_path_sink_t
   float y_scale;
   int64_t *budget;
 
-  bool begin_command (unsigned *before)
+  bool begin_command ()
   {
-    if (unlikely (path->in_error () ||
-		  (budget && *budget <= 0)))
-      return false;
-    *before = path->length;
-    return true;
+    return likely (!path->in_error () && !(budget && *budget < 0));
   }
 
-  void end_command (unsigned before)
+  void end_command ()
   {
+    /* Serialized bytes are bounded by the output buffer's document-size
+     * cap (in_error), not the outline work budget; stop outline traversal
+     * once that cap or an allocation error trips. */
     if (!budget) return;
     if (unlikely (path->in_error ()))
       *budget = 0;
-    else
-      *budget -= path->length - before;
   }
 };
 

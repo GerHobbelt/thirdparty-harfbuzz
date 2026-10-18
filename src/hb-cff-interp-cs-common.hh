@@ -889,29 +889,36 @@ struct cs_interpreter_t : interpreter_t<ENV>
     SUPER::env.set_endchar (false);
     SUPER::env.set_budget (budget);
 
-    bool ret = true;
-    unsigned max_ops = HB_CFF_MAX_OPS;
-    for (;;) {
-      op_code_t op = SUPER::env.fetch_op ();
-      unsigned int cost = op == OpCode_callsubr || op == OpCode_callgsubr ?
-			  HB_BUDGET_8 : HB_BUDGET_1;
-      if (unlikely (!SUPER::env.spend_budget (cost)))
-      {
-	SUPER::env.set_error ();
-	ret = false;
-	break;
-      }
+    /* Cap the operator count by the caller's remaining budget so the single
+     * max_ops counter enforces both the structural limit and the live work
+     * budget, with no budget check in the hot loop.  The consumed operators
+     * are charged back after the loop, and since the cap never exceeds the
+     * remaining budget the charstring cannot overshoot it.  CFF2 blend
+     * charges its proportional work separately, in place. */
+    int64_t remaining = budget ? *budget : (int64_t) HB_CFF_MAX_OPS;
+    unsigned max_ops = (unsigned) hb_clamp (remaining, (int64_t) 0, (int64_t) HB_CFF_MAX_OPS);
+    unsigned start_ops = max_ops;
 
-      OPSET::process_op (op, SUPER::env, param);
-      if (unlikely (SUPER::env.in_error () || !--max_ops))
-      {
-	SUPER::env.set_error ();
-	ret = false;
-	break;
+    bool ret = true;
+    if (likely (max_ops))
+      for (;;) {
+	OPSET::process_op (SUPER::env.fetch_op (), SUPER::env, param);
+	if (unlikely (SUPER::env.in_error () || !--max_ops))
+	{
+	  SUPER::env.set_error ();
+	  ret = false;
+	  break;
+	}
+	if (SUPER::env.is_endchar ())
+	  break;
       }
-      if (SUPER::env.is_endchar ())
-	break;
+    else
+    {
+      SUPER::env.set_error ();
+      ret = false;
     }
+
+    if (budget) *budget -= (int64_t) (start_ops - max_ops);
 
     return ret;
   }

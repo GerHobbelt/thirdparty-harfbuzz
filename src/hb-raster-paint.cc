@@ -149,9 +149,11 @@ ensure_initialized (hb_raster_paint_t *c)
     return;
   }
 
-  /* Resolve the dynamic default only after the surface size is known.
-   * A concrete or unlimited client policy is never overwritten here. */
-  if (c->budget == HB_BUDGET_DEFAULT)
+  /* Resolve the surface-sized pixel budget now that the surface size is
+   * known.  An unlimited policy disables the pixel budget, so leave it.
+   * The outline budget is re-resolved to the same value it already holds
+   * (nothing has been drawn yet). */
+  if (c->budget != HB_BUDGET_UNLIMITED)
     c->recharge_budget ();
 
   /* Initial clip: full coverage rectangle */
@@ -203,10 +205,11 @@ hb_raster_paint_color_glyph (hb_paint_funcs_t *pfuncs HB_UNUSED,
 
 typedef void (*hb_raster_paint_clip_mask_emit_t) (hb_raster_draw_t *rdr, void *user_data);
 
-/* Attach the surface box and the session work budget to @rdr before
+/* Attach the surface box to @rdr and seed its outline budget before
  * outlines are drawn into it: curves outside the surface collapse to
- * their chord, and flattening work is charged as it happens instead
- * of only after the whole outline has been emitted. */
+ * their chord, and outline traversal and curve flattening charge the
+ * seeded budget.  hb_raster_paint_readback_budget() pulls the remainder
+ * back into the session afterwards. */
 static void
 hb_raster_paint_attach_clip_rdr (hb_raster_paint_t *c,
 				 hb_raster_draw_t *rdr,
@@ -217,7 +220,16 @@ hb_raster_paint_attach_clip_rdr (hb_raster_paint_t *c,
 			       (float) surf->extents.y_origin,
 			       (float) surf->extents.x_origin + (float) surf->extents.width,
 			       (float) surf->extents.y_origin + (float) surf->extents.height);
-  hb_raster_draw_set_external_work (rdr, &c->budget_remaining);
+  hb_draw_set_budget (hb_raster_draw_get_funcs (rdr), rdr, c->budget_remaining);
+}
+
+/* Pull the outline budget the rasterizer has consumed back into the
+ * session, so it aggregates across every glyph in the paint walk. */
+static void
+hb_raster_paint_readback_budget (hb_raster_paint_t *c,
+				 hb_raster_draw_t *rdr)
+{
+  c->budget_remaining = hb_draw_get_budget_remaining (hb_raster_draw_get_funcs (rdr), rdr);
 }
 
 static void
@@ -272,9 +284,12 @@ hb_raster_paint_finalize_path_clip (hb_raster_paint_t *c,
 				    hb_raster_image_t *surf,
 				    unsigned w, unsigned h)
 {
-  /* Charge the scanline work of the accumulated outline before
-   * rendering it. */
-  c->budget_remaining -= hb_raster_draw_get_edge_work (rdr, h);
+  if (unlikely (!c->precharge_work (hb_raster_draw_get_pixel_work (rdr, h))))
+  {
+    hb_raster_draw_clear (rdr);
+    hb_raster_paint_push_empty_clip (c, w, h);
+    return;
+  }
 
   hb_raster_image_t *mask_img = hb_raster_draw_render (rdr);
 
@@ -415,7 +430,7 @@ hb_raster_paint_push_clip_from_emitter (hb_raster_paint_t *c,
   /* Out of budget: skip the glyph-outline extraction entirely, so
    * per-glyph outline limits cannot multiply with the caller's
    * paint-graph traversal limits. */
-  if (unlikely (c->budget_remaining <= 0))
+  if (unlikely (c->budget_remaining < 0))
   {
     hb_raster_paint_push_empty_clip (c, w, h);
     return;
@@ -426,6 +441,7 @@ hb_raster_paint_push_clip_from_emitter (hb_raster_paint_t *c,
   hb_raster_draw_set_transform (rdr, t.xx, t.yx, t.xy, t.yy, t.x0, t.y0);
   hb_raster_paint_attach_clip_rdr (c, rdr, surf);
   emit (rdr, emit_data);
+  hb_raster_paint_readback_budget (c, rdr);
 
   hb_raster_paint_finalize_path_clip (c, rdr, surf, w, h);
 }
@@ -743,7 +759,8 @@ hb_raster_paint_push_clip_path_end (hb_paint_funcs_t *pfuncs HB_UNUSED,
   unsigned w = surf->extents.width;
   unsigned h = surf->extents.height;
 
-  if (unlikely (c->budget_remaining <= 0))
+  hb_raster_paint_readback_budget (c, c->clip_rdr);
+  if (unlikely (c->budget_remaining < 0))
   {
     hb_raster_draw_clear (c->clip_rdr);
     hb_raster_paint_push_empty_clip (c, w, h);
@@ -926,7 +943,7 @@ hb_raster_paint_fill_glyph (hb_paint_funcs_t *pfuncs HB_UNUSED,
   if (unlikely (!surf)) return;
 
   /* Out of budget: skip the glyph-outline extraction entirely. */
-  if (unlikely (c->budget_remaining <= 0)) return;
+  if (unlikely (c->budget_remaining < 0)) return;
 
   hb_raster_draw_t *rdr = c->clip_rdr;
   hb_transform_t<> t = c->current_effective_transform ();
@@ -935,10 +952,14 @@ hb_raster_paint_fill_glyph (hb_paint_funcs_t *pfuncs HB_UNUSED,
 
   hb_raster_paint_glyph_clip_data_t data = {glyph, font};
   hb_raster_paint_emit_clip_glyph_mask (rdr, &data);
+  hb_raster_paint_readback_budget (c, rdr);
 
-  /* Charge the scanline work of the accumulated outline before
-   * rendering it. */
-  c->budget_remaining -= hb_raster_draw_get_edge_work (rdr, surf->extents.height);
+  if (unlikely (!c->precharge_work (hb_raster_draw_get_pixel_work (rdr,
+							  surf->extents.height))))
+  {
+    hb_raster_draw_clear (rdr);
+    return;
+  }
 
   hb_raster_image_t *mask_img = hb_raster_draw_render (rdr);
   if (unlikely (!mask_img)) return;
@@ -966,8 +987,9 @@ hb_raster_paint_image (hb_paint_funcs_t *pfuncs HB_UNUSED,
 
   ensure_initialized (c);
 
-  /* Out of budget: skip, including the image decode below. */
-  if (unlikely (c->budget_remaining <= 0)) return false;
+  /* Out of pixel budget: skip, including the image decode below.  Image
+   * compositing is pixel work and does no outline traversal. */
+  if (unlikely (c->pixel_remaining < 0)) return false;
 
   unsigned src_width = width;
   unsigned src_height = height;
