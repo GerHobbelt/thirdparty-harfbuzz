@@ -400,7 +400,6 @@ struct glyf_accelerator_t
 
   public:
 
-#ifndef HB_NO_VAR
   struct points_aggregator_t
   {
     hb_font_t *font;
@@ -495,6 +494,7 @@ struct glyf_accelerator_t
 		 : phantoms[glyf_impl::PHANTOM_RIGHT].x - phantoms[glyf_impl::PHANTOM_LEFT].x;
     return hb_clamp (roundf (result), 0.f, (float) UINT_MAX / 2);
   }
+#endif
 
   float
   get_v_origin_with_var_unscaled (hb_codepoint_t gid,
@@ -518,8 +518,6 @@ struct glyf_accelerator_t
 
     return phantoms[glyf_impl::PHANTOM_TOP].y;
   }
-#endif
-#endif
 
   public:
 

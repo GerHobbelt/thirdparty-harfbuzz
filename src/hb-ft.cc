@@ -1687,7 +1687,10 @@ hb_ft_face_create_from_file_or_fail (const char   *file_name,
 			     file_name,
 			     index,
 			     &ft_face)))
+  {
+    destroy_ft_library (ft_library);
     return nullptr;
+  }
 
   FT_Reference_Face (ft_face);
   hb_face_t *face = hb_ft_face_create (ft_face, _hb_ft_face_destroy_static);
@@ -1748,7 +1751,10 @@ hb_ft_face_create_from_blob_or_fail (hb_blob_t    *blob,
 				    blob_size,
 				    index,
 				    &ft_face)))
+  {
+    destroy_ft_library (ft_library);
     return nullptr;
+  }
 
   FT_Reference_Face (ft_face);
   hb_face_t *face = hb_ft_face_create (ft_face, _hb_ft_face_destroy_static);
@@ -1842,6 +1848,7 @@ hb_ft_font_set_funcs (hb_font_t *font)
 				    &ft_face)))
   {
     hb_blob_destroy (blob);
+    destroy_ft_library (ft_library);
     DEBUG_MSG (FT, font, "FT_New_Memory_Face() failed");
     return;
   }
@@ -1858,6 +1865,7 @@ hb_ft_font_set_funcs (hb_font_t *font)
   {
     DEBUG_MSG (FT, font, "hb_blob_set_user_data() failed");
     _hb_ft_face_destroy_static (ft_face);
+    destroy_ft_library (ft_library);
     return;
   }
 

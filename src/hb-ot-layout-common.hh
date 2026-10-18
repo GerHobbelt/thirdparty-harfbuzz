@@ -2916,15 +2916,15 @@ _hb_avar2_region_is_dead (const hb_hashmap_t<hb_tag_t, Triple> &axis_tuples,
   return false;
 }
 
-struct SparseVariationRegion : Array16Of<SparseVarRegionAxis>
+struct SparseVariationRegion
 {
   float evaluate (const int *coords, unsigned int coord_len) const
   {
     float v = 1.f;
-    unsigned int count = len;
+    unsigned int count = axes.len;
     for (unsigned int i = 0; i < count; i++)
     {
-      float factor = arrayZ[i].evaluate (coords, coord_len);
+      float factor = (this+axes[i]).evaluate (coords, coord_len);
       if (factor == 0.f)
 	return 0.;
       v *= factor;
@@ -2934,7 +2934,25 @@ struct SparseVariationRegion : Array16Of<SparseVarRegionAxis>
 
   bool serialize (hb_serialize_context_t *c,
 		  const SparseVariationRegion *src)
-  { return bool (src->copy (c)); }
+  {
+    TRACE_SERIALIZE (this);
+    if (unlikely (!axes.serialize (c, (unsigned) src->axes.len))) return_trace (false);
+    for (unsigned i = 0; i < axes.len; i++)
+      if (unlikely (!axes[i].serialize_copy (c, src->axes[i], src)))
+	return_trace (false);
+    return_trace (true);
+  }
+
+  bool sanitize (hb_sanitize_context_t *c) const
+  {
+    TRACE_SANITIZE (this);
+    return_trace (axes.sanitize (c, this));
+  }
+
+  protected:
+  Array16Of<Offset32To<SparseVarRegionAxis>> axes;
+  public:
+  DEFINE_SIZE_ARRAY (2, axes);
 };
 
 struct SparseVarRegionList
@@ -2987,10 +3005,10 @@ struct SparseVarRegionList
   }
 
   public:
-  Array16Of<Offset32To<SparseVariationRegion>>
+  Array32Of<Offset32To<SparseVariationRegion>>
 		regions;
   public:
-  DEFINE_SIZE_ARRAY (2, regions);
+  DEFINE_SIZE_ARRAY (4, regions);
 };
 
 
@@ -3385,8 +3403,10 @@ struct MultiVarData
 {
   size_t get_size () const
   { return hb_unsigned_add_saturate (min_size - regionIndices.min_size,
-				     regionIndices.get_size (),
-				     StructAfter<CFF2Index> (regionIndices).get_size ()); }
+				     regionIndices.get_size ()); }
+
+  const TupleList &get_delta_sets () const
+  { return this+StructAfter<decltype (deltaSetsX)> (regionIndices); }
 
   void get_delta (unsigned int inner,
 		  const int *coords, unsigned int coord_count,
@@ -3394,7 +3414,7 @@ struct MultiVarData
 		  hb_array_t<float> out,
 		  hb_scalar_cache_t *cache = nullptr) const
   {
-    auto &deltaSets = StructAfter<decltype (deltaSetsX)> (regionIndices);
+    auto &deltaSets = get_delta_sets ();
 
     auto values_iter = deltaSets.fetcher (inner);
     unsigned regionCount = regionIndices.len;
@@ -3427,11 +3447,11 @@ struct MultiVarData
 		  format == 1 &&
 		  regionIndices.sanitize (c) &&
 		  hb_barrier () &&
-		  StructAfter<decltype (deltaSetsX)> (regionIndices).sanitize (c));
+		  StructAfter<decltype (deltaSetsX)> (regionIndices).sanitize (c, this));
   }
 
   unsigned get_item_count () const
-  { return StructAfter<decltype (deltaSetsX)> (regionIndices).count; }
+  { return get_delta_sets ().count; }
 
   void collect_region_refs (hb_set_t &region_indices) const
   {
@@ -3448,7 +3468,8 @@ struct MultiVarData
     unsigned region_count = src->regionIndices.len;
     unsigned header_size = HBUINT8::static_size +
 			   Array16Of<HBUINT16>::min_size +
-			   region_count * HBUINT16::static_size;
+			   region_count * HBUINT16::static_size +
+			   HBUINT32::static_size;
     if (unlikely (!c->extend_size (this, header_size, false)))
       return_trace (false);
     format = 1;
@@ -3461,7 +3482,7 @@ struct MultiVarData
       regionIndices[i] = region_map.get (old_region);
     }
 
-    const auto &src_delta_sets = StructAfter<decltype (deltaSetsX)> (src->regionIndices);
+    const auto &src_delta_sets = src->get_delta_sets ();
     hb_vector_t<hb_ubytes_t> delta_sets;
     unsigned data_size = 0;
     if (unlikely (!delta_sets.alloc_exact (inner_map.get_population ())))
@@ -3478,15 +3499,15 @@ struct MultiVarData
       return_trace (false);
 
     auto &out_delta_sets = StructAfter<decltype (deltaSetsX)> (regionIndices);
-    return_trace (out_delta_sets.serialize (c, delta_sets.iter (), &data_size));
+    return_trace (out_delta_sets.serialize_serialize (c, delta_sets.iter (), &data_size));
   }
 
   protected:
   HBUINT8	      format; // 1
   Array16Of<HBUINT16> regionIndices;
-  TupleList	      deltaSetsX;
+  Offset32To<TupleList> deltaSetsX;
   public:
-  DEFINE_SIZE_MIN (8);
+  DEFINE_SIZE_MIN (7);
 };
 
 struct ItemVariationStore
@@ -5000,6 +5021,17 @@ Condition::subset_lookup_condition_impl (hb_subset_context_t *c,
 		LOOKUP_CONDITION_SUBSET_TRUE :
 		LOOKUP_CONDITION_SUBSET_FALSE);
 
+      if (!c->plan->user_axes_location.is_empty () &&
+          hb_first (*new_varidx_delta) == VarIdx::NO_VARIATION)
+      {
+        // Conditions becoming constant depend on the unrounded sign, not
+        // the integer delta used to instance positioning values.
+        float value = (int) src.defaultValue +
+                      c->plan->layout_variation_delta (src.varIdx);
+        return value > 0 ? LOOKUP_CONDITION_SUBSET_TRUE :
+                          LOOKUP_CONDITION_SUBSET_FALSE;
+      }
+
       int default_value = (int) src.defaultValue +
 			  hb_second (*new_varidx_delta);
       if (unlikely (!c->serializer->check_assign (
@@ -5009,11 +5041,6 @@ Condition::subset_lookup_condition_impl (hb_subset_context_t *c,
         return LOOKUP_CONDITION_SUBSET_ERROR;
       out->varIdx = hb_first (*new_varidx_delta);
 
-      if (!c->plan->user_axes_location.is_empty () &&
-	  out->varIdx == VarIdx::NO_VARIATION)
-        return default_value > 0 ?
-	       LOOKUP_CONDITION_SUBSET_TRUE :
-	       LOOKUP_CONDITION_SUBSET_FALSE;
       return LOOKUP_CONDITION_SUBSET_KEEP;
     }
 
@@ -5142,7 +5169,10 @@ struct ConditionSet
       cond_idx++;
     }
 
-    if (!should_keep) return;
+    /* Satisfied pinned conditions still terminate first-match processing.
+     * Keep their universal record when other axes remain variable. */
+    c->universal = num_kept_cond == 0;
+    if (!should_keep && c->all_axes_pinned) return;
 
     //check if condition_set is unique with variations
     if (can_deduplicate && c->conditionset_map->has (p))
@@ -5152,8 +5182,6 @@ struct ConditionSet
     if (can_deduplicate)
       c->conditionset_map->set (p, 1);
     c->record_cond_idx_map->set (c->cur_record_idx, s);
-    if (should_keep && num_kept_cond == 0)
-      c->universal = true;
   }
 
   bool subset (hb_subset_context_t *c,
@@ -5440,7 +5468,13 @@ struct FeatureVariationRecord
     auto *out = c->subset_context->serializer->embed (this);
     if (unlikely (!out)) return_trace (false);
 
-    out->conditions.serialize_subset (c->subset_context, conditions, base, c, insert_catch_all);
+    hb_set_t *retained_conditions = c->feature_record_cond_idx_map ?
+        c->feature_record_cond_idx_map->get (c->cur_feature_var_record_idx).get () : nullptr;
+    if (!insert_catch_all && retained_conditions && retained_conditions->is_empty ())
+      /* A null ConditionSet is the unconditional first-match record. */
+      out->conditions = 0;
+    else
+      out->conditions.serialize_subset (c->subset_context, conditions, base, c, insert_catch_all);
     out->substitutions.serialize_subset (c->subset_context, substitutions, base, c, insert_catch_all);
 
     return_trace (true);
