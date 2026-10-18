@@ -36,7 +36,7 @@
 static void
 test_simple_tags (const char *s, hb_script_t script)
 {
-  hb_script_t tag;
+  hb_tag_t tag;
   unsigned int count = 2;
   hb_tag_t t[2];
 
@@ -58,7 +58,7 @@ test_simple_tags (const char *s, hb_script_t script)
 static void
 test_script_tags_from_language (const char *s, const char *lang_s, hb_script_t script)
 {
-  hb_script_t tag;
+  hb_tag_t tag;
   unsigned int count = 1;
   hb_tag_t t;
 
@@ -77,7 +77,7 @@ test_script_tags_from_language (const char *s, const char *lang_s, hb_script_t s
 static void
 test_indic_tags (const char *s1, const char *s2, const char *s3, hb_script_t script)
 {
-  hb_script_t tag1, tag2, tag3;
+  hb_tag_t tag1, tag2, tag3;
   hb_tag_t t[3];
   unsigned int count = 3;
 
@@ -521,8 +521,8 @@ test_tags (hb_script_t  script,
 {
   va_list expected_tags;
   unsigned int i;
-  hb_tag_t *script_tags = malloc (script_count * sizeof (hb_tag_t));
-  hb_tag_t *language_tags = malloc (language_count * sizeof (hb_tag_t));
+  hb_tag_t *script_tags = (hb_tag_t *)malloc (script_count * sizeof (hb_tag_t));
+  hb_tag_t *language_tags = (hb_tag_t *)malloc (language_count * sizeof (hb_tag_t));
   hb_language_t lang;
   g_assert_true (script_tags);
   g_assert_true (language_tags);
@@ -570,7 +570,7 @@ test_ot_tag_full (void)
 #endif
 
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
   hb_test_init (&argc, &argv);
 

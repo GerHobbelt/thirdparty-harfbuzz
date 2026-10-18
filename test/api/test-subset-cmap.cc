@@ -415,7 +415,7 @@ test_subset_cmap_format15 (void)
 #endif
 
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
   hb_test_init (&argc, &argv);
 

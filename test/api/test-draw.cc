@@ -1204,7 +1204,7 @@ test_hb_draw_budget (void)
 static void
 test_hb_draw_funcs (const void* user_data)
 {
-  const char *font_funcs_name = user_data;
+  const char *font_funcs_name = (const char *)user_data;
   char str[1024];
   draw_data_t draw_data = {
     .str = str,
@@ -1287,7 +1287,7 @@ test_hb_draw_compare_ot_funcs (const void *user_data)
 #endif
 
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
   funcs = hb_draw_funcs_create ();
   hb_draw_funcs_set_move_to_func (funcs, move_to, NULL, NULL);

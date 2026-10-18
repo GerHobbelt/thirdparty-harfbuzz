@@ -86,7 +86,7 @@ test_predef_charset_names (void)
 #endif
 
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
   hb_test_init (&argc, &argv);
 

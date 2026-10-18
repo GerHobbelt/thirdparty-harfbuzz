@@ -111,7 +111,7 @@ test_ot_name (void)
 #endif
 
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
   unsigned int status;
   hb_test_init (&argc, &argv);
