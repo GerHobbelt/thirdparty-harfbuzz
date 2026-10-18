@@ -833,8 +833,6 @@ hb_vector_draw_render_pdf (hb_vector_draw_t *draw)
 
   hb_blob_t *blob = hb_buf_blob_from (&draw->recycled_blob, &out);
 
-  hb_vector_draw_clear (draw);
-
   return blob;
 }
 
@@ -918,8 +916,6 @@ hb_vector_draw_render_svg (hb_vector_draw_t *draw)
 
   hb_blob_t *blob = hb_buf_blob_from (&draw->recycled_blob, &out);
 
-  hb_vector_draw_clear (draw);
-
   return blob;
 }
 
@@ -928,6 +924,8 @@ hb_vector_draw_render_svg (hb_vector_draw_t *draw)
  * @draw: a draw context.
  *
  * Renders accumulated draw content to an output blob.
+ * Accumulated content and extents are cleared on return, including
+ * when rendering fails. User configuration is preserved.
  *
  * Return value: (transfer full) (nullable): output blob, or `NULL` if rendering cannot proceed.
  *
@@ -936,6 +934,7 @@ hb_vector_draw_render_svg (hb_vector_draw_t *draw)
 hb_blob_t *
 hb_vector_draw_render (hb_vector_draw_t *draw)
 {
+  HB_SCOPE_GUARD (hb_vector_draw_clear (draw));
   switch (draw->format)
   {
     case HB_VECTOR_FORMAT_SVG:
@@ -998,9 +997,13 @@ hb_vector_draw_reset (hb_vector_draw_t *draw)
 /**
  * hb_vector_draw_recycle_blob:
  * @draw: a draw context.
- * @blob: (nullable): previously rendered blob to recycle.
+ * @blob: (transfer full) (nullable): previously rendered blob to recycle.
  *
  * Provides a blob for internal buffer reuse by later render calls.
+ * The caller transfers ownership of one reference to @draw and must
+ * not destroy that reference after this call. Finish accessing @blob
+ * and its data before recycling: later renders may reuse the blob
+ * and overwrite its data.
  *
  * Since: 13.0.0
  */
