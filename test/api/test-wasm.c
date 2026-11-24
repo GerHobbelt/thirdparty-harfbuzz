@@ -298,8 +298,13 @@ test_wasm_destroy (void)
   hb_font_destroy (font);
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr) hb_test_wasm_main(cnt, arr)
+#endif
+
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
   hb_test_init (&argc, &argv);
 
