@@ -2647,9 +2647,7 @@ struct hb_scalar_cache_t
 {
   private:
   static constexpr unsigned STATIC_LENGTH = 128;
-  static constexpr int INVALID = INT_MIN;
-  static constexpr float MULTIPLIER = 1 << ((sizeof (int) * 8) - 2);
-  static constexpr float DIVISOR = 1.f / MULTIPLIER;
+  static constexpr float INVALID = NAN;
 
   public:
   hb_scalar_cache_t () {}
@@ -2714,16 +2712,10 @@ struct hb_scalar_cache_t
     }
     auto *values = &static_values[0];
     auto *cached_value = &values[i];
-    // Super hot. Most common path is that we have a cached value of 0.
-    int v = *cached_value;
-    if (likely (!v))
-    {
-      *value = 0.f;
-      return true;
-    }
-    if (v == INVALID)
+    float v = *cached_value;
+    if (std::isnan (v))
       return false;
-    *value = v * DIVISOR;
+    *value = v;
     return true;
   }
 
@@ -2733,13 +2725,13 @@ struct hb_scalar_cache_t
     if (unlikely (i >= length)) return;
     auto *values = &static_values[0];
     auto *cached_value = &values[i];
-    *cached_value = roundf(value * MULTIPLIER);
+    *cached_value = value;
   }
 
   public:
   unsigned length;
   private:
-  mutable hb_atomic_t<int> static_values[STATIC_LENGTH];
+  mutable hb_atomic_t<float> static_values[STATIC_LENGTH];
 };
 
 struct VarRegionList
@@ -5042,13 +5034,13 @@ Condition::subset_lookup_condition_impl (hb_subset_context_t *c,
       if (!c->plan->axes_old_index_tag_map.has (src.axisIndex, &axis_tag))
         return LOOKUP_CONDITION_SUBSET_ERROR;
 
-      Triple axis_limit {-1.0, 0.0, 1.0};
+      Triple axis_limit {-1.f, 0.f, 1.f};
       Triple *normalized_limit;
       if (c->plan->axes_location.has (*axis_tag, &normalized_limit))
         axis_limit = *normalized_limit;
 
-      double filter_min = (double) src.filterRangeMinValue.to_float ();
-      double filter_max = (double) src.filterRangeMaxValue.to_float ();
+      float filter_min = src.filterRangeMinValue.to_float ();
+      float filter_max = src.filterRangeMaxValue.to_float ();
       if (filter_min > filter_max)
         return LOOKUP_CONDITION_SUBSET_FALSE;
       if (axis_limit.is_point ())
@@ -5069,7 +5061,7 @@ Condition::subset_lookup_condition_impl (hb_subset_context_t *c,
       if (unlikely (!out))
         return LOOKUP_CONDITION_SUBSET_ERROR;
 
-      TripleDistances axis_distances {1.0, 1.0};
+      TripleDistances axis_distances {1.f, 1.f};
       TripleDistances *distances;
       if (c->plan->axes_triple_distances.has (*axis_tag, &distances))
         axis_distances = *distances;
@@ -6295,6 +6287,16 @@ struct VariationDevice
 			     hb_scalar_cache_t *store_cache = nullptr) const
   { return !font->has_nonzero_coords ? 0 : font->em_scalef_y (get_delta (font, store, store_cache)); }
 
+  float get_x_delta_f (hb_font_t *font,
+		       const ItemVariationStore &store,
+		       hb_scalar_cache_t *store_cache) const
+  { return !font->has_nonzero_coords ? 0.f : font->em_fscalef_x (get_delta (font, store, store_cache)); }
+
+  float get_y_delta_f (hb_font_t *font,
+		       const ItemVariationStore &store,
+		       hb_scalar_cache_t *store_cache) const
+  { return !font->has_nonzero_coords ? 0.f : font->em_fscalef_y (get_delta (font, store, store_cache)); }
+
   VariationDevice* copy (hb_serialize_context_t *c,
                          const hb_hashmap_t<unsigned, hb_pair_t<unsigned, int>> *layout_variation_idx_delta_map) const
   {
@@ -6357,6 +6359,36 @@ struct DeviceHeader
 
 struct Device
 {
+  // Anchors retain fractional coordinates until their difference is rounded.
+  // Hinting adjustments and value records keep their integer semantics.
+  float get_x_delta_f (hb_font_t *font,
+		       const ItemVariationStore &store,
+		       hb_scalar_cache_t *store_cache = nullptr) const
+  {
+#ifndef HB_NO_VAR
+    if (u.b.format == 0x8000)
+    {
+      hb_barrier ();
+      return u.variation.get_x_delta_f (font, store, store_cache);
+    }
+#endif
+    return get_x_delta (font, store, store_cache);
+  }
+
+  float get_y_delta_f (hb_font_t *font,
+		       const ItemVariationStore &store,
+		       hb_scalar_cache_t *store_cache = nullptr) const
+  {
+#ifndef HB_NO_VAR
+    if (u.b.format == 0x8000)
+    {
+      hb_barrier ();
+      return u.variation.get_y_delta_f (font, store, store_cache);
+    }
+#endif
+    return get_y_delta (font, store, store_cache);
+  }
+
   hb_position_t get_x_delta (hb_font_t *font,
 			     const ItemVariationStore &store=Null (ItemVariationStore),
 			     hb_scalar_cache_t *store_cache = nullptr) const
