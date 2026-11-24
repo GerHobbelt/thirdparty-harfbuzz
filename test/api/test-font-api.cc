@@ -466,6 +466,43 @@ glyph_h_advance_func1 (hb_font_t *font HB_UNUSED, void *font_data HB_UNUSED,
 }
 
 static void
+test_font_create_without_funcs (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
+  unsigned int upem = hb_face_get_upem (face);
+  hb_font_t *font = hb_font_create_without_funcs_or_fail (face);
+  g_assert_nonnull (font);
+  g_assert_false (hb_font_is_immutable (font));
+  g_assert_true (hb_font_get_face (font) == face);
+  g_assert_true (hb_face_is_immutable (face));
+  hb_face_destroy (face);
+
+  int x_scale, y_scale;
+  hb_font_get_scale (font, &x_scale, &y_scale);
+  g_assert_cmpint (x_scale, ==, upem);
+  g_assert_cmpint (y_scale, ==, upem);
+
+  hb_codepoint_t glyph = 123;
+  g_assert_false (hb_font_get_nominal_glyph (font, 'a', &glyph));
+  g_assert_cmpuint (glyph, ==, 0);
+#ifdef HAVE_FREETYPE
+  g_assert_null (hb_ft_font_get_ft_face (font));
+#endif
+
+  hb_font_funcs_t *funcs = hb_font_funcs_create ();
+  hb_font_funcs_set_glyph_h_advance_func (funcs, glyph_h_advance_func1, NULL, NULL);
+  hb_font_set_funcs (font, funcs, NULL, NULL);
+  hb_font_funcs_destroy (funcs);
+  g_assert_cmpint (hb_font_get_glyph_h_advance (font, 1), ==, 8);
+  hb_font_destroy (font);
+
+  font = hb_font_create_without_funcs_or_fail (NULL);
+  g_assert_nonnull (font);
+  g_assert_true (hb_font_get_face (font) == hb_face_get_empty ());
+  hb_font_destroy (font);
+}
+
+static void
 test_fontfuncs_subclassing (void)
 {
   hb_blob_t *blob;
@@ -1045,6 +1082,34 @@ test_glyph_origin_offsets_saturate (void)
   hb_font_destroy (font);
   hb_face_destroy (face);
   hb_font_funcs_destroy (ffuncs);
+}
+
+static void
+test_ot_vertical_fallback_saturates (void)
+{
+  /* No vmtx; MVAR moves the ascender to INT32_MAX and the descender to
+   * INT32_MIN at TEST=1, so the vertical fallbacks must not overflow
+   * subtracting one from the other. */
+  hb_face_t *face = hb_test_open_font_file ("fonts/mvar-huge-ascender.ttf");
+  hb_font_t *font = hb_font_create (face);
+  hb_ot_font_set_funcs (font);
+  hb_variation_t var = {HB_TAG ('T','E','S','T'), 1.f};
+  hb_font_set_variations (font, &var, 1);
+
+  hb_font_extents_t extents;
+  hb_font_get_h_extents (font, &extents);
+  g_assert_cmpint (extents.ascender, ==, INT32_MAX);
+  g_assert_cmpint (extents.descender, ==, INT32_MIN);
+
+  g_assert_cmpint (hb_font_get_glyph_v_advance (font, 1), ==, INT32_MIN);
+
+  hb_position_t x, y;
+  hb_font_get_glyph_v_origin (font, 1, &x, &y);
+  /* y_bearing 500, height -500: centered within the saturated advance. */
+  g_assert_cmpint (y, ==, 500 + ((INT32_MAX - 500) >> 1));
+
+  hb_font_destroy (font);
+  hb_face_destroy (face);
 }
 
 static hb_position_t
@@ -1650,12 +1715,14 @@ main (int argc, const char **argv)
   hb_test_add (test_fontfuncs_parallels);
 
   hb_test_add (test_font_empty);
+  hb_test_add (test_font_create_without_funcs);
   hb_test_add (test_font_properties);
   hb_test_add (test_synthetic_glyph_extents_overflow);
   hb_test_add (test_synthetic_bold_saturates);
   hb_test_add (test_synthetic_slant_saturates);
   hb_test_add (test_synthetic_slant_cancelling);
   hb_test_add (test_glyph_origin_offsets_saturate);
+  hb_test_add (test_ot_vertical_fallback_saturates);
   hb_test_add (test_synthetic_bold_extreme_strength);
   hb_test_add (test_font_float_scale_saturates);
 #ifndef HB_DISABLE_DEPRECATED

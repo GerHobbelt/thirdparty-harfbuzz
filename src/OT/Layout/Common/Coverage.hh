@@ -135,7 +135,21 @@ struct Coverage
     case 3: hb_barrier (); return u.format3.get_population ();
     case 4: hb_barrier (); return u.format4.get_population ();
 #endif
-    default:return NOT_COVERED;
+    default:return 0;
+    }
+  }
+
+  /* Number of glyph or range records; what walking the table costs. */
+  unsigned get_record_count () const
+  {
+    switch (u.format.v) {
+    case 1: hb_barrier (); return u.format1.glyphArray.len;
+    case 2: hb_barrier (); return u.format2.rangeRecord.len;
+#ifndef HB_NO_BEYOND_64K
+    case 3: hb_barrier (); return u.format3.glyphArray.len;
+    case 4: hb_barrier (); return u.format4.rangeRecord.len;
+#endif
+    default:return 0;
     }
   }
 
@@ -190,6 +204,11 @@ struct Coverage
   {
     TRACE_SUBSET (this);
     const hb_subset_plan_t *plan = c->plan;
+
+    /* Ranges are walked glyph by glyph, once per offset that points at us. */
+    if (unlikely (!c->check_ops (hb_min (get_population (), plan->source->get_num_glyphs ()))))
+      return_trace (false);
+
     auto it =
     + iter ()
     | hb_take (plan->source->get_num_glyphs ())

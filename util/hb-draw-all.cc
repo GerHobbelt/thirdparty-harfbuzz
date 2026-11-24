@@ -5,7 +5,7 @@
 
 
 #if defined(BUILD_MONOLITHIC)
-#define main(cnt, arr) hb_paint_all_main (cnt, arr)
+#define main(cnt, arr) hb_draw_all_main (cnt, arr)
 #endif
 
 int main (int argc, char **argv)
@@ -32,18 +32,18 @@ int main (int argc, char **argv)
   if (argc > 3)
   {
     hb_variation_t variations[] = {
-      { HB_TAG ('w', 'g', 'h', 't'), atoi (argv[3]) },
+      { HB_TAG ('w', 'g', 'h', 't'), (float) atoi (argv[3]) },
     };
     hb_font_set_variations (font, variations, 1);
   }
 
-  hb_paint_funcs_t *funcs = hb_paint_funcs_create ();
+  hb_draw_funcs_t *funcs = hb_draw_funcs_create ();
 
   unsigned glyph_count = hb_face_get_glyph_count (face);
   for (unsigned gid = 0; gid < glyph_count; gid++)
-    hb_font_paint_glyph (font, gid, funcs, NULL, 0, 0);
+    hb_font_draw_glyph (font, gid, funcs, NULL);
 
-  hb_paint_funcs_destroy (funcs);
+  hb_draw_funcs_destroy (funcs);
   hb_font_destroy (font);
   hb_face_destroy (face);
   return 0;

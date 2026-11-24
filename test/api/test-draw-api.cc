@@ -1151,6 +1151,52 @@ test_hb_draw_cff_budget (void)
 }
 
 static void
+test_hb_draw_cff2_blend_budget (void)
+{
+  /* A charstring that pushes 100 numbers and then blends all of them 100
+   * times.  Its VarData has no regions, so a blend has no deltas to pop;
+   * walking the default values must consume budget all the same. */
+  char cff2_data[59 + 100 + 100 * 2] = {
+    2, 0, 5, 0, 7, /* header */
+    (char) (139 + 50), 17, (char) (139 + 16), 24, (char) (139 + 40), 12, 36, /* Top DICT */
+    0, 0, 0, 0, /* global subrs */
+    0, 22, 0, 1, 0, 0, 0, 12, 0, 1, 0, 0, 0, 16, /* vstore */
+    0, 1, 0, 0, /* region list */
+    0, 0, 0, 0, 0, 0, /* VarData */
+    0, 0, 0, 1, 1, 1, 4, (char) 139, (char) (139 + 50), 18, /* FDArray, empty Private DICT */
+    0, 0, 0, 1, 2, 0, 1, 0x01, 0x2D /* CharStrings */
+  };
+  memset (cff2_data + 59, 139, 100);
+  for (unsigned i = 0; i < 100; i++)
+  {
+    cff2_data[159 + i * 2] = (char) (139 + 100);
+    cff2_data[159 + i * 2 + 1] = 16; /* blend */
+  }
+
+  hb_face_t *face = hb_face_builder_create ();
+  HB_FACE_ADD_TABLE (face, "CFF2", cff2_data);
+  hb_face_set_glyph_count (face, 1);
+  hb_font_t *font = hb_font_create (face);
+
+  draw_budget_data_t data = {HB_BUDGET_DEFAULT, 0};
+  hb_draw_funcs_t *draw_funcs = hb_draw_funcs_create ();
+  hb_draw_funcs_set_set_budget_func (draw_funcs, draw_set_budget, NULL, NULL);
+  hb_draw_funcs_set_get_budget_remaining_func (draw_funcs, draw_get_budget_remaining, NULL, NULL);
+
+  g_assert_true (hb_draw_set_budget (draw_funcs, &data, 20000));
+  g_assert_true (hb_font_draw_glyph_or_fail (font, 0, draw_funcs, &data));
+  g_assert_cmpint (data.live, <, 20000 - 100 * 100);
+
+  g_assert_true (hb_draw_set_budget (draw_funcs, &data, 5000));
+  g_assert_false (hb_font_draw_glyph_or_fail (font, 0, draw_funcs, &data));
+  g_assert_cmpint (data.live, <, 0);
+
+  hb_draw_funcs_destroy (draw_funcs);
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
+static void
 test_hb_draw_glyf_composite_budget (void)
 {
   /* A child composite whose 256 components all reference itself.  Preparing
@@ -1187,6 +1233,138 @@ test_hb_draw_glyf_composite_budget (void)
 
   g_assert_true (hb_draw_set_budget (draw_funcs, &data, 10000));
   g_assert_true (hb_font_draw_glyph_or_fail (font, 0, draw_funcs, &data));
+
+  hb_draw_funcs_destroy (draw_funcs);
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
+static int64_t
+draw_gvar_budget_consumption (const char *var_data, unsigned var_data_size)
+{
+  /* One empty glyph and one axis.  The only shared tuple peaks at +1. */
+  const char glyf_data[10] = {0};
+  const char loca_data[] = {0, 0, 0, 5};
+  const char fvar_data[] = {
+    0, 1, 0, 0, 0, 16, 0, 2, 0, 1, 0, 20, 0, 0, 0, 8,
+    'w', 'g', 'h', 't', 0, 100, 0, 0, 1, (char) 0x90, 0, 0, 3, (char) 0x84, 0, 0, 0, 0, 1, 0
+  };
+  char gvar_data[26 + 1024] = {
+    0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 24, 0, 1, 0, 0, 0, 0, 0, 26,
+    0, 0, 2, 0, 0x40, 0
+  };
+  g_assert_cmpuint (var_data_size, <=, 1024);
+  memcpy (gvar_data + 26, var_data, var_data_size);
+
+  hb_face_t *face = hb_face_builder_create ();
+  HB_FACE_ADD_TABLE (face, "glyf", glyf_data);
+  HB_FACE_ADD_TABLE (face, "loca", loca_data);
+  HB_FACE_ADD_TABLE (face, "fvar", fvar_data);
+  HB_FACE_ADD_TABLE (face, "gvar", gvar_data);
+  hb_face_set_glyph_count (face, 1);
+  hb_font_t *font = hb_font_create (face);
+  hb_variation_t variation = {HB_TAG ('w','g','h','t'), 900};
+  hb_font_set_variations (font, &variation, 1);
+
+  const int64_t budget = 100000;
+  draw_budget_data_t data = {HB_BUDGET_DEFAULT, 0};
+  hb_draw_funcs_t *draw_funcs = hb_draw_funcs_create ();
+  hb_draw_funcs_set_set_budget_func (draw_funcs, draw_set_budget, NULL, NULL);
+  hb_draw_funcs_set_get_budget_remaining_func (draw_funcs, draw_get_budget_remaining, NULL, NULL);
+  g_assert_true (hb_draw_set_budget (draw_funcs, &data, budget));
+  g_assert_true (hb_font_draw_glyph_or_fail (font, 0, draw_funcs, &data));
+
+  hb_draw_funcs_destroy (draw_funcs);
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+
+  return budget - data.live;
+}
+
+static void
+test_hb_draw_gvar_budget (void)
+{
+  /* 100 tuples with an embedded peak of -1: none applies at wght=900, but
+   * the region of each has to be evaluated. */
+  char unapplied[4 + 100 * 6] = {0, 100, 0x02, 0x5C};
+  for (unsigned i = 0; i < 100; i++)
+  {
+    unapplied[4 + i * 6 + 2] = (char) 0x80;
+    unapplied[4 + i * 6 + 4] = (char) 0xC0;
+  }
+  g_assert_cmpint (draw_gvar_budget_consumption (unapplied, sizeof (unapplied)), >=, 200);
+
+  /* 64 shared point numbers, all of them point 0, and eight tuples that
+   * each apply 64 zero deltas to them: far more than the glyph has points. */
+  char points[4 + 8 * 4 + 2 + 64 + 8 * 2] = {(char) 0x80, 8, 0, 36};
+  for (unsigned i = 0; i < 8; i++)
+    points[4 + i * 4 + 1] = 2;
+  points[36] = 64;
+  points[37] = 63;
+  memset (points + 38 + 64, 0xBF, 8 * 2);
+  g_assert_cmpint (draw_gvar_budget_consumption (points, sizeof (points)), >=, 9 * 64);
+}
+
+static void
+test_hb_draw_cff2_blend_region_budget (void)
+{
+  /* A CFF2 font whose only charstring blends one value over 256 region
+   * indices, all naming the one region of a 16-axis region list.  Evaluating
+   * the region scalars must be charged for every (region index, axis) pair,
+   * independently of the blend's own operand count. */
+  char cff2_data[938] = {0};
+  cff2_data[0] = 2;
+  cff2_data[2] = 5;
+  cff2_data[4] = 19;
+  /* Top DICT: CharStrings at 28, vstore at 296, FDArray at 928. */
+  cff2_data[5] = 0x1d;  cff2_data[9] = 28;   cff2_data[10] = 17;
+  cff2_data[11] = 0x1d; cff2_data[14] = 1;   cff2_data[15] = 40;  cff2_data[16] = 24;
+  cff2_data[17] = 0x1d; cff2_data[20] = 3;   cff2_data[21] = (char) 160;
+  cff2_data[22] = 12;   cff2_data[23] = 36;
+  /* Empty Global Subr INDEX at 24; CharStrings INDEX at 28: one 259-byte
+   * charstring: 257 zeros, 1, blend. */
+  cff2_data[31] = 1;    cff2_data[32] = 2;
+  cff2_data[34] = 1;    cff2_data[35] = 1;   cff2_data[36] = 4;
+  for (unsigned i = 0; i < 257; i++)
+    cff2_data[37 + i] = (char) 139;
+  cff2_data[294] = (char) 140;
+  cff2_data[295] = 16;
+  /* VariationStore at 296: 630 bytes; region list at +12, one VarData at +112. */
+  cff2_data[296] = 2;   cff2_data[297] = 118;
+  cff2_data[299] = 1;   cff2_data[303] = 12;  cff2_data[305] = 1;  cff2_data[309] = 112;
+  cff2_data[311] = 16;  cff2_data[313] = 1;
+  for (unsigned i = 0; i < 16; i++)
+    cff2_data[314 + i * 6 + 2] = cff2_data[314 + i * 6 + 4] = 0x40;
+  cff2_data[414] = 1;
+  /* FDArray INDEX at 928: one FD with an empty Private DICT. */
+  cff2_data[931] = 1;   cff2_data[932] = 1;   cff2_data[933] = 1;  cff2_data[934] = 4;
+  cff2_data[935] = (char) 139;
+  cff2_data[936] = (char) 139;
+  cff2_data[937] = 18;
+  /* One axis; the font is moved off its default so that drawing blends. */
+  const char fvar_data[] = {0, 1, 0, 0, 0, 16, 0, 2, 0, 1, 0, 20, 0, 0, 0, 8,
+			    'w', 'g', 'h', 't', 0, 100, 0, 0, 1, 144, 0, 0, 3, 132, 0, 0, 0, 0, 1, 0};
+
+  hb_face_t *face = hb_face_builder_create ();
+  HB_FACE_ADD_TABLE (face, "CFF2", cff2_data);
+  HB_FACE_ADD_TABLE (face, "fvar", fvar_data);
+  hb_face_set_glyph_count (face, 1);
+  hb_font_t *font = hb_font_create (face);
+  hb_variation_t variation = {HB_TAG ('w','g','h','t'), 800};
+  hb_font_set_variations (font, &variation, 1);
+
+  draw_budget_data_t data = {HB_BUDGET_DEFAULT, 0};
+  hb_draw_funcs_t *draw_funcs = hb_draw_funcs_create ();
+  hb_draw_funcs_set_set_budget_func (draw_funcs, draw_set_budget, NULL, NULL);
+  hb_draw_funcs_set_get_budget_remaining_func (draw_funcs, draw_get_budget_remaining, NULL, NULL);
+
+  g_assert_true (hb_draw_set_budget (draw_funcs, &data, 100000));
+  g_assert_true (hb_font_draw_glyph_or_fail (font, 0, draw_funcs, &data));
+  g_assert_cmpint (100000 - data.live, >=, 256 * 16);
+
+  g_assert_true (hb_draw_set_budget (draw_funcs, &data, 2048));
+  g_assert_false (hb_font_draw_glyph_or_fail (font, 0, draw_funcs, &data));
+  g_assert_cmpint (data.live, <, 0);
 
   hb_draw_funcs_destroy (draw_funcs);
   hb_font_destroy (font);
@@ -1365,7 +1543,10 @@ main (int argc, const char **argv)
   hb_test_add (test_hb_draw_immutable);
   hb_test_add (test_hb_draw_budget);
   hb_test_add (test_hb_draw_cff_budget);
+  hb_test_add (test_hb_draw_cff2_blend_budget);
   hb_test_add (test_hb_draw_glyf_composite_budget);
+  hb_test_add (test_hb_draw_cff2_blend_region_budget);
+  hb_test_add (test_hb_draw_gvar_budget);
 
   const char **font_funcs = hb_font_list_funcs ();
   for (const char **font_funcs_name = font_funcs; *font_funcs_name; font_funcs_name++)

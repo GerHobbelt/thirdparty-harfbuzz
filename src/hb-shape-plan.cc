@@ -94,10 +94,10 @@ hb_shape_plan_key_t::init (bool                           copy,
     /* Make start/end uniform to easier catch bugs. */
     for (unsigned int i = 0; i < num_user_features; i++)
     {
-      if (features[0].start != HB_FEATURE_GLOBAL_START)
-	features[0].start = 1;
-      if (features[0].end   != HB_FEATURE_GLOBAL_END)
-	features[0].end   = 2;
+      if (features[i].start != HB_FEATURE_GLOBAL_START)
+	features[i].start = 1;
+      if (features[i].end   != HB_FEATURE_GLOBAL_END)
+	features[i].end   = 2;
     }
   }
   this->shaper_func = nullptr;
@@ -567,18 +567,10 @@ retry:
 		   shaper_list))
       return hb_shape_plan_get_empty ();
 
-    hb_face_t::plan_node_t *cached = face->last_shape_plan.get_acquire ();
-    if (cached && cached->shape_plan->key.equal (&key))
-    {
-      DEBUG_MSG_FUNC (SHAPE_PLAN, cached->shape_plan, "fulfilled from last-plan cache");
-      return hb_shape_plan_reference (cached->shape_plan);
-    }
-
     for (hb_face_t::plan_node_t *node = cached_plan_nodes; node; node = node->next)
       if (node->shape_plan->key.equal (&key))
       {
 	DEBUG_MSG_FUNC (SHAPE_PLAN, node->shape_plan, "fulfilled from cache");
-	face->last_shape_plan.set_release (node);
 	return hb_shape_plan_reference (node->shape_plan);
       }
   }
@@ -605,7 +597,6 @@ retry:
     goto retry;
   }
   DEBUG_MSG_FUNC (SHAPE_PLAN, shape_plan, "inserted into cache");
-  face->last_shape_plan.set_release (node);
 
   return hb_shape_plan_reference (shape_plan);
 }

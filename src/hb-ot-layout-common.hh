@@ -1624,6 +1624,8 @@ struct ClassDefFormat1_3
     if (use_class_zero)
     {
       const hb_set_t& glyphset = *c->plan->glyphset_gsub ();
+      if (glyph_filter && unlikely (!c->check_ops (glyphset.get_population ())))
+	return_trace (false);
       unsigned glyph_count = glyph_filter
 			     ? hb_len (hb_iter (glyphset) | hb_filter (glyph_filter))
 			     : glyphset.get_population ();
@@ -1675,6 +1677,15 @@ struct ClassDefFormat1_3
     unsigned int count = classValue.len;
     for (unsigned int i = 0; i < count; i++)
       if (classValue[i] == klass) glyphs->add (startGlyph + i);
+    return true;
+  }
+
+  template <typename set_t>
+  bool collect_classes (set_t *glyphs, const hb_set_t &klasses) const
+  {
+    unsigned int count = classValue.len;
+    for (unsigned int i = 0; i < count; i++)
+      if (klasses.has (classValue[i])) glyphs->add (startGlyph + i);
     return true;
   }
 
@@ -1876,8 +1887,13 @@ struct ClassDefFormat2_4
     hb_sorted_vector_t<hb_codepoint_pair_t> glyph_and_klass;
     hb_set_t orig_klasses;
 
-    if (glyph_set.get_population () * hb_bit_storage ((unsigned) rangeRecord.len)
-	< get_population ())
+    /* Either walk is repeated for every offset that points at us. */
+    unsigned glyph_set_cost = glyph_set.get_population () * hb_bit_storage ((unsigned) rangeRecord.len);
+    unsigned population = get_population ();
+    if (unlikely (!c->check_ops (hb_min (glyph_set_cost, population))))
+      return_trace (false);
+
+    if (glyph_set_cost < population)
     {
       for (hb_codepoint_t g : glyph_set)
       {
@@ -1912,6 +1928,8 @@ struct ClassDefFormat2_4
     }
 
     const hb_set_t& glyphset = *c->plan->glyphset_gsub ();
+    if (glyph_filter && unlikely (!c->check_ops (glyphset.get_population ())))
+      return_trace (false);
     unsigned glyph_count = glyph_filter
                            ? hb_len (hb_iter (glyphset) | hb_filter (glyph_filter))
                            : glyphset.get_population ();
@@ -1949,6 +1967,18 @@ struct ClassDefFormat2_4
     for (auto &range : rangeRecord)
     {
       if (range.value == klass)
+	if (unlikely (!range.collect_coverage (glyphs)))
+	  return false;
+    }
+    return true;
+  }
+
+  template <typename set_t>
+  bool collect_classes (set_t *glyphs, const hb_set_t &klasses) const
+  {
+    for (auto &range : rangeRecord)
+    {
+      if (klasses.has (range.value))
 	if (unlikely (!range.collect_coverage (glyphs)))
 	  return false;
     }
@@ -2140,6 +2170,20 @@ struct ClassDef
     }
   }
 
+  /* Number of class or range records; what walking the table costs. */
+  unsigned get_record_count () const
+  {
+    switch (u.format.v) {
+    case 1: hb_barrier (); return u.format1.classValue.len;
+    case 2: hb_barrier (); return u.format2.rangeRecord.len;
+#ifndef HB_NO_BEYOND_64K
+    case 3: hb_barrier (); return u.format3.classValue.len;
+    case 4: hb_barrier (); return u.format4.rangeRecord.len;
+#endif
+    default:return 0;
+    }
+  }
+
   template<typename Iterator,
 	   hb_requires (hb_is_sorted_source_of (Iterator, hb_codepoint_t))>
   bool serialize (hb_serialize_context_t *c, Iterator it_with_class_zero)
@@ -2292,6 +2336,21 @@ struct ClassDef
 #ifndef HB_NO_BEYOND_64K
     case 3: hb_barrier (); return u.format3.collect_class (glyphs, klass);
     case 4: hb_barrier (); return u.format4.collect_class (glyphs, klass);
+#endif
+    default:return false;
+    }
+  }
+
+  /* Like collect_class(), for all of klasses in one walk of the table. */
+  template <typename set_t>
+  bool collect_classes (set_t *glyphs, const hb_set_t &klasses) const
+  {
+    switch (u.format.v) {
+    case 1: hb_barrier (); return u.format1.collect_classes (glyphs, klasses);
+    case 2: hb_barrier (); return u.format2.collect_classes (glyphs, klasses);
+#ifndef HB_NO_BEYOND_64K
+    case 3: hb_barrier (); return u.format3.collect_classes (glyphs, klasses);
+    case 4: hb_barrier (); return u.format4.collect_classes (glyphs, klasses);
 #endif
     default:return false;
     }
@@ -5509,6 +5568,18 @@ struct FeatureTableSubstitution
     return nullptr;
   }
 
+  /* Calls visit (feature_index, substitute) until it returns false. */
+  template <typename Visitor>
+  bool visit_substitutes (const hb_set_t *feature_indexes,
+			  Visitor       &visit) const
+  {
+    for (const FeatureTableSubstitutionRecord &record : substitutions)
+      if (feature_indexes->has (record.featureIndex) &&
+	  !visit (record.featureIndex, this+record.feature))
+	return false;
+    return true;
+  }
+
   void collect_lookups (const hb_set_t *feature_indexes,
 			hb_set_t       *lookup_indexes /* OUT */) const
   {
@@ -6030,6 +6101,16 @@ struct FeatureVariations
   {
     const FeatureVariationRecord &record = varRecords[variations_index];
     return (this+record.substitutions).find_substitute (feature_index);
+  }
+
+  template <typename Visitor>
+  bool visit_substitutes (const hb_set_t *feature_indexes,
+			  Visitor       &visit) const
+  {
+    for (const FeatureVariationRecord &record : varRecords)
+      if (!(this+record.substitutions).visit_substitutes (feature_indexes, visit))
+	return false;
+    return true;
   }
 
   bool collect_lookup_conditions (const int *coords,
