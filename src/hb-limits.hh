@@ -120,6 +120,23 @@
 #define HB_GPU_DRAW_MAX_CURVES 65536
 #endif
 
+/* Bytes the CBDT subsetter may copy out of the source CBDT table, as a
+ * multiple of that table's length.  Image blocks of different glyphs or
+ * strikes may overlap or repeat, so bounds-checking each block against the
+ * table does not bound their sum. */
+#ifndef HB_SUBSET_CBDT_MAX_COPY_FACTOR
+#define HB_SUBSET_CBDT_MAX_COPY_FACTOR 64
+#endif
+
+/* Entries the CBDT accelerator builds to answer find_table() by glyph
+ * without walking a strike's IndexSubtableRecord array per query.  The
+ * record count is a 32-bit field bounded only by the table length; a strike
+ * whose records would push the shared index past this keeps the linear
+ * walk, so the index stays bounded whatever the font claims. */
+#ifndef HB_CBDT_MAX_INDEX_ENTRIES
+#define HB_CBDT_MAX_INDEX_ENTRIES 65536
+#endif
+
 /* Total bytes of sub-blobs (gradient color stops, clip outlines) in one
  * hb_gpu_paint_t walk; exceeding it makes the paint unsupported. */
 #ifndef HB_GPU_PAINT_MAX_SUB_BYTES
@@ -154,7 +171,8 @@
 #endif
 
 /* Maximum surface dimension (pixels per side) when extents are derived
- * from font data (glyph extents or accumulated outline bounds).  Bounds
+ * from font data (glyph extents, accumulated outline bounds, or the header
+ * of an embedded PNG image about to be decoded).  Bounds
  * attacker-controlled allocations; extents set explicitly through
  * hb_raster_{draw,paint}_set_extents() are not limited. */
 #ifndef HB_RASTER_MAX_AUTO_DIMENSION
@@ -188,6 +206,7 @@
 #define HB_BUDGET_256	256u
 #define HB_BUDGET_512	512u
 #define HB_BUDGET_1024	1024u
+#define HB_BUDGET_8192	8192u
 
 /* The common finite default for one top-level glyph rendering session.
  * Nested outline and paint work shares the same live counter. */
@@ -204,7 +223,7 @@ hb_budget_spend (int64_t &budget, unsigned int cost, unsigned int mult = 1)
   return budget >= 0;
 }
 
-/* The flat pixel-work floor for one raster paint session.  Pixel and
+/* The flat pixel-work floor for one raster draw or paint session.  Pixel and
  * outline work use separate live counters, so keep this independent of
  * the common outline budget above. */
 #ifndef HB_BUDGET_RASTER_PIXELS

@@ -317,6 +317,116 @@ test_native_ft_create_invalid_blob_no_leak (void)
   }
 }
 
+static unsigned int ft_face_destroy_count;
+
+static void
+count_ft_face_destroy (void *data HB_UNUSED)
+{
+  ft_face_destroy_count++;
+}
+
+static void
+test_native_ft_create_unsanitizable_font (void)
+{
+  /* A font that FreeType opens but HarfBuzz fails to sanitize: numTables
+   * claims more table records than the file has room for.  hb_face_create()
+   * drops the blob then, but the destroy callback handed to hb_ft_face_create()
+   * must still not run before the hb_face_t / hb_font_t is destroyed. */
+  init_freetype ();
+
+#if GLIB_CHECK_VERSION(2,37,2)
+  char *path = g_test_build_filename (G_TEST_DIST, "fonts/Roboto-Regular.abc.ttf", NULL);
+#else
+  char *path = g_strdup ("fonts/Roboto-Regular.abc.ttf");
+#endif
+
+  gchar *contents;
+  gsize length;
+  GError *error = NULL;
+  g_assert_true (g_file_get_contents (path, &contents, &length, &error));
+  g_free (path);
+
+  contents[4] = contents[5] = (gchar) 0xFF;
+
+  FT_Face ft_face;
+  g_assert_cmpint (FT_New_Memory_Face (ft_library, (const FT_Byte *) contents, length, 0, &ft_face), ==, 0);
+  g_assert_cmpint (FT_Set_Char_Size (ft_face, 2000, 1000, 0, 0), ==, 0);
+
+  ft_face_destroy_count = 0;
+  hb_face_t *face = hb_ft_face_create (ft_face, count_ft_face_destroy);
+  g_assert_cmpuint (ft_face_destroy_count, ==, 0);
+  hb_face_destroy (face);
+  g_assert_cmpuint (ft_face_destroy_count, ==, 1);
+
+  ft_face_destroy_count = 0;
+  hb_font_t *font = hb_ft_font_create (ft_face, count_ft_face_destroy);
+  g_assert_cmpuint (ft_face_destroy_count, ==, 0);
+  hb_font_destroy (font);
+  g_assert_cmpuint (ft_face_destroy_count, ==, 1);
+
+  /* The font holds its own FT_Face reference; releasing ours must be fine. */
+  font = hb_ft_font_create_referenced (ft_face);
+  FT_Done_Face (ft_face);
+
+  hb_font_extents_t extents;
+  hb_codepoint_t glyph;
+  g_assert_true (hb_font_get_h_extents (font, &extents));
+  g_assert_true (hb_font_get_nominal_glyph (font, 'a', &glyph));
+
+  hb_font_destroy (font);
+  g_free (contents);
+
+  cleanup_freetype ();
+}
+
+static unsigned int ft_blob_destroy_count;
+
+static void
+count_ft_blob_destroy (void *data)
+{
+  ft_blob_destroy_count++;
+  g_free (data);
+}
+
+static void
+test_native_ft_create_from_blob_table_outlives_face (void)
+{
+  /* Table blobs of a face created by hb_ft_face_create_from_blob_or_fail()
+   * point into the caller's blob data; they must keep that data alive on
+   * their own, after both the face and the caller's blob reference are gone. */
+#if GLIB_CHECK_VERSION(2,37,2)
+  char *path = g_test_build_filename (G_TEST_DIST, "fonts/Roboto-Regular.abc.ttf", NULL);
+#else
+  char *path = g_strdup ("fonts/Roboto-Regular.abc.ttf");
+#endif
+
+  gchar *contents;
+  gsize length;
+  GError *error = NULL;
+  g_assert_true (g_file_get_contents (path, &contents, &length, &error));
+  g_free (path);
+
+  ft_blob_destroy_count = 0;
+  hb_blob_t *blob = hb_blob_create (contents, length, HB_MEMORY_MODE_READONLY,
+				    contents, count_ft_blob_destroy);
+  hb_face_t *face = hb_ft_face_create_from_blob_or_fail (blob, 0);
+  g_assert_nonnull (face);
+  hb_blob_destroy (blob);
+
+  hb_blob_t *head = hb_face_reference_table (face, HB_TAG ('h','e','a','d'));
+  hb_face_destroy (face);
+  g_assert_cmpuint (ft_blob_destroy_count, ==, 0);
+
+  unsigned int head_length;
+  const char *head_data = hb_blob_get_data (head, &head_length);
+  g_assert_cmpuint (head_length, ==, 54);
+  /* head.magicNumber */
+  g_assert_cmpmem (head_data + 12, 4, "\x5F\x0F\x3C\xF5", 4);
+
+  hb_blob_destroy (head);
+  g_assert_cmpuint (ft_blob_destroy_count, ==, 1);
+}
+
 static gpointer
 create_static_ft_faces (gpointer data)
 {
@@ -362,6 +472,105 @@ test_static_ft_library_multithreaded (void)
   hb_blob_destroy (blob);
 }
 
+#if (FREETYPE_MAJOR*10000 + FREETYPE_MINOR*100 + FREETYPE_PATCH) >= 21300
+typedef struct
+{
+  hb_font_t *font;
+  hb_paint_funcs_t *funcs;
+  hb_codepoint_t glyph;
+  unsigned int images;
+} bitmap_paint_data_t;
+
+static hb_bool_t
+bitmap_paint_image (hb_paint_funcs_t *funcs HB_UNUSED,
+                    void *paint_data,
+                    hb_blob_t *blob,
+                    unsigned int width,
+                    unsigned int height,
+                    hb_tag_t format,
+                    float slant HB_UNUSED,
+                    hb_glyph_extents_t *extents HB_UNUSED,
+                    void *user_data HB_UNUSED)
+{
+  bitmap_paint_data_t *data = paint_data;
+  hb_glyph_extents_t other_extents;
+
+  g_assert_cmpuint (format, ==, HB_PAINT_IMAGE_FORMAT_BGRA);
+  g_assert_cmpuint (width, >, 0);
+  g_assert_cmpuint (height, >, 0);
+  g_assert_cmpuint (hb_blob_get_length (blob), ==, width * height * 4);
+
+  /* Image callbacks must be able to query the same font. */
+  g_assert_true (hb_font_get_glyph_extents (data->font, 3 - data->glyph, &other_extents));
+  data->images++;
+  return TRUE;
+}
+
+static gpointer
+paint_bitmaps (gpointer user_data)
+{
+  bitmap_paint_data_t *data = user_data;
+
+  for (unsigned int i = 0; i < 100; i++)
+    g_assert_true (hb_font_paint_glyph_or_fail (data->font, data->glyph,
+                                              data->funcs, data, 0,
+                                              HB_COLOR (0, 0, 0, 255)));
+  return NULL;
+}
+#endif
+
+static void
+test_ft_paint_bitmap_multithreaded (void)
+{
+#if (FREETYPE_MAJOR*10000 + FREETYPE_MINOR*100 + FREETYPE_PATCH) >= 21300
+  hb_face_t *face = hb_test_open_font_file ("fonts/NotoColorEmoji.subset.ttf");
+  hb_font_t *font = hb_font_create (face);
+  hb_paint_funcs_t *funcs = hb_paint_funcs_create ();
+  GThread *threads[4];
+  bitmap_paint_data_t data[4];
+
+  hb_ft_font_set_funcs (font);
+  FT_Face ft_face = hb_ft_font_lock_face (font);
+  hb_bool_t have_bitmaps = TRUE;
+  for (unsigned int glyph = 1; glyph <= 2; glyph++)
+    if (FT_Load_Glyph (ft_face, glyph, FT_LOAD_COLOR) ||
+        ft_face->glyph->bitmap.pixel_mode != FT_PIXEL_MODE_BGRA)
+      have_bitmaps = FALSE;
+  hb_ft_font_unlock_face (font);
+  if (!have_bitmaps)
+  {
+    g_test_skip ("FreeType color bitmap support not present");
+    goto out;
+  }
+
+  hb_font_make_immutable (font);
+  hb_paint_funcs_set_image_func (funcs, bitmap_paint_image, NULL, NULL);
+  hb_paint_funcs_make_immutable (funcs);
+
+  /* The two color bitmap glyphs share a FreeType glyph slot. */
+  for (unsigned int i = 0; i < G_N_ELEMENTS (threads); i++)
+  {
+    data[i] = (bitmap_paint_data_t) {font, funcs, 1 + i % 2, 0};
+    threads[i] = g_thread_new (NULL, paint_bitmaps, &data[i]);
+  }
+
+  for (unsigned int i = 0; i < G_N_ELEMENTS (threads); i++)
+  {
+    g_thread_join (threads[i]);
+    g_assert_cmpuint (data[i].images, ==, 100);
+  }
+
+out:
+  hb_paint_funcs_destroy (funcs);
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+#else
+  g_test_skip ("FreeType bitmap paint support not present");
+#endif
+}
+
+
+
 #endif // HAVE_GLIB_H
 
 
@@ -379,10 +588,13 @@ main (int argc, char **argv)
   hb_test_init (&argc, &argv);
 
   hb_test_add (test_native_ft_basic);
+  hb_test_add (test_ft_paint_bitmap_multithreaded);
   hb_test_add (test_native_ft_set_funcs_preserves_load_flags);
   hb_test_add (test_native_ft_set_funcs_stream_face_no_deadlock);
   hb_test_add (test_native_ft_glyph_name_zero_size_probe);
   hb_test_add (test_native_ft_create_invalid_blob_no_leak);
+  hb_test_add (test_native_ft_create_unsanitizable_font);
+  hb_test_add (test_native_ft_create_from_blob_table_outlives_face);
   hb_test_add (test_static_ft_library_multithreaded);
 
   return hb_test_run ();
