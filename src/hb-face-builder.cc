@@ -99,7 +99,16 @@ _hb_face_builder_data_reference_blob (hb_face_builder_data_t *data)
   unsigned int face_length = table_count * 16 + 12;
 
   for (auto info : data->tables.values())
-    face_length += hb_ceil_to_4 (hb_blob_get_length (info.data));
+    if (unlikely (hb_unsigned_add_overflows (face_length,
+					     hb_ceil_to_4 (hb_blob_get_length (info.data)),
+					     &face_length)))
+      return nullptr;
+
+  /* hb_blob_create() refuses such a length; do not assemble the font
+   * only to throw it away.  Tables referenced from a font file can
+   * overlap in it, so the sum is not bounded by the size of that file. */
+  if (unlikely (face_length >= 1u << 31))
+    return nullptr;
 
   char *buf = (char *) hb_malloc (face_length);
   if (unlikely (!buf))
@@ -234,7 +243,8 @@ hb_face_builder_create ()
  * @blob: The blob containing the table data to add
  *
  * Add table for @tag with data provided by @blob to the face.  @face must
- * be created using hb_face_builder_create().
+ * be created using hb_face_builder_create().  A face can hold at most
+ * 65535 tables; adding more fails.
  *
  * Since: 1.9.0
  **/
@@ -248,6 +258,11 @@ hb_face_builder_add_table (hb_face_t *face, hb_tag_t tag, hb_blob_t *blob)
     return false;
 
   hb_face_builder_data_t *data = (hb_face_builder_data_t *) face->user_data;
+
+  /* numTables in the font file's table directory is 16bit. */
+  if (unlikely (data->tables.get_population () >= 0xFFFFu &&
+		!data->tables.has (tag)))
+    return false;
 
   hb_blob_t* previous = data->tables.get (tag).data;
   if (!data->tables.set (tag, face_table_info_t {hb_blob_reference (blob), (unsigned) -1}))

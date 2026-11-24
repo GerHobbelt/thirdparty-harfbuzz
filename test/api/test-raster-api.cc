@@ -545,6 +545,106 @@ test_paint_reset (void)
   hb_raster_paint_destroy (fresh);
 }
 
+/* Changing extents while a paint is in progress must not shrink group
+ * surfaces below the root surface and initial clip they composite onto. */
+static void
+test_set_extents_while_painting (void)
+{
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  g_assert_nonnull (paint);
+  hb_paint_funcs_t *funcs = hb_raster_paint_get_funcs (paint);
+
+  hb_raster_extents_t big = {0, 0, 64, 64, 0};
+  hb_raster_extents_t small = {0, 0, 4, 4, 0};
+  hb_raster_paint_set_extents (paint, &big);
+  hb_paint_color (funcs, paint, true, HB_COLOR (255, 0, 0, 255));
+
+  hb_raster_paint_set_extents (paint, &small);
+  hb_paint_push_group (funcs, paint);
+  hb_paint_color (funcs, paint, true, HB_COLOR (0, 0, 255, 255));
+  hb_paint_pop_group (funcs, paint, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
+
+  hb_raster_image_t *img = hb_raster_paint_render (paint);
+  g_assert_nonnull (img);
+
+  hb_raster_extents_t out_ext;
+  hb_raster_image_get_extents (img, &out_ext);
+  g_assert_cmpuint (out_ext.width, ==, big.width);
+  g_assert_cmpuint (out_ext.height, ==, big.height);
+
+  const uint8_t *buf = hb_raster_image_get_buffer (img);
+  for (unsigned y = 0; y < out_ext.height; y++)
+  {
+    const uint8_t *row = buf + (size_t) y * out_ext.stride;
+    for (unsigned x = 0; x < out_ext.width; x++)
+    {
+      const uint8_t *pixel = row + x * 4;
+      g_assert_cmphex (pixel[0], ==, 0x00); /* blue */
+      g_assert_cmphex (pixel[1], ==, 0x00); /* green */
+      g_assert_cmphex (pixel[2], ==, 0xff); /* red */
+      g_assert_cmphex (pixel[3], ==, 0xff); /* alpha */
+    }
+  }
+
+  hb_raster_image_destroy (img);
+  /* The changed extents are cleared, not deferred to another render. */
+  g_assert_false (hb_raster_paint_get_extents (paint, nullptr));
+  g_assert_null (hb_raster_paint_render (paint));
+  hb_raster_paint_set_extents (paint, &small);
+  hb_paint_color (funcs, paint, true, HB_COLOR (0, 0, 255, 255));
+  img = hb_raster_paint_render (paint);
+  g_assert_nonnull (img);
+  hb_raster_image_get_extents (img, &out_ext);
+  g_assert_cmpuint (out_ext.width, ==, small.width);
+  g_assert_cmpuint (out_ext.height, ==, small.height);
+  hb_raster_image_destroy (img);
+  hb_raster_paint_destroy (paint);
+}
+
+static void
+test_clip_rectangle_transformed (void)
+{
+  const struct {
+    float xx, yx, xy, yy, dx, dy;
+    unsigned center_x;
+  } transforms[] = {
+    {1.f, 0.f, 0.2f, 1.f, 0.f, 0.f, 38},
+    {1.f, 0.f, 0.2f, -1.f, 0.f, 64.f, 38},
+    {0.f, 1.f, -1.f, 0.f, 64.f, 0.f, 32},
+  };
+
+  /* Cover both winding orders and intersecting with a rectangle or mask. */
+  for (const auto &t : transforms)
+    for (unsigned depth = 1; depth <= 2; depth++)
+    {
+      hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+      g_assert_nonnull (paint);
+      hb_raster_extents_t ext = {0, 0, 64, 64, 0};
+      hb_raster_paint_set_extents (paint, &ext);
+
+      hb_paint_funcs_t *funcs = hb_raster_paint_get_funcs (paint);
+      hb_paint_push_transform (funcs, paint, t.xx, t.yx, t.xy, t.yy, t.dx, t.dy);
+      for (unsigned i = 0; i < depth; i++)
+        hb_paint_push_clip_rectangle (funcs, paint, 16.f, 16.f, 48.f, 48.f);
+      hb_paint_color (funcs, paint, true, HB_COLOR (0, 0, 0, 255));
+      for (unsigned i = 0; i < depth; i++)
+        hb_paint_pop_clip (funcs, paint);
+      hb_paint_pop_transform (funcs, paint);
+
+      hb_raster_image_t *image = hb_raster_paint_render (paint);
+      g_assert_nonnull (image);
+      hb_raster_extents_t out_ext;
+      hb_raster_image_get_extents (image, &out_ext);
+      const uint8_t *buffer = hb_raster_image_get_buffer (image);
+      /* The transformed center is opaque; the corner is outside the clip. */
+      g_assert_cmpuint (buffer[32 * out_ext.stride + t.center_x * 4 + 3], ==, 255);
+      g_assert_cmpuint (buffer[3], ==, 0);
+
+      hb_raster_image_destroy (image);
+      hb_raster_paint_destroy (paint);
+    }
+}
+
 /* ── main ────────────────────────────────────────────────────────── */
 
 #if defined(BUILD_MONOLITHIC)
@@ -569,6 +669,8 @@ main (int argc, const char **argv)
   hb_test_add (test_background_premultiplied);
   hb_test_add (test_background_stride);
   hb_test_add (test_paint_reset);
+  hb_test_add (test_set_extents_while_painting);
+  hb_test_add (test_clip_rectangle_transformed);
 
   return hb_test_run ();
 }

@@ -487,11 +487,12 @@ struct cff1_subset_plan
 
     subset_enc_code_ranges.complete (glyph);
 
-    assert (subset_enc_num_codes <= 0xFF);
     size0 = Encoding0::min_size + HBUINT8::static_size * subset_enc_num_codes;
     size1 = Encoding1::min_size + Encoding1_Range::static_size * subset_enc_code_ranges.length;
 
-    if (size0 < size1)
+    /* Format 0 holds at most 255 codes; a format 1 source encoding
+     * can give codes to more glyphs than that. */
+    if (subset_enc_num_codes <= 0xFF && size0 < size1)
       subset_enc_format = 0;
     else
       subset_enc_format = 1;
@@ -557,12 +558,14 @@ struct cff1_subset_plan
 	/* Retain the SID for the old missing glyph ID */
 	old_glyph = glyph;
       }
+      /* Missing output glyphs can lie beyond the source glyph map. */
+      bool in_map = glyph_to_sid_map && old_glyph < glyph_to_sid_map->length;
       unsigned sid;
       if (identity_charset)
 	sid = glyph;
       else
       {
-	sid = glyph_to_sid_map ?
+	sid = in_map ?
 		       glyph_to_sid_map->arrayZ[old_glyph].code :
 		       acc.glyph_to_sid (old_glyph, &glyph_to_sid_cache);
 
@@ -573,7 +576,7 @@ struct cff1_subset_plan
       if (sid != last_sid + 1)
 	subset_charset_ranges.push (code_pair_t {sid, glyph});
 
-      if (glyph == old_glyph && skip)
+      if (glyph == old_glyph && skip && in_map)
       {
 	glyph = hb_min (_.first - 1, glyph_to_sid_map->arrayZ[old_glyph].glyph);
 	sid += glyph - old_glyph;

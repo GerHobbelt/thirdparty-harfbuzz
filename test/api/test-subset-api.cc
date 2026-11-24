@@ -27,6 +27,8 @@
 #include "hb-test.h"
 #include "hb-subset-test.h"
 
+#include <math.h>
+
 /* Unit tests for hb-subset-glyf.h */
 
 static void
@@ -539,6 +541,47 @@ test_subset_plan (void)
   hb_face_destroy (face_ac);
 }
 
+static void
+test_subset_custom_glyph_mapping (void)
+{
+  /* old gid, new gid, last retained gid, expected output glyph count */
+  static const unsigned tests[][4] = {
+    {2, 1, 3, 4},
+    {0, 0, 3, 4},
+    {0, 17, 3, 4}, /* .notdef always stays at 0. */
+    {1, 300, 3, 303},
+    {2, 0, 3, 0},
+    {1, 0xFFFFFFu, 1, 0}, /* The count, including .notdef, exceeds 24 bits. */
+    {2, 0xFFFFFEu, 3, 0}, /* No room for the unmapped glyphs. */
+    {2, 0x7FFFFFFFu, 3, 0},
+    {2, 0xFFFFFFFEu, 3, 0},
+  };
+  hb_face_t *source = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
+
+  for (unsigned i = 0; i < G_N_ELEMENTS (tests); i++)
+  {
+    hb_set_t *glyphs = hb_set_create ();
+    hb_set_add_range (glyphs, 0, tests[i][2]);
+    hb_subset_input_t *input = hb_subset_test_create_input_from_glyphs (glyphs);
+    hb_set_destroy (glyphs);
+    hb_map_set (hb_subset_input_old_to_new_glyph_mapping (input), tests[i][0], tests[i][1]);
+
+    hb_face_t *subset = hb_subset_or_fail (source, input);
+    if (tests[i][3])
+    {
+      g_assert_nonnull (subset);
+      g_assert_cmpuint (hb_face_get_glyph_count (subset), ==, tests[i][3]);
+    }
+    else
+      g_assert_null (subset);
+
+    hb_face_destroy (subset);
+    hb_subset_input_destroy (input);
+  }
+
+  hb_face_destroy (source);
+}
+
 static hb_blob_t*
 _copy_table (hb_face_t *face HB_UNUSED, hb_tag_t tag, void *user_data)
 {
@@ -607,6 +650,63 @@ test_subset_create_for_tables_face_MAXP (void)
   hb_face_destroy (source);
 }
 #endif
+
+static void
+test_subset_axis_range_from_string (void)
+{
+  float min, max, def;
+
+  /* An explicit len must bound the parse: bytes after len are not part of
+   * the string and must be neither read nor interpreted. */
+  g_assert_true (hb_subset_axis_range_from_string ("100:200:", 3, &min, &max, &def));
+  g_assert_cmpfloat (min, ==, 100.f);
+  g_assert_cmpfloat (def, ==, 100.f);
+  g_assert_cmpfloat (max, ==, 100.f);
+
+  g_assert_true (hb_subset_axis_range_from_string ("100:200:", 7, &min, &max, &def));
+  g_assert_cmpfloat (min, ==, 100.f);
+  g_assert_true (isnan (def));
+  g_assert_cmpfloat (max, ==, 200.f);
+
+  g_assert_true (hb_subset_axis_range_from_string ("100:200,wdth=75:100", 7, &min, &max, &def));
+  g_assert_cmpfloat (min, ==, 100.f);
+  g_assert_true (isnan (def));
+  g_assert_cmpfloat (max, ==, 200.f);
+
+  g_assert_true (hb_subset_axis_range_from_string ("100:300:200,", 11, &min, &max, &def));
+  g_assert_cmpfloat (min, ==, 100.f);
+  g_assert_cmpfloat (def, ==, 300.f);
+  g_assert_cmpfloat (max, ==, 200.f);
+
+  g_assert_true (hb_subset_axis_range_from_string (":300:,", 5, &min, &max, &def));
+  g_assert_true (isnan (min));
+  g_assert_cmpfloat (def, ==, 300.f);
+  g_assert_true (isnan (max));
+
+  g_assert_true (hb_subset_axis_range_from_string ("drop,wdth=75", 4, &min, &max, &def));
+  g_assert_true (isnan (min));
+  g_assert_true (isnan (def));
+  g_assert_true (isnan (max));
+
+  g_assert_true (hb_subset_axis_range_from_string ("dropped", 4, &min, &max, &def));
+  g_assert_true (isnan (min));
+  g_assert_false (hb_subset_axis_range_from_string ("dropped", -1, &min, &max, &def));
+  g_assert_false (hb_subset_axis_range_from_string ("drop", 3, &min, &max, &def));
+  g_assert_false (hb_subset_axis_range_from_string ("", 0, &min, &max, &def));
+
+  /* NUL-terminated input behaves as before. */
+  g_assert_true (hb_subset_axis_range_from_string ("100:200", -1, &min, &max, &def));
+  g_assert_cmpfloat (min, ==, 100.f);
+  g_assert_true (isnan (def));
+  g_assert_cmpfloat (max, ==, 200.f);
+
+  g_assert_true (hb_subset_axis_range_from_string ("drop", -1, &min, &max, &def));
+  g_assert_true (isnan (min));
+  g_assert_true (isnan (def));
+  g_assert_true (isnan (max));
+
+  g_assert_false (hb_subset_axis_range_from_string ("abc", -1, &min, &max, &def));
+}
 
 #ifdef HB_EXPERIMENTAL_API
 const uint8_t CFF2[226] = {
@@ -1004,10 +1104,12 @@ main (int argc, const char **argv)
   hb_test_add (test_subset_set_flags);
   hb_test_add (test_subset_sets);
   hb_test_add (test_subset_plan);
+  hb_test_add (test_subset_custom_glyph_mapping);
   hb_test_add (test_subset_create_for_tables_face);
 #ifndef HB_NO_BEYOND_64K
   hb_test_add (test_subset_create_for_tables_face_MAXP);
 #endif
+  hb_test_add (test_subset_axis_range_from_string);
 
   #ifdef HB_EXPERIMENTAL_API
   hb_test_add (test_subset_input_to_string);

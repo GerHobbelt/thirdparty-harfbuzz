@@ -205,6 +205,7 @@ struct Encoding
 
     case 1:
     {
+      if (unlikely (!c->check_success (code_ranges.length <= 0xFF))) return_trace (false);
       Encoding1 *fmt1 = c->allocate_size<Encoding1> (Encoding1::min_size + Encoding1_Range::static_size * code_ranges.length);
       if (unlikely (!fmt1)) return_trace (false);
       fmt1->nRanges () = code_ranges.length;
@@ -1513,7 +1514,7 @@ struct cff1
 
   struct accelerator_subset_t : accelerator_templ_t<cff1_private_dict_opset_subset_t, cff1_private_dict_values_subset_t>
   {
-    accelerator_subset_t (hb_face_t *face) : SUPER (face) {}
+    HB_INTERNAL accelerator_subset_t (hb_face_t *face);
     ~accelerator_subset_t ()
     {
       if (cff_accelerator)
@@ -1526,6 +1527,7 @@ struct cff1
     HB_INTERNAL bool get_seac_components (hb_codepoint_t glyph, hb_codepoint_t *base, hb_codepoint_t *accent) const;
 
     mutable CFF::cff_subset_accelerator_t* cff_accelerator = nullptr;
+    bool subrs_may_end_in_seac = false;
 
     typedef accelerator_templ_t<cff1_private_dict_opset_subset_t, cff1_private_dict_values_subset_t> SUPER;
   };
