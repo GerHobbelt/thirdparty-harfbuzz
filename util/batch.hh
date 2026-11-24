@@ -27,6 +27,11 @@
 
 #include "options.hh"
 
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
 #ifndef MAX
 #define MAX(a, b)  ((a) > (b) ? (a) : (b))
 #endif
@@ -40,50 +45,59 @@ batch_main (int argc, const char **argv)
   if (argc == 2 && !strcmp (argv[1], "--batch"))
   {
     int ret = 0;
-    GString *line = g_string_new (nullptr);
-    while (true)
+    std::string line;
+
+    // Read line by line from stdin until EOF
+    while (std::getline(std::cin, line))
     {
-      g_string_set_size (line, 0);
-      char chunk[4092];
-      while (fgets (chunk, sizeof (chunk), stdin))
+      // Windows CRLF line-endings MAY produce lines with a lingering CR at the end, so we better discard that one before continuing...
+      if (!line.empty() && line.back() == '\r')
       {
-	g_string_append (line, chunk);
-	if (line->len && line->str[line->len - 1] == '\n')
-	  break;
-      }
-      if (!line->len)
-	break;
-
-      char *buf = line->str;
-      size_t l = line->len;
-      if (l && buf[l - 1] == '\n') buf[l - 1] = '\0';
-
-      char *args[64];
-      argc = 0;
-      args[argc++] = argv[0];
-      char *p = buf, *e;
-      args[argc++] = p;
-      while ((e = strchr (p, ';')) && argc < (int) ARRAY_LENGTH (args))
-      {
-	*e++ = '\0';
-	while (*e == ';')
-	  e++;
-	args[argc++] = p = e;
+	line.pop_back();
       }
 
-      int result = main_t () (argc, args);
+      std::vector<std::string> tokens;
+      std::string token;
+      std::istringstream tokenStream(line);
+
+      // set argv[0] for this command line:
+      tokens.push_back(argv[0]);
+
+      // chop the line into arguments a.k.a. 'tokens':
+      while (std::getline(tokenStream, token, ';'))
+      {
+	tokens.push_back(token);
+      }
+
+      // Handle trailing semicolon (e.g., "a;b;" -> {"a", "b", ""})
+      if (!line.empty() && line.back() == ';')
+      {
+	tokens.push_back("");
+      }
+
+      // now that the arg set has been collected, produce it in argv[] compatible form:
+
+      std::vector<const char *> c_strings;
+      c_strings.reserve(tokens.size() + 1);  // reckon with the NULL sentinel!
+
+      for (const auto &str : tokens)
+      {
+	c_strings.push_back(str.c_str());
+      }
+      c_strings.push_back(nullptr);
+
+      int result = main_t() (tokens.size(), c_strings);
 
       if (report_status)
-	fprintf (stdout, result == 0 ? "success\n" : "failure\n");
-      fflush (stdout);
+	fprintf(stdout, result == 0 ? "success\n" : "failure\n");
+      fflush(stdout);
 
-      ret = MAX (ret, result);
+      ret = MAX(ret, result);
     }
-    g_string_free (line, true);
     return ret;
   }
 
-  int ret = main_t () (argc, argv);
+  int ret = main_t() (argc, argv);
   if (report_status && ret != 0)
     fprintf (stdout, "error: Operation failed. Probably a bug. File github issue.\n");
   return ret;
