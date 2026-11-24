@@ -40,8 +40,18 @@ HB_WASM_API (ptr_t(font_t), font_create) (HB_WASM_EXEC_ENV
 
   hb_font_t *font = hb_font_create (face);
 
-  HB_OBJ2REF (font);
+  /* The instance owns the font, and destroys it when it goes. */
+  HB_OBJ2REF_OWNED (font);
+  if (unlikely (!fontref))
+    hb_font_destroy (font);
+
   return fontref;
+}
+
+HB_WASM_API (void, font_destroy) (HB_WASM_EXEC_ENV
+				  ptr_d(font_t, font))
+{
+  HB_WASM_PLAN->destroy_ref (fontptr, hb_wasm_ref_type_font);
 }
 
 HB_WASM_API (ptr_t(face_t), font_get_face) (HB_WASM_EXEC_ENV
@@ -51,7 +61,24 @@ HB_WASM_API (ptr_t(face_t), font_get_face) (HB_WASM_EXEC_ENV
 
   hb_face_t *face = hb_font_get_face (font);
 
-  HB_OBJ2REF (face);
+  /* The face we are shaping with, or one the module created and still
+   * has a handle to. */
+  auto *plan = HB_WASM_PLAN;
+  uint32_t faceref = plan->find_ref (face, hb_wasm_ref_type_face);
+  if (faceref)
+    return faceref;
+
+  /* The font was not one of ours. */
+  if (face == hb_face_get_empty ())
+    return nullref;
+
+  /* The module destroyed its handle to the face of a font it still has.
+   * The font can be destroyed next, so the new handle holds the face. */
+  hb_face_reference (face);
+  faceref = plan->obj2ref (face, hb_wasm_ref_type_face, true);
+  if (unlikely (!faceref))
+    hb_face_destroy (face);
+
   return faceref;
 }
 
@@ -165,9 +192,14 @@ HB_WASM_API (bool_t, font_copy_glyph_outline) (HB_WASM_EXEC_ENV
 
     hb_memcpy (points, hb_outline.points.arrayZ, hb_outline.points.get_size ());
     hb_memcpy (contours, hb_outline.contours.arrayZ, hb_outline.contours.get_size ());
+    outline->n_points = hb_outline.points.length;
+    outline->n_contours = hb_outline.contours.length;
 
     return true;
   }
+
+  module_free (outline->points);
+  module_free (outline->contours);
 
   outline->n_points = hb_outline.points.length;
   outline->points = wasm_runtime_module_dup_data (module_inst,
@@ -224,6 +256,7 @@ HB_WASM_API (bool_t, font_copy_coords) (HB_WASM_EXEC_ENV
     }
 		unsigned bytes = our_length * sizeof (int);
     hb_memcpy (their_coords, our_coords, bytes);
+    coords->length = our_length;
 
     return true;
   }
