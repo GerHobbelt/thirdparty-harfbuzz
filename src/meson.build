@@ -854,8 +854,9 @@ hb_gpu_shader_sources = [
 ]
 
 hb_gpu_shader_helper = find_program('gen-gpu-shader-artifacts.py')
+hb_gpu_shader_headers = []
 foreach p: hb_gpu_shader_sources
-  custom_target('@0@'.format(p.get(1)),
+  hb_gpu_shader_headers += custom_target('@0@'.format(p.get(1)),
     build_by_default: true,
     input: p.get(0),
     output: p.get(1),
@@ -880,6 +881,7 @@ if not get_option('gpu').disabled()
 
   libharfbuzz_gpu = library('harfbuzz-gpu',
     hb_gpu_sources,
+    hb_gpu_shader_headers,
     include_directories: incconfig,
     dependencies: gpu_deps,
     link_with: [libharfbuzz],
@@ -997,6 +999,7 @@ if get_option('tests').enabled()
     'test-bimap': ['test-bimap.cc', 'hb-static.cc'],
     'test-cache': ['test-cache.cc'],
     'test-cff': ['test-cff.cc', 'hb-static.cc'],
+    'test-colr': ['test-colr.cc', 'hb-static.cc'],
     'test-classdef-graph': ['graph/test-classdef-graph.cc', 'hb-static.cc', 'graph/gsubgpos-context.cc'],
     'test-result': ['test-result.cc', 'hb-static.cc'],
     'test-decycler': ['test-decycler.cc', 'hb-static.cc'],
@@ -1043,6 +1046,13 @@ if get_option('tests').enabled()
       install: false,
     ),
       args: [meson.project_source_root() / 'test/api/fonts/NotoColorEmoji.subset.multiple_size_tables.ttf'],
+      suite: ['src', 'subset'])
+    test('test-subset-cff2-serialize', executable('test-subset-cff2-serialize', ['hb-subset-cff2.cc', 'hb-subset-cff-common.cc', 'hb-subset-instancer-solver.cc', 'hb-subset-instancer-iup.cc', 'hb-static.cc'],
+      include_directories: incconfig,
+      cpp_args: cpp_args + ['-DMAIN', '-UNDEBUG'],
+      dependencies: [libharfbuzz_dep, libharfbuzz_subset_dep],
+      install: false,
+    ),
       suite: ['src', 'subset'])
   endif
 

@@ -479,6 +479,9 @@ struct cff1_subset_plan
       {
 	hb_codepoint_t  sid = acc.glyph_to_sid (old_glyph, &glyph_to_sid_cache);
 	encoding->get_supplement_codes (sid, supp_codes);
+	/* Supplement entries name the glyph by SID; emit the renumbered one
+	 * (plan_subset_charset () already added all glyph names to sidmap). */
+	sid = sidmap[sid];
 	for (unsigned int i = 0; i < supp_codes.length; i++)
 	  subset_enc_supp_codes.push (code_pair_t {supp_codes[i], sid});
       }
@@ -534,6 +537,13 @@ struct cff1_subset_plan
 
     if (!glyph_to_sid_map || glyph_to_sid_map->in_error ())
     {
+      /* A map created above is not yet shared with the accelerator, so a
+       * failed one is ours to free. */
+      if (created_map && glyph_to_sid_map)
+      {
+	glyph_to_sid_map->~glyph_to_sid_map_t ();
+	hb_free (glyph_to_sid_map);
+      }
       glyph_to_sid_map = nullptr;
       created_map = false;
     }

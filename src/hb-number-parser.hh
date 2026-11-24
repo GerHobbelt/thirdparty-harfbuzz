@@ -28,9 +28,6 @@
 
 #include "hb.hh"
 
-static const double _powers_of_10[] =
-{ 1.0e+256, 1.0e+128, 1.0e+64, 1.0e+32, 1.0e+16, 1.0e+8, 10000., 100., 10. };
-  
 /* Grammar:
  *   number  := sign? mantissa exponent?
  *   sign    := '+' | '-'
@@ -109,7 +106,7 @@ struct hb_number_parser_t
     return (state == Sign || state == AfterDotFromStart) ? 0 : pos;
   }
 
-  /* Valid after finish() returned true. */
+  /* Valid after `commit ()` returned nonzero. */
   double get_value () const
   {
     double v = value;
@@ -138,10 +135,10 @@ struct hb_number_parser_t
 	  v /= 1e308; e -= 308;
 	  if (unlikely (e > 308)) { v /= 1e308; e -= 308; }
 	}
-	v /= _pow10 (e);
+	v /= hb_pow10 (e);
       }
       else
-	v *= _pow10 (e);
+	v *= hb_pow10 (e);
     }
     return v;
   }
@@ -168,7 +165,7 @@ private:
       double result = (double) fraction;
       if (drop > 5 || (drop == 5 && (sticky || (fraction & 1))))
 	result += 1;
-      return result / _pow10 (count);
+      return result / hb_pow10 (count);
     }
 
     bool is_empty () const { return !count; }
@@ -210,18 +207,6 @@ private:
     exp_neg = false;
     exp_overflow = false;
     exp_speculation_active = false;
-  }
-
-  /* Handles 0..308; anything larger overflows double and returns HUGE_VAL. */
-  static double _pow10 (unsigned exponent)
-  {
-    /* DBL_MAX is between 10^308 and 10^309 */
-    if (unlikely (exponent > 308)) return HUGE_VAL;
-    unsigned mask = 1 << (ARRAY_LENGTH (_powers_of_10) - 1);
-    double result = 1;
-    for (const double *power = _powers_of_10; mask; ++power, mask >>= 1)
-      if (exponent & mask) result *= *power;
-    return result;
   }
 };
 

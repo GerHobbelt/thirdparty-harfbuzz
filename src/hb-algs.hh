@@ -1222,16 +1222,14 @@ static inline unsigned int DIV_CEIL (const unsigned int a, unsigned int b)
 { return (a + (b - 1)) / b; }
 
 
-/* ARRAY_LENGTH (array) converts implicitly to size_t.
- * decltype (ARRAY_LENGTH (array))::value extracts the length without evaluating
- * array, so it is a constant expression even for reference parameters. */
+/* ARRAY_LENGTH (array) is a constant expression even for reference parameters,
+ * and does not evaluate array. */
+template <typename Type> struct hb_array_length;
+template <typename Type, size_t n>
+struct hb_array_length<Type[n]> : std::integral_constant<size_t, n> {};
+
 #undef  ARRAY_LENGTH
-struct
-{
-  template <typename Type, size_t n> constexpr std::integral_constant<size_t, n>
-  operator () (const Type (&)[n]) const { return {}; }
-}
-HB_FUNCOBJ (ARRAY_LENGTH);
+#define ARRAY_LENGTH(array) (hb_array_length<hb_remove_reference<decltype (array)>>::value)
 
 static inline void *
 hb_memcpy (void *__restrict dst, const void *__restrict src, size_t len)
@@ -1867,6 +1865,32 @@ static inline hb_scope_guard_t<F> hb_make_scope_guard (F &&f)
   auto HB_SCOPE_GUARD_NAME(__LINE__) = \
     hb_make_scope_guard ([&]() { stmt; }); \
   (void) HB_SCOPE_GUARD_NAME(__LINE__)
+
+
+/* Handles 0..308; anything larger overflows double and returns HUGE_VAL. */
+static inline double hb_pow10 (unsigned n)
+{
+  static const double small_powers_of_10[] =
+  { 1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15 };
+  static const double large_powers_of_10[] =
+  { 1e0, 1e16, 1e32, 1e48, 1e64, 1e80, 1e96, 1e112, 1e128, 1e144,
+    1e160, 1e176, 1e192, 1e208, 1e224, 1e240, 1e256, 1e272, 1e288, 1e304 };
+
+  /* DBL_MAX is between 10^308 and 10^309 */
+  constexpr unsigned MAX_POW10_EXP = 308;
+  constexpr unsigned POW10_SHIFT   = 4;
+  constexpr unsigned POW10_SMALL   = 1u << POW10_SHIFT;   /* 16 */
+  constexpr unsigned POW10_MASK    = POW10_SMALL - 1;     /* 15 */
+
+  static_assert (ARRAY_LENGTH (small_powers_of_10) == POW10_SMALL,
+    "_small_powers_of_10: size must be 2^POW10_SHIFT");
+  static_assert ((MAX_POW10_EXP >> POW10_SHIFT) < ARRAY_LENGTH (large_powers_of_10),
+    "_large_powers_of_10: must cover MAX_POW10_EXP >> POW10_SHIFT");
+
+  if (unlikely (n > MAX_POW10_EXP)) return HUGE_VAL;
+  if (likely (n < POW10_SMALL)) return small_powers_of_10[n];
+  return large_powers_of_10[n >> POW10_SHIFT] * small_powers_of_10[n & POW10_MASK];
+}
 
 
 #endif /* HB_ALGS_HH */

@@ -317,6 +317,28 @@ test_subset_cff1_seac_precheck (void)
 }
 
 static void
+test_subset_cff1_encoding_supplement (void)
+{
+  /* Dropping "first" renumbers the custom glyph-name SIDs; the Encoding
+   * supplement (code 98 -> "second") must follow them. */
+  hb_face_t *face = hb_test_open_font_file ("fonts/cff1_encoding_supplement.otf");
+  hb_face_t *face_subset = hb_test_open_font_file ("fonts/cff1_encoding_supplement.42,43.otf");
+  hb_face_t *face_test;
+
+  hb_set_t *codepoints = hb_set_create ();
+  hb_set_add (codepoints, 0x42);  /* B */
+  hb_set_add (codepoints, 0x43);  /* C */
+  face_test = hb_subset_test_create_subset (face, hb_subset_test_create_input (codepoints));
+  hb_set_destroy (codepoints);
+
+  hb_subset_test_check (face_subset, face_test, HB_TAG ('C','F','F',' '));
+
+  hb_face_destroy (face_test);
+  hb_face_destroy (face_subset);
+  hb_face_destroy (face);
+}
+
+static void
 test_subset_cff1_dotsection (void)
 {
   hb_face_t *face = hb_test_open_font_file ("fonts/cff1_dotsect.otf");
@@ -383,6 +405,42 @@ test_subset_cff1_encoding_many_codes_retaingids (void)
   hb_face_destroy (face_subset);
   hb_face_destroy (face);
   hb_face_destroy (face_expected);
+}
+
+static void
+test_subset_cff1_encoding_glyph_count (gconstpointer data)
+{
+  const char *fonts[][2] = {
+    {"fonts/cff1_encoding0_bounded.otf", "fonts/cff1_encoding0_excess.otf"},
+    {"fonts/cff1_encoding1_bounded.otf", "fonts/cff1_encoding1_excess.otf"},
+  };
+  unsigned format = GPOINTER_TO_UINT (data);
+  hb_face_t *bounded = hb_test_open_font_file (fonts[format][0]);
+  hb_face_t *excess = hb_test_open_font_file (fonts[format][1]);
+
+  for (unsigned remap = 0; remap < 2; remap++)
+  {
+    hb_subset_input_t *input = hb_subset_input_create_or_fail ();
+    hb_set_add (hb_subset_input_glyph_set (input), 2);
+    /* Gaps in an explicit mapping can extend past the source glyph count.
+     * Excess encoding entries must not give those new empty glyphs codes. */
+    if (remap)
+      hb_map_set (hb_subset_input_old_to_new_glyph_mapping (input), 2, 4);
+
+    hb_face_t *expected = hb_subset_or_fail (bounded, input);
+    hb_face_t *actual = hb_subset_or_fail (excess, input);
+    g_assert_nonnull (expected);
+    g_assert_nonnull (actual);
+    g_assert_cmpuint (hb_face_get_glyph_count (actual), ==, remap ? 5 : 2);
+    hb_subset_test_check (expected, actual, HB_TAG ('C','F','F',' '));
+
+    hb_face_destroy (actual);
+    hb_face_destroy (expected);
+    hb_subset_input_destroy (input);
+  }
+
+  hb_face_destroy (excess);
+  hb_face_destroy (bounded);
 }
 
 static void
@@ -617,10 +675,13 @@ main (int argc, const char **argv)
   hb_test_add (test_subset_cff1_seac);
   hb_test_add (test_subset_cff1_cid_seac);
   hb_test_add (test_subset_cff1_seac_precheck);
+  hb_test_add (test_subset_cff1_encoding_supplement);
   hb_test_add (test_subset_cff1_dotsection);
   hb_test_add (test_subset_cff1_retaingids);
   hb_test_add (test_subset_cff1_j_retaingids);
   hb_test_add (test_subset_cff1_encoding_many_codes_retaingids);
+  hb_test_add_data_flavor (GUINT_TO_POINTER (0), "format0", test_subset_cff1_encoding_glyph_count);
+  hb_test_add_data_flavor (GUINT_TO_POINTER (1), "format1", test_subset_cff1_encoding_glyph_count);
   hb_test_add (test_subset_cff1_encoding_range_overflow);
   hb_test_add (test_subset_cff1_identity_charset);
   hb_test_add (test_subset_cff1_j_identity_charset);

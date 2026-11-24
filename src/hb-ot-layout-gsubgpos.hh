@@ -1131,9 +1131,9 @@ struct hb_ot_apply_context_t :
   typedef return_t (*recurse_func_t) (hb_ot_apply_context_t *c, unsigned int lookup_index);
 
   template <typename T>
-  static inline auto apply_ (const T &obj, hb_ot_apply_context_t *c, hb_priority<1>) HB_RETURN (return_t, obj.apply (c, nullptr) )
+  static auto apply_ (const T &obj, hb_ot_apply_context_t *c, hb_priority<1>) HB_RETURN (return_t, obj.apply (c, nullptr) )
   template <typename T>
-  static inline auto apply_ (const T &obj, hb_ot_apply_context_t *c, hb_priority<0>) HB_RETURN (return_t, obj.apply (c) )
+  static auto apply_ (const T &obj, hb_ot_apply_context_t *c, hb_priority<0>) HB_RETURN (return_t, obj.apply (c) )
   template <typename T>
   return_t dispatch (const T &obj) { return apply_(obj, this, hb_prioritize); }
 
@@ -1420,21 +1420,21 @@ struct hb_accelerate_subtables_context_t :
        hb_dispatch_context_t<hb_accelerate_subtables_context_t>
 {
   template <typename T>
-  static inline auto collect_second_glyphs_ (const T &obj,
-					     hb_set_digest_t *digest,
-					     hb_priority<1>) HB_RETURN (void, obj.collect_second_glyphs (digest) )
+  static auto collect_second_glyphs_ (const T &obj,
+				      hb_set_digest_t *digest,
+				      hb_priority<1>) HB_RETURN (void, obj.collect_second_glyphs (digest) )
   template <typename T>
-  static inline void collect_second_glyphs_ (const T &obj HB_UNUSED,
-					     hb_set_digest_t *digest,
-					     hb_priority<0>)
+  static void collect_second_glyphs_ (const T &obj HB_UNUSED,
+				      hb_set_digest_t *digest,
+				      hb_priority<0>)
   { *digest = hb_set_digest_t::full (); }
 
   template <typename T>
-  static inline auto apply_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<1>) HB_RETURN (bool, obj->apply (c, external_cache) )
+  static auto apply_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<1>) HB_RETURN (bool, obj->apply (c, external_cache) )
   template <typename T>
-  static inline auto apply_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<0>) HB_RETURN (bool, obj->apply (c) )
+  static auto apply_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<0>) HB_RETURN (bool, obj->apply (c) )
   template <typename T>
-  static inline bool apply_to (const void *obj, hb_ot_apply_context_t *c, void *external_cache)
+  static bool apply_to (const void *obj, hb_ot_apply_context_t *c, void *external_cache)
   {
     const T *typed_obj = (const T *) obj;
     return apply_ (typed_obj, c, external_cache, hb_prioritize);
@@ -1442,32 +1442,30 @@ struct hb_accelerate_subtables_context_t :
 
 #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
   template <typename T>
-  static inline auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<2>) HB_RETURN (bool, obj->apply_cached (c, external_cache) )
+  static auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<2>) HB_RETURN (bool, obj->apply_cached (c, external_cache) )
   template <typename T>
-  static inline auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<1>) HB_RETURN (bool, obj->apply (c, external_cache) )
+  static auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<1>) HB_RETURN (bool, obj->apply (c, external_cache) )
   template <typename T>
-  static inline auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<0>) HB_RETURN (bool, obj->apply (c) )
+  static auto apply_cached_ (const T *obj, hb_ot_apply_context_t *c, void *external_cache, hb_priority<0>) HB_RETURN (bool, obj->apply (c) )
   template <typename T>
-  static inline bool apply_cached_to (const void *obj, hb_ot_apply_context_t *c, void *external_cache)
+  static bool apply_cached_to (const void *obj, hb_ot_apply_context_t *c, void *external_cache)
   {
     const T *typed_obj = (const T *) obj;
     return apply_cached_ (typed_obj, c, external_cache, hb_prioritize);
   }
 
   template <typename T>
-  static inline auto cache_func_ (hb_ot_apply_context_t *c,
-				  hb_ot_subtable_cache_op_t op,
-				  hb_priority<1>) HB_RETURN (bool, T::cache_func (c, op) )
+  static auto cache_func_ (hb_ot_apply_context_t *c,
+			   hb_ot_subtable_cache_op_t op,
+			   hb_priority<1>) HB_RETURN (bool, T::cache_func (c, op) )
   template <typename T=void>
-  static inline bool cache_func_ (hb_ot_apply_context_t *c,
-				  hb_ot_subtable_cache_op_t op HB_UNUSED,
-				  hb_priority<0>) { return false; }
+  static bool cache_func_ (hb_ot_apply_context_t *c,
+			   hb_ot_subtable_cache_op_t op HB_UNUSED,
+			   hb_priority<0>) { return false; }
   template <typename Type>
-  static inline bool cache_func_to (hb_ot_apply_context_t *c,
-				    hb_ot_subtable_cache_op_t op)
-  {
-    return cache_func_<Type> (c, op, hb_prioritize);
-  }
+  static bool cache_func_to (hb_ot_apply_context_t *c,
+			     hb_ot_subtable_cache_op_t op)
+  { return cache_func_<Type> (c, op, hb_prioritize); }
 #endif
 
   typedef bool (*hb_apply_func_t) (const void *obj, hb_ot_apply_context_t *c, void *external_cache);
@@ -3223,7 +3221,7 @@ struct Rule
     if (unlikely (!inputCount)) return_trace (false);
     const auto input = inputZ.as_array (inputCount - 1);
 
-    const hb_map_t *mapping = klass_map == nullptr ? c->plan->glyph_map : klass_map;
+    const hb_map_t *mapping = klass_map == nullptr ? &c->plan->glyph_map_gsub : klass_map;
     if (!hb_all (input, mapping)) return_trace (false);
     return_trace (serialize (c->serializer, mapping, lookup_map));
   }
@@ -6707,17 +6705,12 @@ struct GSUBGPOS
   template <typename T>
   struct accelerator_t
   {
-    accelerator_t (hb_face_t *face)
+    accelerator_t (hb_face_t *face) : face (face)
     {
+      sanitized_table.init ();
       hb_sanitize_context_t sc;
       sc.lazy_some_gpos = true;
       this->table = sc.reference_table<T> (face);
-
-      if (unlikely (this->table->is_blocklisted (this->table.get_blob (), face)))
-      {
-	hb_blob_destroy (this->table.get_blob ());
-	this->table = hb_blob_get_empty ();
-      }
 
       this->lookup_count = table->get_lookup_count ();
 
@@ -6740,9 +6733,13 @@ struct GSUBGPOS
       }
       hb_free (this->accels);
       this->table.destroy ();
+      sanitized_table.fini ();
     }
 
     hb_blob_t *get_blob () const { return table.get_blob (); }
+
+    hb_blob_ptr_t<T> borrow_sanitized_table () const
+    { return sanitized_table.get_blob (); }
 
     hb_ot_layout_lookup_accelerator_t *get_accel (unsigned lookup_index) const
     {
@@ -6766,6 +6763,10 @@ struct GSUBGPOS
 
       return accel;
     }
+
+    /* Keep full sanitization independent of shaping's lazy sanitization. */
+    hb_face_t *face; /* Must be immediately before the lazy loader. */
+    hb_table_lazy_loader_t<T, 1> sanitized_table;
 
     hb_blob_ptr_t<T> table;
     unsigned int lookup_count;
