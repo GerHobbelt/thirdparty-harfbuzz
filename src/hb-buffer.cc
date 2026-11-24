@@ -333,10 +333,9 @@ hb_buffer_t::enter ()
   {
     max_len = hb_max (mul, (unsigned) HB_BUFFER_MAX_LEN_MIN);
   }
-  if (likely (!hb_unsigned_mul_overflows (len, HB_BUFFER_MAX_OPS_FACTOR, &mul)))
-  {
-    max_ops = hb_max (mul, (unsigned) HB_BUFFER_MAX_OPS_MIN);
-  }
+  max_ops = (int) hb_clamp ((uint64_t) len * HB_BUFFER_MAX_OPS_FACTOR,
+			  (uint64_t) HB_BUFFER_MAX_OPS_MIN,
+			  (uint64_t) HB_BUFFER_MAX_OPS_DEFAULT);
 }
 void
 hb_buffer_t::leave ()
@@ -362,6 +361,8 @@ hb_buffer_t::add (hb_codepoint_t  codepoint,
   glyph->codepoint = codepoint;
   glyph->mask = 0;
   glyph->cluster = cluster;
+  if (unlikely (have_positions))
+    hb_memset (&pos[len], 0, sizeof (pos[len]));
 
   len++;
 }
@@ -1551,6 +1552,11 @@ hb_buffer_clear_contents (hb_buffer_t *buffer)
  *
  * Pre allocates memory for @buffer to fit at least @size number of items.
  *
+ * This can move the arrays of @buffer.  Pointers returned earlier by
+ * hb_buffer_get_glyph_infos() and hb_buffer_get_glyph_positions() are
+ * then no longer valid, even though the contents of @buffer have not
+ * changed, and must be fetched again.
+ *
  * Return value:
  * `true` if @buffer memory allocation succeeded, `false` otherwise
  *
@@ -1671,11 +1677,13 @@ hb_buffer_get_length (const hb_buffer_t *buffer)
  * @length: (out): The output-array length.
  *
  * Returns @buffer glyph information array.  Returned pointer
- * is valid as long as @buffer contents are not modified.
+ * is valid as long as @buffer contents are not modified and
+ * hb_buffer_pre_allocate() is not called on it.
  *
  * Return value: (transfer none) (array length=length):
  * The @buffer glyph information array.
- * The value valid as long as buffer has not been modified.
+ * The value valid as long as buffer has not been modified
+ * or pre-allocated.
  *
  * Since: 0.9.2
  **/
@@ -1695,7 +1703,8 @@ hb_buffer_get_glyph_infos (hb_buffer_t  *buffer,
  * @length: (out): The output length
  *
  * Returns @buffer glyph position array.  Returned pointer
- * is valid as long as @buffer contents are not modified.
+ * is valid as long as @buffer contents are not modified and
+ * hb_buffer_pre_allocate() is not called on it.
  *
  * If buffer did not have positions before, the positions will be
  * initialized to zeros, unless this function is called from
@@ -1704,7 +1713,8 @@ hb_buffer_get_glyph_infos (hb_buffer_t  *buffer,
  *
  * Return value: (transfer none) (array length=length):
  * The @buffer glyph position array.
- * The value valid as long as buffer has not been modified.
+ * The value valid as long as buffer has not been modified
+ * or pre-allocated.
  *
  * Since: 0.9.2
  **/
@@ -1901,10 +1911,31 @@ hb_buffer_add_utf (hb_buffer_t  *buffer,
   const T *end = next + item_length;
   while (next < end)
   {
-    hb_codepoint_t u;
-    const T *old_next = next;
-    next = utf_t::next (next, end, &u, replacement);
-    buffer->add (u, old_next - (const T *) text);
+    if (unlikely (!buffer->ensure (buffer->len + 1)))
+    {
+      next = end;
+      break;
+    }
+    /* Each remaining code unit produces at most one glyph. Decode up to
+     * the available space before checking capacity again. */
+    const T *limit = next + hb_min ((unsigned) (end - next),
+				    buffer->allocated - buffer->len - 1);
+    unsigned start = buffer->len;
+    hb_glyph_info_t *out = buffer->info + start;
+    do
+    {
+      hb_codepoint_t u;
+      const T *old_next = next;
+      next = utf_t::next (next, end, &u, replacement);
+      *out = {};
+      out->codepoint = u;
+      out->cluster = old_next - text;
+      out++;
+    } while (next < limit);
+    buffer->len = out - buffer->info;
+    if (unlikely (buffer->have_positions))
+      hb_memset (buffer->pos + start, 0,
+		 (buffer->len - start) * sizeof (buffer->pos[0]));
   }
 
   /* Add post-context */
@@ -2425,7 +2456,7 @@ hb_buffer_t::message_impl (hb_font_t *font, const char *fmt, va_list ap)
 
   message_depth++;
 
-  char buf[100];
+  char buf[1024];
   vsnprintf (buf, sizeof (buf), fmt, ap);
   bool ret = (bool) this->message_func (this, font, buf, this->message_data);
 

@@ -450,7 +450,7 @@ hb_vector_paint_get_palette (const hb_vector_paint_t *paint)
  * (or replaced for the same index).
  *
  * These overrides are consulted by paint operations that resolve CPAL
- * entries, including SVG glyph content using `var(--colorN)`.
+ * entries.
  *
  * Since: 13.0.0
  */
@@ -737,6 +737,7 @@ hb_vector_paint_clear (hb_vector_paint_t *paint)
   paint->defs.clear ();
   paint->path.clear ();
   paint->group_stack.clear ();
+  paint->scopes.clear ();
   paint->transform_group_open_mask = 0;
   paint->transform_group_depth = 0;
   paint->transform_group_overflow_depth = 0;
@@ -745,6 +746,8 @@ hb_vector_paint_clear (hb_vector_paint_t *paint)
   paint->recharge_budget ();
   paint->gradient_counter = 0;
   paint->path_def_count = 0;
+  paint->group_def_count = 0;
+  paint->mask_counter = 0;
   paint->color_stops_scratch.clear ();
   paint->captured_scratch.clear ();
 }
@@ -812,8 +815,10 @@ hb_vector_paint_reset (hb_vector_paint_t *paint)
  * Provides a blob for internal buffer reuse by later render calls.
  * The caller transfers ownership of one reference to @paint and must
  * not destroy that reference after this call. Finish accessing @blob
- * and its data before recycling: later renders may reuse the blob
- * and overwrite its data.
+ * and its data before recycling, and do not keep other references
+ * to it: later renders may reuse the blob and overwrite its data.
+ * An immutable blob, such as one that a sub-blob was created from,
+ * is not reused; it is simply destroyed.
  *
  * Since: 13.0.0
  */
@@ -825,5 +830,10 @@ hb_vector_paint_recycle_blob (hb_vector_paint_t *paint,
   paint->recycled_blob = nullptr;
   if (!blob || blob == hb_blob_get_empty ())
     return;
+  if (hb_blob_is_immutable (blob))
+  {
+    hb_blob_destroy (blob);
+    return;
+  }
   paint->recycled_blob = blob;
 }

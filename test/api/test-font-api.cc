@@ -74,7 +74,7 @@ test_default_funcs_environment (void)
   /* "ot" is the first entry of supported_font_funcs, so the same funcs
    * would be selected if the environment variable were ignored entirely.
    * Check that the FreeType funcs are not selected. */
-  g_assert_null (hb_ft_font_get_face (font));
+  g_assert_null (hb_ft_font_get_ft_face (font));
 #endif
 
   g_assert_true (hb_font_set_funcs_using (font, ""));
@@ -111,7 +111,7 @@ test_default_funcs_environment_nonfirst (void)
 
   hb_face_t *face = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
   hb_font_t *font = hb_font_create (face);
-  g_assert_nonnull (hb_ft_font_get_face (font));
+  g_assert_nonnull (hb_ft_font_get_ft_face (font));
   hb_codepoint_t glyph;
   g_assert_true (hb_font_get_nominal_glyph (font, 'a', &glyph));
   g_assert_cmpint (hb_font_get_glyph_h_advance (font, glyph), >, 0);
@@ -143,18 +143,18 @@ test_default_funcs_environment_snapshot (void)
 
   hb_face_t *face = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
   hb_font_t *font = hb_font_create (face);
-  g_assert_nonnull (hb_ft_font_get_face (font));
+  g_assert_nonnull (hb_ft_font_get_ft_face (font));
   hb_font_destroy (font);
 
   /* Keep the caller-owned storage alive and change only its valid value.
    * The cached default must remain the original snapshot. */
   memcpy (strchr (funcs_env, '=') + 1, "ot", 3);
   font = hb_font_create (face);
-  g_assert_nonnull (hb_ft_font_get_face (font));
+  g_assert_nonnull (hb_ft_font_get_ft_face (font));
 
   /* An explicit selection must still override the cached default. */
   g_assert_true (hb_font_set_funcs_using (font, "ot"));
-  g_assert_null (hb_ft_font_get_face (font));
+  g_assert_null (hb_ft_font_get_ft_face (font));
   hb_codepoint_t glyph;
   g_assert_true (hb_font_get_nominal_glyph (font, 'a', &glyph));
   g_assert_cmpint (hb_font_get_glyph_h_advance (font, glyph), >, 0);
@@ -847,6 +847,39 @@ test_font_properties (void)
   hb_font_destroy (subfont);
 }
 
+static void
+test_scaled_glyph_extents_round_outward (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
+  hb_font_t *font = hb_font_create (face);
+  const struct {
+    int x_scale, y_scale;
+    hb_position_t x_bearing, y_bearing, width, height;
+  } cases[] = {
+    {13, 13, 0, 7, 7, -8},
+    {-13, 13, 0, 7, -7, -8},
+    {13, -13, 0, -7, 7, 8},
+    {-13, -13, 0, -7, -7, 8},
+    {0, 13, 0, 7, 0, -8},
+    {13, 0, 0, 0, 7, 0},
+    {0, 0, 0, 0, 0, 0},
+  };
+  hb_codepoint_t glyph;
+  g_assert_true (hb_font_get_nominal_glyph (font, 'a', &glyph));
+  for (unsigned i = 0; i < G_N_ELEMENTS (cases); i++)
+  {
+    hb_font_set_scale (font, cases[i].x_scale, cases[i].y_scale);
+    hb_glyph_extents_t extents;
+    g_assert_true (hb_font_get_glyph_extents (font, glyph, &extents));
+    g_assert_cmpint (extents.x_bearing, ==, cases[i].x_bearing);
+    g_assert_cmpint (extents.y_bearing, ==, cases[i].y_bearing);
+    g_assert_cmpint (extents.width, ==, cases[i].width);
+    g_assert_cmpint (extents.height, ==, cases[i].height);
+  }
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
 static hb_bool_t
 _extreme_glyph_extents_func (hb_font_t *font HB_UNUSED, void *font_data HB_UNUSED,
 			     hb_codepoint_t glyph HB_UNUSED,
@@ -1180,105 +1213,132 @@ test_font_float_scale_saturates (void)
 static void
 test_font_set_face (void)
 {
-  hb_face_t *face1 = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
-  hb_face_t *face2 = hb_test_open_font_file ("fonts/OpenSans-Regular.ttf");
-  hb_font_t *font = hb_font_create (face1);
-  hb_codepoint_t glyph1, glyph2, glyph;
-  char name[32];
+  hb_face_t *face = hb_test_open_font_file ("fonts/Mada-VF.ttf");
+  hb_face_t *other = hb_test_open_font_file ("fonts/Roboto-Variable.abc.ttf");
+  hb_font_t *font = hb_font_create (face);
+  unsigned serial = hb_font_get_serial (font);
 
-  g_assert_true (hb_font_get_nominal_glyph (font, 'a', &glyph1));
-  g_assert_true (hb_font_get_glyph_h_advance (font, glyph1));
+  hb_font_set_face (font, other);
+  g_assert_true (hb_font_get_face (font) == face);
+  g_assert_cmpuint (hb_font_get_serial (font), ==, serial);
+  g_assert_false (hb_face_is_immutable (other));
 
-  /* The font holds the last reference to face1, so setting a new face
-   * frees it; the font funcs must use the new face from then on. */
-  hb_face_destroy (face1);
-  hb_font_set_face (font, face2);
+  hb_font_set_face (font, NULL);
+  g_assert_true (hb_font_get_face (font) == face);
+  g_assert_cmpuint (hb_font_get_serial (font), ==, serial);
 
-  g_assert_true (hb_font_get_nominal_glyph (font, 'a', &glyph));
-  hb_font_t *font2 = hb_font_create (face2);
-  g_assert_true (hb_font_get_nominal_glyph (font2, 'a', &glyph2));
-  g_assert_cmpuint (glyph, ==, glyph2);
-  g_assert_cmpint (hb_font_get_glyph_h_advance (font, glyph), ==,
-		   hb_font_get_glyph_h_advance (font2, glyph2));
-  g_assert_true (hb_font_get_glyph_name (font, glyph, name, sizeof (name)));
-  g_assert_cmpstr (name, ==, "a");
-
-  hb_font_destroy (font2);
   hb_font_destroy (font);
-  hb_face_destroy (face2);
+  hb_face_destroy (face);
+  hb_face_destroy (other);
+}
+
+static int legacy_data_freed;
+
+static void
+legacy_data_free (void *user_data HB_UNUSED)
+{
+  legacy_data_freed++;
 }
 
 static hb_bool_t
-_set_face_nominal_glyph_func (hb_font_t *font HB_UNUSED,
-			      void *font_data HB_UNUSED,
-			      hb_codepoint_t unicode HB_UNUSED,
-			      hb_codepoint_t *glyph,
-			      void *user_data HB_UNUSED)
+legacy_glyph_func (hb_font_t *font HB_UNUSED, void *font_data HB_UNUSED,
+		   hb_codepoint_t unicode HB_UNUSED,
+		   hb_codepoint_t variation_selector HB_UNUSED,
+		   hb_codepoint_t *glyph, void *user_data HB_UNUSED)
 {
-  *glyph = 1234;
-  return TRUE;
+  *glyph = 42;
+  return true;
 }
 
 static void
-_set_face_destroy (void *data)
+legacy_draw_func (hb_font_t *font HB_UNUSED, void *font_data HB_UNUSED,
+		  hb_codepoint_t glyph HB_UNUSED,
+		  hb_draw_funcs_t *draw_funcs HB_UNUSED, void *draw_data,
+		  void *user_data HB_UNUSED)
 {
-  /* Font data may point into the old face without holding a reference;
-   * the face must still be alive when the data is released. */
-  hb_face_t *face = (hb_face_t *) data;
-  g_assert_cmpuint (hb_face_get_glyph_count (face), >, 0);
+  (*(int *) draw_data)++;
 }
 
-static void
-test_font_set_face_custom_funcs (void)
+static hb_bool_t
+legacy_paint_func (hb_font_t *font HB_UNUSED, void *font_data HB_UNUSED,
+		   hb_codepoint_t glyph HB_UNUSED,
+		   hb_paint_funcs_t *paint_funcs HB_UNUSED, void *paint_data,
+		   unsigned int palette_index HB_UNUSED,
+		   hb_color_t foreground HB_UNUSED,
+		   void *user_data HB_UNUSED)
 {
-  hb_face_t *face1 = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
-  hb_face_t *face2 = hb_test_open_font_file ("fonts/OpenSans-Regular.ttf");
-  hb_font_t *font = hb_font_create (face1);
+  (*(int *) paint_data)++;
+  return true;
+}
+
+/* The legacy setters wrap their callback in a trampoline.  Given no
+ * callback they must put the default back, as the other setters do, and
+ * not leave a trampoline around nothing to be called through. */
+static void
+test_fontfuncs_legacy_null (void)
+{
   hb_font_funcs_t *ffuncs = hb_font_funcs_create ();
+  hb_draw_funcs_t *dfuncs = hb_draw_funcs_create ();
+  hb_paint_funcs_t *pfuncs = hb_paint_funcs_create ();
+  hb_font_t *font;
   hb_codepoint_t glyph;
+  int calls = 0;
 
-  hb_font_funcs_set_nominal_glyph_func (ffuncs, _set_face_nominal_glyph_func, NULL, NULL);
-  hb_font_set_funcs (font, ffuncs, face1, _set_face_destroy);
+  legacy_data_freed = 0;
+
+  hb_font_funcs_set_glyph_func (ffuncs, legacy_glyph_func, NULL, legacy_data_free);
+  hb_font_funcs_set_draw_glyph_func (ffuncs, legacy_draw_func, NULL, legacy_data_free);
+  hb_font_funcs_set_paint_glyph_func (ffuncs, legacy_paint_func, NULL, legacy_data_free);
+  g_assert_cmpint (legacy_data_freed, ==, 0);
+
+  font = hb_font_create (hb_face_get_empty ());
+  hb_font_set_funcs (font, ffuncs, NULL, NULL);
+  glyph = 0;
+  g_assert_true (hb_font_get_nominal_glyph (font, 'a', &glyph));
+  g_assert_cmpuint (glyph, ==, 42);
+  glyph = 0;
+  g_assert_true (hb_font_get_variation_glyph (font, 'a', 0xFE00, &glyph));
+  g_assert_cmpuint (glyph, ==, 42);
+  g_assert_true (hb_font_draw_glyph_or_fail (font, 1, dfuncs, &calls));
+  g_assert_cmpint (calls, ==, 1);
+  g_assert_true (hb_font_paint_glyph_or_fail (font, 1, pfuncs, &calls, 0, HB_COLOR (0, 0, 0, 255)));
+  g_assert_cmpint (calls, ==, 2);
+  hb_font_destroy (font);
+
+  /* Each clear releases the data it was handed, and the data of the
+   * callback it replaces. */
+  hb_font_funcs_set_glyph_func (ffuncs, NULL, NULL, legacy_data_free);
+  g_assert_cmpint (legacy_data_freed, ==, 2);
+  hb_font_funcs_set_draw_glyph_func (ffuncs, NULL, NULL, legacy_data_free);
+  g_assert_cmpint (legacy_data_freed, ==, 4);
+  hb_font_funcs_set_glyph_shape_func (ffuncs, NULL, NULL, legacy_data_free);
+  g_assert_cmpint (legacy_data_freed, ==, 5);
+  hb_font_funcs_set_paint_glyph_func (ffuncs, NULL, NULL, legacy_data_free);
+  g_assert_cmpint (legacy_data_freed, ==, 7);
+
+  /* Nothing answers now but the defaults, which find nothing in a font
+   * with no parent to ask.  None of the callbacks above is called. */
+  font = hb_font_create (hb_face_get_empty ());
+  hb_font_set_funcs (font, ffuncs, NULL, NULL);
+  glyph = 7;
+  g_assert_false (hb_font_get_nominal_glyph (font, 'a', &glyph));
+  g_assert_false (hb_font_get_variation_glyph (font, 'a', 0xFE00, &glyph));
+  g_assert_false (hb_font_draw_glyph_or_fail (font, 1, dfuncs, &calls));
+  g_assert_false (hb_font_paint_glyph_or_fail (font, 1, pfuncs, &calls, 0, HB_COLOR (0, 0, 0, 255)));
+  g_assert_cmpint (calls, ==, 2);
+  hb_font_destroy (font);
+
+  /* An immutable object takes no change, and still releases the data. */
+  hb_font_funcs_make_immutable (ffuncs);
+  hb_font_funcs_set_glyph_func (ffuncs, NULL, NULL, legacy_data_free);
+  hb_font_funcs_set_draw_glyph_func (ffuncs, NULL, NULL, legacy_data_free);
+  hb_font_funcs_set_paint_glyph_func (ffuncs, NULL, NULL, legacy_data_free);
+  g_assert_cmpint (legacy_data_freed, ==, 10);
+
+  hb_paint_funcs_destroy (pfuncs);
+  hb_draw_funcs_destroy (dfuncs);
   hb_font_funcs_destroy (ffuncs);
-
-  g_assert_true (hb_font_get_nominal_glyph (font, 'a', &glyph));
-  g_assert_cmpuint (glyph, ==, 1234);
-
-  /* Custom font funcs belong to the old face; setting a new face
-   * releases them and installs the default ones for the new face. */
-  hb_face_destroy (face1);
-  hb_font_set_face (font, face2);
-
-  g_assert_true (hb_font_get_nominal_glyph (font, 'a', &glyph));
-  g_assert_cmpuint (glyph, !=, 1234);
-
-  hb_font_destroy (font);
-  hb_face_destroy (face2);
-}
-
-static void
-test_font_set_face_variation (void)
-{
-  hb_face_t *face1 = hb_test_open_font_file ("fonts/Mada-VF.ttf");
-  hb_face_t *face2 = hb_test_open_font_file ("fonts/Roboto-Variable.abc.ttf");
-  hb_font_t *font = hb_font_create (face1);
-  const float *coords;
-  unsigned length;
-
-  /* The font's design coords are sized for face1's single axis. */
-  hb_font_set_variation (font, HB_TAG ('w','g','h','t'), 400);
-  hb_font_set_face (font, face2);
-
-  /* face2 has two axes; the old coords must not be read as face2's. */
-  hb_font_set_variation (font, HB_TAG ('w','g','h','t'), 500);
-  coords = hb_font_get_var_coords_design (font, &length);
-  g_assert_cmpuint (length, ==, 2);
-  g_assert_cmpfloat (coords[0], ==, 500);
-  g_assert_cmpfloat (coords[1], ==, 100);
-
-  hb_font_destroy (font);
-  hb_face_destroy (face1);
-  hb_face_destroy (face2);
+  g_assert_cmpint (legacy_data_freed, ==, 10);
 }
 
 #if defined(__GNUC__)
@@ -1680,6 +1740,62 @@ test_fontations_advances (void)
 #endif
 
 
+#ifndef HB_NO_HINTING
+static hb_bool_t
+contour_point_ppem_guard (hb_font_t *font HB_UNUSED, void *font_data,
+                          hb_codepoint_t glyph, unsigned point_index HB_UNUSED,
+                          hb_position_t *x, hb_position_t *y,
+                          void *user_data HB_UNUSED)
+{
+  (*(unsigned *) font_data)++;
+  *x = glyph == 1 ? 300 : 0;
+  *y = glyph == 1 ? 500 : 0;
+  return true;
+}
+
+static void
+test_gpos_contour_point_ppem_guard (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("fonts/gpos-contour-ppem.ttf");
+  hb_font_t *parent = hb_font_create (face);
+  hb_ot_font_set_funcs (parent);
+  hb_font_t *font = hb_font_create_sub_font (parent);
+  unsigned calls = 0;
+  hb_font_funcs_t *funcs = hb_font_funcs_create ();
+  hb_font_funcs_set_glyph_contour_point_func (funcs, contour_point_ppem_guard, NULL, NULL);
+  hb_font_set_funcs (font, funcs, &calls, NULL);
+  hb_font_funcs_destroy (funcs);
+  const struct { unsigned x_ppem, y_ppem; int x, y; } cases[] = {
+    {0, 0, -200, 580},
+    {12, 0, -300, 580},
+    {0, 12, -200, 500},
+    {12, 12, -300, 500},
+  };
+  for (unsigned i = 0; i < G_N_ELEMENTS (cases); i++)
+  {
+    calls = 0;
+    hb_font_set_ppem (font, cases[i].x_ppem, cases[i].y_ppem);
+    hb_buffer_t *buffer = hb_buffer_create ();
+    hb_buffer_add_utf8 (buffer, "A\xCC\x81", -1, 0, -1);
+    hb_buffer_guess_segment_properties (buffer);
+    /* Exercise the OT AnchorFormat2 callback guard. */
+    const char *shapers[] = {"ot", NULL};
+    g_assert_true (hb_shape_full (font, buffer, NULL, 0, shapers));
+    g_assert_cmpuint (hb_buffer_get_length (buffer), ==, 2);
+    const hb_glyph_position_t *pos = hb_buffer_get_glyph_positions (buffer, NULL);
+    g_assert_cmpint (pos[1].x_offset, ==, cases[i].x);
+    g_assert_cmpint (pos[1].y_offset, ==, cases[i].y);
+    g_assert_cmpuint (calls, ==, i ? 2 : 0);
+    hb_buffer_destroy (buffer);
+  }
+  hb_font_destroy (font);
+  hb_font_destroy (parent);
+  hb_face_destroy (face);
+}
+#endif
+
+
+
 
 #if defined(BUILD_MONOLITHIC)
 #define main      harfbuzz_test_font_main
@@ -1713,10 +1829,14 @@ main (int argc, const char **argv)
   hb_test_add (test_fontfuncs_nil);
   hb_test_add (test_fontfuncs_subclassing);
   hb_test_add (test_fontfuncs_parallels);
+#ifndef HB_NO_HINTING
+  hb_test_add (test_gpos_contour_point_ppem_guard);
+#endif
 
   hb_test_add (test_font_empty);
   hb_test_add (test_font_create_without_funcs);
   hb_test_add (test_font_properties);
+  hb_test_add (test_scaled_glyph_extents_round_outward);
   hb_test_add (test_synthetic_glyph_extents_overflow);
   hb_test_add (test_synthetic_bold_saturates);
   hb_test_add (test_synthetic_slant_saturates);
@@ -1727,8 +1847,7 @@ main (int argc, const char **argv)
   hb_test_add (test_font_float_scale_saturates);
 #ifndef HB_DISABLE_DEPRECATED
   hb_test_add (test_font_set_face);
-  hb_test_add (test_font_set_face_custom_funcs);
-  hb_test_add (test_font_set_face_variation);
+  hb_test_add (test_fontfuncs_legacy_null);
 #endif
 #ifdef HAVE_FONTATIONS
   hb_test_add (test_fontations_glyph_from_name_threads);

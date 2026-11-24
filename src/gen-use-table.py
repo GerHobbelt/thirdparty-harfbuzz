@@ -95,6 +95,17 @@ for i, f in enumerate (files):
 
 defaults = ('Other', 'Not_Applicable', 'jt_X', '', 'Cn', 'No_Block', 'Unknown')
 
+# Characters that are not in the Unicode Indic files, but that USE gives
+# a class: the generic bases that is_BASE_OTHER lists.  A character gets a
+# class only if it has a record, which these would not have otherwise.
+# TODO: https://github.com/MicrosoftDocs/typography-issues/issues/1249
+unicode_data[0][0x2015] = defaults[0]
+unicode_data[0][0x2022] = defaults[0]
+unicode_data[0][0x25FB] = defaults[0]
+unicode_data[0][0x25FC] = defaults[0]
+unicode_data[0][0x25FD] = defaults[0]
+unicode_data[0][0x25FE] = defaults[0]
+
 # Merge data into one dict:
 for i,v in enumerate (defaults):
 	values[i][v] = values[i].get (v, 0) + 1
@@ -102,7 +113,7 @@ combined = {}
 for i,d in enumerate (unicode_data):
 	for u,v in d.items ():
 		if not u in combined:
-			if i >= 4:
+			if i >= 4 and not (i == 4 and v == 'Zs'):
 				continue
 			combined[u] = list (defaults)
 		combined[u][i] = v
@@ -274,6 +285,7 @@ def is_OTHER(U, UISC, UDI, UGC, AJT):
 		and not is_BASE(U, UISC, UDI, UGC, AJT)
 		and not is_BASE_OTHER(U, UISC, UDI, UGC, AJT)
 		and not is_CGJ(U, UISC, UDI, UGC, AJT)
+		and not is_SPACE(U, UISC, UDI, UGC, AJT)
 		and not is_SYM_MOD(U, UISC, UDI, UGC, AJT)
 		and not is_Word_Joiner(U, UISC, UDI, UGC, AJT)
 	)
@@ -284,6 +296,8 @@ def is_REPHA(U, UISC, UDI, UGC, AJT):
 def is_SAKOT(U, UISC, UDI, UGC, AJT):
 	# Split off of HALANT
 	return U == 0x1A60
+def is_SPACE(U, UISC, UDI, UGC, AJT):
+	return UGC == Zs and not is_BASE_OTHER(U, UISC, UDI, UGC, AJT)
 def is_SYM_MOD(U, UISC, UDI, UGC, AJT):
 	return UISC == Symbol_Modifier
 def is_VOWEL(U, UISC, UDI, UGC, AJT):
@@ -322,6 +336,7 @@ use_mapping = {
 	'SE':	is_HIEROGLYPH_SEGMENT_END,
 	'ZWNJ':	is_ZWNJ,
 	'O':	is_OTHER,
+	'SP':	is_SPACE,
 	'RK':	is_REORDERING_KILLER,
 	'R':	is_REPHA,
 	'Sk':	is_SAKOT,

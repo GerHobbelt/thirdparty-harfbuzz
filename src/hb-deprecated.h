@@ -135,11 +135,15 @@ typedef unsigned int			(*hb_unicode_eastasian_width_func_t)	(hb_unicode_funcs_t 
 /**
  * hb_unicode_funcs_set_eastasian_width_func:
  * @ufuncs: a Unicode-function structure
- * @func: (closure user_data) (destroy destroy) (scope notified): The callback function to assign
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The callback function to assign
  * @user_data: Data to pass to @func
  * @destroy: (nullable): The function to call when @user_data is not needed anymore
  *
  * Sets the implementation function for #hb_unicode_eastasian_width_func_t.
+ *
+ * If @func is `NULL`, the implementation of the parent
+ * Unicode-functions structure is restored.  @destroy is then called
+ * on @user_data right away.
  *
  * Since: 0.9.2
  * Deprecated: 2.0.0
@@ -201,13 +205,17 @@ typedef unsigned int			(*hb_unicode_decompose_compatibility_func_t)	(hb_unicode_
 /**
  * hb_unicode_funcs_set_decompose_compatibility_func:
  * @ufuncs: A Unicode-functions structure
- * @func: (closure user_data) (destroy destroy) (scope notified): The callback function to assign
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The callback function to assign
  * @user_data: Data to pass to @func
  * @destroy: (nullable): The function to call when @user_data is not needed anymore
  *
  * Sets the implementation function for #hb_unicode_decompose_compatibility_func_t.
  *
  * 
+ *
+ * If @func is `NULL`, the implementation of the parent
+ * Unicode-functions structure is restored.  @destroy is then called
+ * on @user_data right away.
  *
  * Since: 0.9.2
  * Deprecated: 2.0.0
@@ -237,11 +245,15 @@ typedef hb_font_get_glyph_kerning_func_t hb_font_get_glyph_v_kerning_func_t;
 /**
  * hb_font_funcs_set_glyph_v_kerning_func:
  * @ffuncs: A font-function structure
- * @func: (closure user_data) (destroy destroy) (scope notified): The callback function to assign
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The callback function to assign
  * @user_data: Data to pass to @func
  * @destroy: (nullable): The function to call when @user_data is not needed anymore
  *
  * Sets the implementation function for #hb_font_get_glyph_v_kerning_func_t.
+ *
+ * If @func is `NULL`, the default implementation is restored, which
+ * defers to the parent font.  @destroy is then called on @user_data
+ * right away.
  *
  * Since: 0.9.2
  * Deprecated: 2.0.0
@@ -320,12 +332,16 @@ typedef hb_bool_t (*hb_font_paint_glyph_func_t) (hb_font_t *font, void *font_dat
 /**
  * hb_font_funcs_set_glyph_shape_func:
  * @ffuncs: A font-function structure
- * @func: (closure user_data) (destroy destroy) (scope notified): The callback function to assign
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The callback function to assign
  * @user_data: Data to pass to @func
  * @destroy: (nullable): The function to call when @user_data is not needed anymore
  *
  * Sets the implementation function for #hb_font_get_glyph_shape_func_t,
  * which is the same as #hb_font_draw_glyph_func_t.
+ *
+ * If @func is `NULL`, the default implementation is restored, which
+ * defers to the parent font.  @destroy is then called on @user_data
+ * right away.
  *
  * Since: 4.0.0
  * Deprecated: 7.0.0: Use hb_font_funcs_set_draw_glyph_func() instead
@@ -339,11 +355,15 @@ hb_font_funcs_set_glyph_shape_func (hb_font_funcs_t *ffuncs,
 /**
  * hb_font_funcs_set_draw_glyph_func:
  * @ffuncs: A font-function structure
- * @func: (closure user_data) (destroy destroy) (scope notified): The callback function to assign
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The callback function to assign
  * @user_data: Data to pass to @func
  * @destroy: (nullable): The function to call when @user_data is not needed anymore
  *
  * Sets the implementation function for #hb_font_draw_glyph_func_t.
+ *
+ * If @func is `NULL`, the default implementation is restored, which
+ * defers to the parent font.  @destroy is then called on @user_data
+ * right away.
  *
  * Since: 7.0.0
  * Deprecated: 11.2.0: Use hb_font_funcs_set_draw_glyph_or_fail_func instead.
@@ -357,11 +377,15 @@ hb_font_funcs_set_draw_glyph_func (hb_font_funcs_t *ffuncs,
 /**
  * hb_font_funcs_set_paint_glyph_func:
  * @ffuncs: A font-function structure
- * @func: (closure user_data) (destroy destroy) (scope notified): The callback function to assign
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The callback function to assign
  * @user_data: Data to pass to @func
  * @destroy: (nullable): The function to call when @user_data is no longer needed
  *
  * Sets the implementation function for #hb_font_paint_glyph_func_t.
+ *
+ * If @func is `NULL`, the default implementation is restored, which
+ * defers to the parent font.  @destroy is then called on @user_data
+ * right away.
  *
  * Since: 7.0.0
  * Deprecated: 11.2.0: Use hb_font_funcs_set_paint_glyph_or_fail_func() instead.

@@ -568,6 +568,10 @@ hb_raster_draw_get_pixel_work (const hb_raster_draw_t *draw)
  * call, avoiding per-render memory allocation.  The caller transfers
  * ownership of @image to @draw and must not use it afterwards.
  *
+ * Finish accessing @image and its buffer before recycling, and do
+ * not keep other references to it: later renders may reuse the
+ * image and overwrite its contents.
+ *
  * If @draw already holds a recycled image, the previously recycled
  * image is destroyed.
  *
@@ -640,7 +644,7 @@ flatten_quadratic_recursive (hb_raster_draw_t *draw,
     bool check_clip;
   };
 
-  quad_node_t stack[16];
+  quad_node_t stack[HB_RASTER_MAX_FLATTEN_DEPTH];
   unsigned top = 0;
 
   bool check_clip = draw->flatten_clip_active;
@@ -649,13 +653,13 @@ flatten_quadratic_recursive (hb_raster_draw_t *draw,
 
   while (true)
   {
-    bool emit_chord = depth >= 16;
+    bool emit_chord = false;
 
     /* Entirely outside the clip box: the chord is exact for coverage.
        Subdivided control points are convex combinations of their
        parent's, so once a node is entirely inside the box no
        descendant can leave it and the test is skipped below. */
-    if (!emit_chord && check_clip)
+    if (check_clip)
     {
       float bx0 = hb_min (x0, hb_min (x1, x2));
       float bx1 = hb_max (x0, hb_max (x1, x2));
@@ -686,21 +690,33 @@ flatten_quadratic_recursive (hb_raster_draw_t *draw,
       }
       else
       {
-	/* FreeType behavior: control-point deviation from chord center. */
+	/* FreeType behavior: control-point deviation from chord center.
+	   Written so that a NaN deviation reads as flat: it is NaN
+	   again in both halves, all the way to the depth cap. */
 	const float flat_thresh = 0.25f;
 	float dx = x0 + x2 - 2.f * x1;
 	float dy = y0 + y2 - 2.f * y1;
 	if (dx < 0) dx = -dx;
 	if (dy < 0) dy = -dy;
-	is_flat = dx <= flat_thresh && dy <= flat_thresh;
+	is_flat = !(dx > flat_thresh || dy > flat_thresh);
       }
       emit_chord = is_flat;
     }
 
-    /* Charge one unit per subdivision; degrade to the chord when the
-       session work budget is spent. */
     if (!emit_chord)
     {
+      /* Not flat after this many halvings: the curve is too large to
+	 draw, as an outline put out of reach by a transform is.  End
+	 the outline here, so that nothing more is spent on it. */
+      if (unlikely (depth >= HB_RASTER_MAX_FLATTEN_DEPTH))
+      {
+	draw->edges_left = 0;
+	*work = work_left;
+	return;
+      }
+
+      /* Charge one unit per subdivision; degrade to the chord when the
+	 session work budget is spent. */
       if (unlikely (work_left <= 0))
 	emit_chord = true;
       else
@@ -728,7 +744,7 @@ flatten_quadratic_recursive (hb_raster_draw_t *draw,
     float x12 = (x1 + x2) * 0.5f, y12 = (y1 + y2) * 0.5f;
     float xm  = (x01 + x12) * 0.5f, ym  = (y01 + y12) * 0.5f;
 
-    /* Depth is capped at 16, so stack capacity 16 is sufficient. */
+    /* Only nodes short of the depth cap are split, one pending per level. */
     stack[top++] = {xm, ym, x12, y12, x2, y2, depth + 1, check_clip};
     x2 = xm; y2 = ym;
     x1 = x01; y1 = y01;
@@ -850,7 +866,7 @@ flatten_cubic_recursive (hb_raster_draw_t *draw,
     bool check_clip;
   };
 
-  cubic_node_t stack[16];
+  cubic_node_t stack[HB_RASTER_MAX_FLATTEN_DEPTH];
   unsigned top = 0;
 
   bool check_clip = draw->flatten_clip_active;
@@ -859,13 +875,13 @@ flatten_cubic_recursive (hb_raster_draw_t *draw,
 
   while (true)
   {
-    bool emit_chord = depth >= 16;
+    bool emit_chord = false;
 
     /* Entirely outside the clip box: the chord is exact for coverage.
        Subdivided control points are convex combinations of their
        parent's, so once a node is entirely inside the box no
        descendant can leave it and the test is skipped below. */
-    if (!emit_chord && check_clip)
+    if (check_clip)
     {
       float bx0 = hb_min (hb_min (x0, x1), hb_min (x2, x3));
       float bx1 = hb_max (hb_max (x0, x1), hb_max (x2, x3));
@@ -891,7 +907,8 @@ flatten_cubic_recursive (hb_raster_draw_t *draw,
       }
       else
       {
-	/* FreeType behavior: chord-trisection distance test. */
+	/* FreeType behavior: chord-trisection distance test.  As for
+	   the quadratic, a NaN distance reads as flat. */
 	const float flat_thresh = 0.5f;
 
 	float d10x = 2.f * x0 - 3.f * x1 + x3;
@@ -904,18 +921,26 @@ flatten_cubic_recursive (hb_raster_draw_t *draw,
 	if (d20x < 0) d20x = -d20x;
 	if (d20y < 0) d20y = -d20y;
 
-	is_flat = d10x <= flat_thresh &&
-		  d10y <= flat_thresh &&
-		  d20x <= flat_thresh &&
-		  d20y <= flat_thresh;
+	is_flat = !(d10x > flat_thresh ||
+		    d10y > flat_thresh ||
+		    d20x > flat_thresh ||
+		    d20y > flat_thresh);
       }
       emit_chord = is_flat;
     }
 
-    /* Charge one unit per subdivision; degrade to the chord when the
-       session work budget is spent. */
     if (!emit_chord)
     {
+      /* As for the quadratic: not flat by now ends the outline. */
+      if (unlikely (depth >= HB_RASTER_MAX_FLATTEN_DEPTH))
+      {
+	draw->edges_left = 0;
+	*work = work_left;
+	return;
+      }
+
+      /* Charge one unit per subdivision; degrade to the chord when the
+	 session work budget is spent. */
       if (unlikely (work_left <= 0))
 	emit_chord = true;
       else
@@ -947,7 +972,7 @@ flatten_cubic_recursive (hb_raster_draw_t *draw,
     float x123 = (x12 + x23) * 0.5f, y123 = (y12 + y23) * 0.5f;
     float xm   = (x012 + x123) * 0.5f, ym   = (y012 + y123) * 0.5f;
 
-    /* Depth is capped at 16, so stack capacity 16 is sufficient. */
+    /* Only nodes short of the depth cap are split, one pending per level. */
     stack[top++] = {xm, ym, x123, y123, x23, y23, x3, y3, depth + 1, check_clip};
     x3 = xm; y3 = ym;
     x2 = x012; y2 = y012;
@@ -1705,7 +1730,7 @@ hb_raster_draw_render (hb_raster_draw_t *draw)
 		draw->budget != HB_BUDGET_UNLIMITED &&
 		hb_raster_draw_get_pixel_work (draw) >
 		hb_max ((int64_t) HB_BUDGET_RASTER_PIXELS,
-			(int64_t) HB_BUDGET_RASTER_PAINT_PASSES *
+			(int64_t) HB_BUDGET_RASTER_DRAW_PASSES *
 			ext.width * ext.height)))
     return nullptr;
 

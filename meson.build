@@ -1,6 +1,6 @@
 project('harfbuzz', ['c', 'cpp'],
   meson_version: '>= 1.3.0',
-  version: '15.1.0',
+  version: '15.2.0',
   default_options: [
     'cpp_eh=none',          # Just to support msvc, we are passing -fno-exceptions also anyway
     # 'cpp_rtti=false',     # Do NOT enable, wraps inherit it and ICU needs RTTI
@@ -250,7 +250,7 @@ if wasm_dep.found()
 endif
 
 if graphite2_dep.found() or graphite_dep.found()
-  conf.set('HAVE_GRAPHITE2', 1)
+  conf.set('HAVE_GRAPHITE', 1)
 endif
 
 if icu_dep.found()
@@ -263,6 +263,10 @@ endif
 
 if get_option('experimental_api')
   conf.set('HB_EXPERIMENTAL_API', 1)
+endif
+
+if not get_option('gpu').disabled()
+  conf.set('HAVE_GPU', 1)
 endif
 
 if not get_option('raster').disabled()
@@ -456,6 +460,9 @@ endif
 if not get_option('vector').disabled()
   libs += [libharfbuzz_vector]
 endif
+if not get_option('gpu').disabled()
+  libs += [libharfbuzz_gpu]
+endif
 alias_target('libs', libs)
 
 # Re glib, see https://github.com/harfbuzz/harfbuzz/issues/4153#issuecomment-2646347531
@@ -483,7 +490,7 @@ build_summary = {
      'Fontations': conf.get('HAVE_FONTATIONS', 0) == 1,
     },
   'Additional shapers':
-    {'Graphite2': conf.get('HAVE_GRAPHITE2', 0) == 1,
+    {'Graphite2': conf.get('HAVE_GRAPHITE', 0) == 1,
      'WebAssembly (experimental)': conf.get('HAVE_WASM', 0) == 1,
     },
   'Platform / other shapers (not normally needed)':

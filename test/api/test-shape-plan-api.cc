@@ -29,6 +29,30 @@
 /* Unit tests for hb-shape-plan.h */
 
 static void
+test_shape_plan_null_arguments (void)
+{
+  hb_face_t *face = hb_face_create (hb_blob_get_empty (), 0);
+  hb_face_t *faces[] = {NULL, hb_face_get_empty (), face};
+  for (unsigned i = 0; i < G_N_ELEMENTS (faces); i++)
+  {
+    g_assert_true (hb_shape_plan_create2 (faces[i], NULL, NULL, 0, NULL, 0, NULL) ==
+                   hb_shape_plan_get_empty ());
+    g_assert_true (hb_shape_plan_create_cached2 (faces[i], NULL, NULL, 0, NULL, 0, NULL) ==
+                   hb_shape_plan_get_empty ());
+  }
+
+  hb_segment_properties_t props = HB_SEGMENT_PROPERTIES_DEFAULT;
+  props.direction = HB_DIRECTION_LTR;
+  hb_shape_plan_t *expected = hb_shape_plan_create2 (NULL, &props, NULL, 0, NULL, 0, NULL);
+  hb_shape_plan_t *actual = hb_shape_plan_create_cached2 (NULL, &props, NULL, 0, NULL, 0, NULL);
+  g_assert_cmpstr (hb_shape_plan_get_shaper (actual), ==, hb_shape_plan_get_shaper (expected));
+
+  hb_shape_plan_destroy (actual);
+  hb_shape_plan_destroy (expected);
+  hb_face_destroy (face);
+}
+
+static void
 test_ot_shape_plan_get_feature_tags_rtl (void)
 {
   /* Test getting features enabled for horizontal RTL text */
@@ -389,6 +413,31 @@ test_shape_plan_execute_buffer_limits (void)
 
 #ifndef HB_NO_VAR
 static void
+test_ot_shape_plan_cached_default_variations (void)
+{
+  hb_face_t *face = hb_test_open_font_file (
+      "../subset/data/fonts/AnekBangla-question-subset.ttf");
+  hb_segment_properties_t props = HB_SEGMENT_PROPERTIES_DEFAULT;
+  props.script = HB_SCRIPT_BENGALI;
+  props.direction = HB_DIRECTION_LTR;
+
+  /* This face selects a nonzero GSUB variation index at the default location. */
+  unsigned index;
+  g_assert_true (hb_ot_layout_table_find_feature_variations (
+      face, HB_OT_TAG_GSUB, NULL, 0, &index));
+  g_assert_cmpuint (index, ==, 2);
+
+  hb_shape_plan_t *first = hb_shape_plan_create_cached (face, &props, NULL, 0, NULL);
+  hb_shape_plan_t *again = hb_shape_plan_create_cached (face, &props, NULL, 0, NULL);
+  g_assert_true (first != hb_shape_plan_get_empty ());
+  g_assert_true (first == again);
+
+  hb_shape_plan_destroy (again);
+  hb_shape_plan_destroy (first);
+  hb_face_destroy (face);
+}
+
+static void
 test_ot_shape_plan_default_condition_deltas (void)
 {
   hb_face_t *source = hb_test_open_font_file (
@@ -515,6 +564,7 @@ main (int argc, const char **argv)
 {
   hb_test_init (&argc, &argv);
 
+  hb_test_add (test_shape_plan_null_arguments);
   hb_test_add (test_ot_shape_plan_get_feature_tags_rtl);
   hb_test_add (test_ot_shape_plan_get_feature_tags_ltr);
   hb_test_add (test_ot_shape_plan_get_feature_tags_ttb);
@@ -524,6 +574,7 @@ main (int argc, const char **argv)
   hb_test_add (test_ot_shape_plan_get_feature_tags_userfeatures_disablenondeafult);
   hb_test_add (test_shape_plan_execute_buffer_limits);
 #ifndef HB_NO_VAR
+  hb_test_add (test_ot_shape_plan_cached_default_variations);
   hb_test_add (test_ot_shape_plan_default_condition_deltas);
   hb_test_add (test_ot_shape_plan_lookup_variations_cache);
 #endif

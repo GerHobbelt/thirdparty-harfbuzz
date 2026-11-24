@@ -121,11 +121,14 @@ typedef int64_t *(*hb_paint_get_budget_remaining_func_t) (hb_paint_funcs_t *func
 /**
  * hb_paint_funcs_set_set_budget_func:
  * @funcs: paint functions object
- * @func: (closure user_data) (destroy destroy) (scope notified): budget setter
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): budget setter
  * @user_data: Data to pass to @func
  * @destroy: (nullable): callback to destroy @user_data
  *
  * Sets the budget setter callback.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 14.5.0
  **/
@@ -137,11 +140,14 @@ hb_paint_funcs_set_set_budget_func (hb_paint_funcs_t         *funcs,
 /**
  * hb_paint_funcs_set_get_budget_func:
  * @funcs: paint functions object
- * @func: (closure user_data) (destroy destroy) (scope notified): budget getter
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): budget getter
  * @user_data: Data to pass to @func
  * @destroy: (nullable): callback to destroy @user_data
  *
  * Sets the budget-policy getter callback.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 14.5.0
  **/
@@ -153,11 +159,14 @@ hb_paint_funcs_set_get_budget_func (hb_paint_funcs_t         *funcs,
 /**
  * hb_paint_funcs_set_get_budget_remaining_func:
  * @funcs: paint functions object
- * @func: (closure user_data) (destroy destroy) (scope notified): live-budget getter
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): live-budget getter
  * @user_data: Data to pass to @func
  * @destroy: (nullable): callback to destroy @user_data
  *
  * Sets the live-budget getter callback.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 14.5.0
  **/
@@ -259,6 +268,18 @@ typedef void (*hb_paint_pop_transform_func_t) (hb_paint_funcs_t *funcs,
  * @user_data: User data pointer passed to hb_paint_funcs_set_color_glyph_func()
  *
  * A virtual method for the #hb_paint_funcs_t to render a color glyph by glyph index.
+ *
+ * It is called for a color glyph that another color glyph refers to, so
+ * that a client that caches rendered glyphs can supply this one from its
+ * cache.  Returning `false` leaves the glyph to HarfBuzz, which paints it
+ * as part of the walk in progress.
+ *
+ * A callback that paints the glyph by calling hb_font_paint_glyph()
+ * starts a new walk that knows nothing of the one in progress: the cycle
+ * detection of HarfBuzz, and its limits on depth and size, apply to each
+ * walk on its own.  Color glyphs can refer to each other, so such a
+ * callback must guard against cycles and limit how deeply it nests.
+ * Without that, a font can make it recurse until the stack overflows.
  *
  * Return value: `true` if the glyph was painted, `false` otherwise.
  *
@@ -944,11 +965,14 @@ typedef hb_bool_t (*hb_paint_custom_palette_color_func_t) (hb_paint_funcs_t *fun
 /**
  * hb_paint_funcs_set_push_transform_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The push-transform callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The push-transform callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the push-transform callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -961,11 +985,14 @@ hb_paint_funcs_set_push_transform_func (hb_paint_funcs_t               *funcs,
 /**
  * hb_paint_funcs_set_pop_transform_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The pop-transform callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The pop-transform callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the pop-transform callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -978,11 +1005,18 @@ hb_paint_funcs_set_pop_transform_func (hb_paint_funcs_t              *funcs,
 /**
  * hb_paint_funcs_set_color_glyph_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The color-glyph callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The color-glyph callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the color-glyph callback on the paint functions struct.
+ *
+ * A callback that paints by calling hb_font_paint_glyph() is responsible
+ * for guarding against cycles and for limiting how deeply it nests; see
+ * #hb_paint_color_glyph_func_t.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 8.2.0
  */
@@ -995,11 +1029,14 @@ hb_paint_funcs_set_color_glyph_func (hb_paint_funcs_t                *funcs,
 /**
  * hb_paint_funcs_set_fill_glyph_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The fill-glyph callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The fill-glyph callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the fill-glyph callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 14.3.0
  */
@@ -1012,11 +1049,14 @@ hb_paint_funcs_set_fill_glyph_func (hb_paint_funcs_t           *funcs,
 /**
  * hb_paint_funcs_set_push_clip_glyph_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The push-clip-glyph callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The push-clip-glyph callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the push-clip-glyph callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -1029,11 +1069,14 @@ hb_paint_funcs_set_push_clip_glyph_func (hb_paint_funcs_t                *funcs,
 /**
  * hb_paint_funcs_set_push_clip_rectangle_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The push-clip-rectangle callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The push-clip-rectangle callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the push-clip-rect callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -1046,11 +1089,14 @@ hb_paint_funcs_set_push_clip_rectangle_func (hb_paint_funcs_t                   
 /**
  * hb_paint_funcs_set_push_clip_path_start_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The push-clip-path-start callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The push-clip-path-start callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the push-clip-path-start callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 14.2.0
  */
@@ -1063,11 +1109,14 @@ hb_paint_funcs_set_push_clip_path_start_func (hb_paint_funcs_t                  
 /**
  * hb_paint_funcs_set_push_clip_path_end_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The push-clip-path-end callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The push-clip-path-end callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the push-clip-path-end callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 14.2.0
  */
@@ -1080,11 +1129,14 @@ hb_paint_funcs_set_push_clip_path_end_func (hb_paint_funcs_t                   *
 /**
  * hb_paint_funcs_set_pop_clip_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The pop-clip callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The pop-clip callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the pop-clip callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -1097,11 +1149,14 @@ hb_paint_funcs_set_pop_clip_func (hb_paint_funcs_t         *funcs,
 /**
  * hb_paint_funcs_set_color_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The paint-color callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The paint-color callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the paint-color callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -1114,11 +1169,14 @@ hb_paint_funcs_set_color_func (hb_paint_funcs_t      *funcs,
 /**
  * hb_paint_funcs_set_image_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The paint-image callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The paint-image callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the paint-image callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -1131,11 +1189,14 @@ hb_paint_funcs_set_image_func (hb_paint_funcs_t      *funcs,
 /**
  * hb_paint_funcs_set_linear_gradient_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The linear-gradient callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The linear-gradient callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the linear-gradient callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -1148,11 +1209,14 @@ hb_paint_funcs_set_linear_gradient_func (hb_paint_funcs_t                *funcs,
 /**
  * hb_paint_funcs_set_radial_gradient_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The radial-gradient callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The radial-gradient callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the radial-gradient callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -1165,11 +1229,14 @@ hb_paint_funcs_set_radial_gradient_func (hb_paint_funcs_t                *funcs,
 /**
  * hb_paint_funcs_set_sweep_gradient_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The sweep-gradient callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The sweep-gradient callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the sweep-gradient callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -1182,11 +1249,14 @@ hb_paint_funcs_set_sweep_gradient_func (hb_paint_funcs_t               *funcs,
 /**
  * hb_paint_funcs_set_push_group_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The push-group callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The push-group callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the push-group callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -1199,11 +1269,14 @@ hb_paint_funcs_set_push_group_func (hb_paint_funcs_t           *funcs,
 /**
  * hb_paint_funcs_set_push_group_for_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The push-group-for callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The push-group-for callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the push-group-for callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 14.2.0
  */
@@ -1216,11 +1289,14 @@ hb_paint_funcs_set_push_group_for_func (hb_paint_funcs_t               *funcs,
 /**
  * hb_paint_funcs_set_pop_group_func:
  * @funcs: A paint functions struct
- * @func: (closure user_data) (destroy destroy) (scope notified): The pop-group callback
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): The pop-group callback
  * @user_data: Data to pass to @func
  * @destroy: (nullable): Function to call when @user_data is no longer needed
  *
  * Sets the pop-group callback on the paint functions struct.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */
@@ -1233,11 +1309,14 @@ hb_paint_funcs_set_pop_group_func (hb_paint_funcs_t          *funcs,
 /**
  * hb_paint_funcs_set_custom_palette_color_func:
  * @funcs: a paint functions struct.
- * @func: (closure user_data) (destroy destroy) (scope notified): custom-palette-color callback.
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): custom-palette-color callback.
  * @user_data: data to pass to @func.
  * @destroy: (nullable): function to call when @user_data is no longer needed.
  *
  * Sets the custom-palette-color callback on @funcs.
+ *
+ * If @func is `NULL`, the default implementation is restored.
+ * @destroy is then called on @user_data right away.
  *
  * Since: 7.0.0
  */

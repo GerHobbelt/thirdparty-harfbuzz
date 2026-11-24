@@ -32,6 +32,7 @@ use kurbo::BezPath;
 // assumptions about Javascript calling conventions. We
 // really do just want to import some C symbols and run
 // them in unsafe-land!
+#[link(wasm_import_module = "env")]
 extern "C" {
     fn face_get_upem(face: u32) -> u32;
     fn font_get_face(font: u32) -> u32;
@@ -45,6 +46,8 @@ extern "C" {
     fn face_copy_table(font: u32, tag: u32, blob: *mut Blob) -> bool;
     fn buffer_copy_contents(buffer: u32, cbuffer: *mut CBufferContents) -> bool;
     fn buffer_set_contents(buffer: u32, cbuffer: &CBufferContents) -> bool;
+    fn buffer_contents_free(cbuffer: *mut CBufferContents);
+    fn glyph_outline_free(outline: *mut CGlyphOutline);
     fn feature_copy_contents(features: u32, num_features: u32, output: *mut CFFeatures) -> bool;
     fn features_free(features: *mut CFFeatures);
     fn debugprint(s: *const u8);
@@ -203,6 +206,7 @@ impl Font {
             path.close_path();
             results.push(path);
         }
+        unsafe { glyph_outline_free(&mut outline) };
         results
     }
 }
@@ -283,6 +287,7 @@ impl<T: BufferItem> Buffer<T> {
         let infos: Vec<CGlyphInfo> = unsafe {
             std::slice::from_raw_parts(c_contents.info, c_contents.length as usize).to_vec()
         };
+        unsafe { buffer_contents_free(&mut c_contents) };
         Buffer {
             glyphs: infos
                 .into_iter()
@@ -530,6 +535,7 @@ impl Features {
                 end: f.end,
             })
             .collect();
+        unsafe { features_free(&mut c_features) };
         Features { features }
     }
 
@@ -551,15 +557,6 @@ impl Features {
     /// Iterate over the features.
     pub fn iter(&self) -> impl Iterator<Item = &Feature> {
         self.features.iter()
-    }
-}
-
-impl Drop for Features {
-    fn drop(&mut self) {
-        // CFFeatures is stack-allocated but it points to WASM memory.
-        // We don't need to free since feature_copy_contents allocates
-        // in WASM heap and we copied values out. The WASM module
-        // frees its heap on deinstantiation.
     }
 }
 

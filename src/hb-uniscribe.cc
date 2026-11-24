@@ -555,6 +555,7 @@ _hb_uniscribe_shaper_font_data_destroy (hb_uniscribe_font_data_t *data)
  *
  * Return value: a pointer to the LOGFONTW retrieved
  *
+ * Since: 0.9.2
  **/
 LOGFONTW *
 hb_uniscribe_font_get_logfontw (hb_font_t *font)
@@ -570,8 +571,9 @@ hb_uniscribe_font_get_logfontw (hb_font_t *font)
  * Fetches the HFONT handle that corresponds to the
  * specified #hb_font_t font.
  *
- * Return value: the HFONT retreieved
+ * Return value: the HFONT retrieved
  *
+ * Since: 0.9.2
  **/
 HFONT
 hb_uniscribe_font_get_hfont (hb_font_t *font)
@@ -691,7 +693,10 @@ retry:
 
   /* MinGW32 doesn't define fMergeNeutralItems, so we bruteforce */
   //bidi_control.fMergeNeutralItems = true;
-  *(uint32_t*)&bidi_control |= 1u<<24;
+  uint32_t bidi_control_bits;
+  hb_memcpy (&bidi_control_bits, &bidi_control, sizeof (bidi_control_bits));
+  bidi_control_bits |= 1u<<24;
+  hb_memcpy (&bidi_control, &bidi_control_bits, sizeof (bidi_control_bits));
 
   bidi_state.uBidiLevel = HB_DIRECTION_IS_FORWARD (buffer->props.direction) ? 0 : 1;
   bidi_state.fOverrideDirection = 1;

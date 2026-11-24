@@ -2497,46 +2497,19 @@ hb_font_get_parent (hb_font_t *font)
 #ifndef HB_DISABLE_DEPRECATED
 /**
  * hb_font_set_face:
- * @font: #hb_font_t to work upon
- * @face: The #hb_face_t to assign
+ * @font: A font
+ * @face: (nullable): A face
  *
- * Sets @face as the font-face value of @font.
- *
- * Font functions and their data may hold pointers into the old face,
- * so the font functions of @font are released and replaced with the
- * default ones for @face, as hb_font_create() would set up.  Other
- * font properties, such as scale and variations, are kept.
+ * This function does nothing. To use another face, create a new font
+ * with hb_font_create().
  *
  * Since: 1.4.3
  * Deprecated: 15.0.0: Use hb_font_create() instead.
  **/
 void
-hb_font_set_face (hb_font_t *font,
-		  hb_face_t *face)
+hb_font_set_face (hb_font_t *font HB_UNUSED,
+		  hb_face_t *face HB_UNUSED)
 {
-  if (hb_object_is_immutable (font))
-    return;
-
-  if (face == font->face)
-    return;
-
-  if (unlikely (!face))
-    face = hb_face_get_empty ();
-
-  hb_face_t *old = font->face;
-
-  hb_face_make_immutable (face);
-  font->face = hb_face_reference (face);
-  font->changed ();
-
-  /* Release the old font funcs while the old face is still alive. */
-  hb_font_set_funcs (font, nullptr, nullptr, nullptr);
-  hb_font_set_funcs_using (font, nullptr);
-
-  hb_face_destroy (old);
-
-  font->changed ();
-  font->serial_coords = font->serial;
 }
 #endif
 
@@ -3206,8 +3179,7 @@ hb_font_set_variation (hb_font_t *font,
     return;
   }
 
-  /* Initialize design coords.
-   * The font's coords may belong to another face after hb_font_set_face(). */
+  /* Initialize design coords. */
   if (font->design_coords && font->num_coords == coords_length)
   {
     for (unsigned int i = 0; i < coords_length; i++)
@@ -3520,12 +3492,16 @@ hb_font_get_variation_glyph_trampoline (hb_font_t      *font,
 /**
  * hb_font_funcs_set_glyph_func:
  * @ffuncs: The font-functions structure
- * @func: (closure user_data) (destroy destroy) (scope notified): callback function
+ * @func: (nullable) (closure user_data) (destroy destroy) (scope notified): callback function
  * @user_data: data to pass to @func
  * @destroy: (nullable): function to call when @user_data is not needed anymore
  *
  * Deprecated.  Use hb_font_funcs_set_nominal_glyph_func() and
  * hb_font_funcs_set_variation_glyph_func() instead.
+ *
+ * If @func is `NULL`, the default implementations of both are restored,
+ * which defer to the parent font.  @destroy is then called on @user_data
+ * right away.
  *
  * Since: 0.9.2
  * Deprecated: 1.2.3
@@ -3536,6 +3512,16 @@ hb_font_funcs_set_glyph_func (hb_font_funcs_t          *ffuncs,
 			      void                     *user_data,
 			      hb_destroy_func_t         destroy /* May be NULL. */)
 {
+  if (!func)
+  {
+    /* A trampoline around no callback would call through it.  Clear the
+     * two callbacks this sets instead, as their own setters do for a
+     * null callback; the second releases user_data. */
+    hb_font_funcs_set_variation_glyph_func (ffuncs, nullptr, nullptr, nullptr);
+    hb_font_funcs_set_nominal_glyph_func (ffuncs, nullptr, user_data, destroy);
+    return;
+  }
+
   if (hb_object_is_immutable (ffuncs))
   {
     if (destroy)
@@ -3604,6 +3590,15 @@ _hb_font_funcs_set_draw_glyph_func (hb_font_funcs_t           *ffuncs,
 				    void                      *user_data,
 				    hb_destroy_func_t          destroy /* May be NULL. */)
 {
+  if (!func)
+  {
+    /* A trampoline around no callback would call through it.  Clear the
+     * callback this sets instead, as its own setter does for a null
+     * callback, which also releases user_data. */
+    hb_font_funcs_set_draw_glyph_or_fail_func (ffuncs, nullptr, user_data, destroy);
+    return;
+  }
+
   if (hb_object_is_immutable (ffuncs))
   {
     if (destroy)
@@ -3678,6 +3673,15 @@ hb_font_funcs_set_paint_glyph_func (hb_font_funcs_t           *ffuncs,
 				    void                      *user_data,
 				    hb_destroy_func_t          destroy /* May be NULL. */)
 {
+  if (!func)
+  {
+    /* A trampoline around no callback would call through it.  Clear the
+     * callback this sets instead, as its own setter does for a null
+     * callback, which also releases user_data. */
+    hb_font_funcs_set_paint_glyph_or_fail_func (ffuncs, nullptr, user_data, destroy);
+    return;
+  }
+
   if (hb_object_is_immutable (ffuncs))
   {
     if (destroy)

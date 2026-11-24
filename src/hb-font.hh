@@ -166,7 +166,7 @@ struct hb_font_t
   float em_fscale_y (int32_t v) { return em_fmult (v, y_multf); }
   float em_fscalef_x (float v) { return em_fmultf (v, x_multf); }
   float em_fscalef_y (float v) { return em_fmultf (v, y_multf); }
-  hb_position_t em_scale_dir (int16_t v, hb_direction_t direction)
+  hb_position_t em_scale_dir (int32_t v, hb_direction_t direction)
   { return em_mult (v, dir_mult (direction)); }
 
   /* Convert from parent-font user-space to our user-space */
@@ -205,10 +205,32 @@ struct hb_font_t
     float x2 = x1 + em_fscale_x (extents->width);
     float y2 = y1 + em_fscale_y (extents->height);
 
-    extents->x_bearing = hb_clamp_to<hb_position_t> (floorf (x1));
-    extents->y_bearing = hb_clamp_to<hb_position_t> (floorf (y1));
-    extents->width = hb_clamp_to<hb_position_t> ((double) ceilf (x2) - extents->x_bearing);
-    extents->height = hb_clamp_to<hb_position_t> ((double) ceilf (y2) - extents->y_bearing);
+    round_glyph_extents (x1, y1, x2, y2, extents);
+  }
+
+  /* Scales unrounded font-unit bounds.  Scaling before rounding keeps the
+   * box tight around fractional outlines, such as those of variable-font
+   * instances. */
+  void scale_glyph_extents (const hb_extents_t<> &bounds,
+			    hb_glyph_extents_t *extents)
+  {
+    round_glyph_extents (em_fscalef_x (bounds.xmin), em_fscalef_y (bounds.ymax),
+			 em_fscalef_x (bounds.xmax), em_fscalef_y (bounds.ymin),
+			 extents);
+  }
+
+  /* Takes the scaled origin corner (x1,y1) and opposite corner (x2,y2). */
+  static void round_glyph_extents (float x1, float y1,
+				   float x2, float y2,
+				   hb_glyph_extents_t *extents)
+  {
+    /* Round outward even when scaling reverses an axis. */
+    bool x_forward = x1 <= x2;
+    bool y_forward = y1 >= y2;
+    extents->x_bearing = hb_clamp_to<hb_position_t> (x_forward ? floorf (x1) : ceilf (x1));
+    extents->y_bearing = hb_clamp_to<hb_position_t> (y_forward ? ceilf (y1) : floorf (y1));
+    extents->width = hb_clamp_to<hb_position_t> ((double) (x_forward ? ceilf (x2) : floorf (x2)) - extents->x_bearing);
+    extents->height = hb_clamp_to<hb_position_t> ((double) (y_forward ? floorf (y2) : ceilf (y2)) - extents->y_bearing);
   }
 
   void synthetic_glyph_extents (hb_glyph_extents_t *extents)

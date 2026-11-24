@@ -259,13 +259,156 @@ test_budget_cubic (void)
   hb_draw_funcs_t *draw_funcs = hb_gpu_draw_get_funcs (draw);
   hb_draw_state_t draw_state = HB_DRAW_STATE_DEFAULT;
 
-  /* A cubic that fits no quadratic at any depth must not be subdivided
-   * once the budget is spent; the subdivision itself is charged. */
+  /* A cubic that no quadratic fits must not be worked on once the budget
+   * is spent; the attempts themselves are charged. */
   g_assert_true (hb_draw_set_budget (draw_funcs, draw, 0));
   hb_draw_move_to (draw_funcs, draw, &draw_state, 0.f, 0.f);
   hb_draw_cubic_to (draw_funcs, draw, &draw_state,
 		    1e9f, 3e8f, 1e9f, -7e8f, 3.f, 3e9f);
   g_assert_cmpint (hb_draw_get_budget_remaining (draw_funcs, draw), ==, -1);
+
+  hb_gpu_draw_destroy (draw);
+}
+
+static void
+test_cubic_unencodable (void)
+{
+  hb_gpu_draw_t *draw = hb_gpu_draw_create_or_fail ();
+  hb_draw_funcs_t *draw_funcs = hb_gpu_draw_get_funcs (draw);
+  hb_draw_state_t draw_state = HB_DRAW_STATE_DEFAULT;
+
+  /* A cubic far beyond the coordinates the encoder can store makes the
+   * outline unencodable however it is converted, so it must not be
+   * worked on: it is emitted as its control polygon, for a few units. */
+  g_assert_true (hb_draw_set_budget (draw_funcs, draw, 64));
+  hb_draw_move_to (draw_funcs, draw, &draw_state, 0.f, 0.f);
+  hb_draw_cubic_to (draw_funcs, draw, &draw_state,
+		    1e9f, 3e8f, 1e9f, -7e8f, 3.f, 3e9f);
+  g_assert_cmpint (hb_draw_get_budget_remaining (draw_funcs, draw), >=, 0);
+  g_assert_null (hb_gpu_draw_encode (draw, nullptr));
+
+  /* Likewise when both ends of the cubic are within reach. */
+  g_assert_true (hb_draw_set_budget (draw_funcs, draw, 64));
+  draw_state = HB_DRAW_STATE_DEFAULT;
+  hb_draw_move_to (draw_funcs, draw, &draw_state, 0.f, 0.f);
+  hb_draw_cubic_to (draw_funcs, draw, &draw_state,
+		    1e9f, 3e8f, 1e9f, -7e8f, 3.f, 3.f);
+  g_assert_cmpint (hb_draw_get_budget_remaining (draw_funcs, draw), >=, 0);
+  g_assert_null (hb_gpu_draw_encode (draw, nullptr));
+
+  /* And when its middle is too: the control points cancel there. */
+  g_assert_true (hb_draw_set_budget (draw_funcs, draw, 64));
+  draw_state = HB_DRAW_STATE_DEFAULT;
+  hb_draw_move_to (draw_funcs, draw, &draw_state, 0.f, 0.f);
+  hb_draw_cubic_to (draw_funcs, draw, &draw_state,
+		    0.f, 3e9f, 0.f, -3e9f, 8.f, 0.f);
+  g_assert_cmpint (hb_draw_get_budget_remaining (draw_funcs, draw), >=, 0);
+  g_assert_null (hb_gpu_draw_encode (draw, nullptr));
+
+  /* And for coordinates that are not numbers at all. */
+  g_assert_true (hb_draw_set_budget (draw_funcs, draw, 64));
+  draw_state = HB_DRAW_STATE_DEFAULT;
+  hb_draw_move_to (draw_funcs, draw, &draw_state, 0.f, 0.f);
+  hb_draw_cubic_to (draw_funcs, draw, &draw_state,
+		    1.f, 2.f, 3.f, 4.f, NAN, NAN);
+  g_assert_cmpint (hb_draw_get_budget_remaining (draw_funcs, draw), >=, 0);
+
+  hb_gpu_draw_destroy (draw);
+}
+
+static void
+test_cubic_control_on_end (void)
+{
+  hb_gpu_draw_t *draw = hb_gpu_draw_create_or_fail ();
+  hb_draw_funcs_t *draw_funcs = hb_gpu_draw_get_funcs (draw);
+
+  /* A cubic with a control point on its end point has no tangent at
+   * that end.  It must still convert to a few quadratics, not be worked
+   * on to the limit for want of two tangents to intersect. */
+  static const float cubics[2][8] = {
+    {0.f, 0.f,  0.f, 100.f,  100.f, 100.f,  100.f, 100.f},
+    {0.f, 0.f,  0.f, 0.f,    0.f, 100.f,    100.f, 100.f},
+  };
+  for (unsigned i = 0; i < 2; i++)
+  {
+    const float *c = cubics[i];
+    hb_gpu_draw_reset (draw);
+    g_assert_true (hb_draw_set_budget (draw_funcs, draw, 32));
+    hb_draw_state_t draw_state = HB_DRAW_STATE_DEFAULT;
+    hb_draw_move_to (draw_funcs, draw, &draw_state, c[0], c[1]);
+    hb_draw_cubic_to (draw_funcs, draw, &draw_state,
+		      c[2], c[3], c[4], c[5], c[6], c[7]);
+    hb_draw_close_path (draw_funcs, draw, &draw_state);
+    g_assert_cmpint (hb_draw_get_budget_remaining (draw_funcs, draw), >=, 0);
+
+    hb_blob_t *blob = hb_gpu_draw_encode (draw, nullptr);
+    g_assert_nonnull (blob);
+    g_assert_cmpuint (hb_blob_get_length (blob), >, 0);
+    hb_blob_destroy (blob);
+  }
+
+  hb_gpu_draw_destroy (draw);
+}
+
+static hb_blob_t *
+encode_one_curve (hb_gpu_draw_t *draw, const float *c, unsigned n_points)
+{
+  hb_draw_funcs_t *draw_funcs = hb_gpu_draw_get_funcs (draw);
+  hb_gpu_draw_reset (draw);
+  hb_draw_state_t draw_state = HB_DRAW_STATE_DEFAULT;
+  hb_draw_move_to (draw_funcs, draw, &draw_state, c[0], c[1]);
+  if (n_points == 4)
+    hb_draw_cubic_to (draw_funcs, draw, &draw_state,
+		      c[2], c[3], c[4], c[5], c[6], c[7]);
+  else
+    hb_draw_quadratic_to (draw_funcs, draw, &draw_state,
+			  c[2], c[3], c[4], c[5]);
+  hb_draw_close_path (draw_funcs, draw, &draw_state);
+  hb_blob_t *blob = hb_gpu_draw_encode (draw, nullptr);
+  g_assert_nonnull (blob);
+  return blob;
+}
+
+static void
+test_cubic_single_quadratic (void)
+{
+  hb_gpu_draw_t *draw = hb_gpu_draw_create_or_fail ();
+
+  /* A cubic runs along the quadratic of its two end tangents, at another
+   * pace, when its two handles add up to 4/3 of the way to where the
+   * tangents meet, however unevenly.  Such a cubic must come out as that
+   * one quadratic. */
+  static const struct
+  {
+    float cubic[8];
+    float quadratic[6];
+    bool same;
+  } tests[] = {
+    /* Handles all the way and a third of the way to (12,12). */
+    {{0.f, 0.f,  12.f, 12.f,  20.f, 4.f,  24.f, 0.f},
+     {0.f, 0.f,  12.f, 12.f,  24.f, 0.f}, true},
+    /* A control point on its end point: the cubic leaves that end toward
+     * the other control point, which is then the quadratic's. */
+    {{0.f, 0.f,  0.f, 0.f,  4.f, 4.f,  8.f, 0.f},
+     {0.f, 0.f,  4.f, 4.f,  8.f, 0.f}, true},
+    /* The first one eight times the size is too far from its quadratic. */
+    {{0.f, 0.f,  96.f, 96.f,  160.f, 32.f,  192.f, 0.f},
+     {0.f, 0.f,  96.f, 96.f,  192.f, 0.f}, false},
+  };
+  for (unsigned i = 0; i < G_N_ELEMENTS (tests); i++)
+  {
+    hb_blob_t *cubic = encode_one_curve (draw, tests[i].cubic, 4);
+    hb_blob_t *quadratic = encode_one_curve (draw, tests[i].quadratic, 3);
+    unsigned cubic_length, quadratic_length;
+    const char *cubic_data = hb_blob_get_data (cubic, &cubic_length);
+    const char *quadratic_data = hb_blob_get_data (quadratic, &quadratic_length);
+    g_assert_cmpuint (cubic_length, >, 0);
+    bool same = cubic_length == quadratic_length &&
+		0 == memcmp (cubic_data, quadratic_data, cubic_length);
+    g_assert_true (same == tests[i].same);
+    hb_blob_destroy (cubic);
+    hb_blob_destroy (quadratic);
+  }
 
   hb_gpu_draw_destroy (draw);
 }
@@ -381,6 +524,59 @@ test_recycle_blob (void)
   g_assert_nonnull (blob2);
   g_assert_cmpuint (hb_blob_get_length (blob2), >, first_length);
 
+  hb_blob_destroy (blob2);
+  hb_gpu_draw_destroy (draw);
+}
+
+static void
+test_recycle_blob_immutable (void)
+{
+  /* A sub-blob makes its parent immutable.  Recycling such a blob
+   * must not let the next encode overwrite or free its data. */
+  hb_gpu_draw_t *draw = hb_gpu_draw_create_or_fail ();
+  g_assert_nonnull (draw);
+
+  hb_draw_funcs_t *funcs = hb_gpu_draw_get_funcs (draw);
+  hb_draw_state_t st = HB_DRAW_STATE_DEFAULT;
+
+  hb_draw_move_to (funcs, draw, &st, 0.f, 0.f);
+  hb_draw_line_to (funcs, draw, &st, 1.f, 0.f);
+  hb_draw_line_to (funcs, draw, &st, 0.f, 1.f);
+  hb_draw_close_path (funcs, draw, &st);
+
+  hb_blob_t *blob = hb_gpu_draw_encode (draw, nullptr);
+  g_assert_nonnull (blob);
+  unsigned first_length = hb_blob_get_length (blob);
+  g_assert_cmpuint (first_length, >, 0);
+  char *copy = (char *) g_malloc (first_length);
+  memcpy (copy, hb_blob_get_data (blob, nullptr), first_length);
+
+  hb_blob_t *kept = hb_blob_create_sub_blob (blob, 0, first_length);
+  g_assert_true (hb_blob_is_immutable (blob));
+
+  hb_gpu_draw_recycle_blob (draw, blob);
+
+  for (unsigned i = 0; i < 8; i++)
+  {
+    float x = 3.f * i;
+    hb_draw_move_to (funcs, draw, &st, x, 0.f);
+    hb_draw_line_to (funcs, draw, &st, x + 2.f, 0.f);
+    hb_draw_quadratic_to (funcs, draw, &st, x + 3.f, 1.f, x + 2.f, 2.f);
+    hb_draw_line_to (funcs, draw, &st, x, 2.f);
+    hb_draw_close_path (funcs, draw, &st);
+  }
+  hb_blob_t *blob2 = hb_gpu_draw_encode (draw, nullptr);
+  g_assert_nonnull (blob2);
+  g_assert_true (blob2 != blob);
+  g_assert_cmpuint (hb_blob_get_length (blob2), >, first_length);
+
+  unsigned kept_length;
+  const char *kept_data = hb_blob_get_data (kept, &kept_length);
+  g_assert_cmpuint (kept_length, ==, first_length);
+  g_assert_true (0 == memcmp (kept_data, copy, first_length));
+
+  g_free (copy);
+  hb_blob_destroy (kept);
   hb_blob_destroy (blob2);
   hb_gpu_draw_destroy (draw);
 }
@@ -516,6 +712,85 @@ test_extents_saturate_overflow (void)
   g_assert_cmpint (ext.y_bearing, ==, 1);
   g_assert_cmpint (ext.width, ==, G_MAXINT32);
   g_assert_cmpint (ext.height, ==, -1);
+
+  hb_gpu_draw_destroy (draw);
+}
+
+static void
+test_encode_rejects_nan_point (void)
+{
+  /* A COLRv1 PaintTransform chain can overflow the transform a clip
+   * glyph is drawn through, so that one outline point comes out as
+   * inf - inf = NaN while the points after it stay finite.  The NaN
+   * does not show in the extents that bound every point before the
+   * int16 quantization, so it was converted to int16 (undefined
+   * behavior).  The outline must fail to encode, as with an infinite
+   * point. */
+  hb_gpu_draw_t *draw = hb_gpu_draw_create_or_fail ();
+  g_assert_nonnull (draw);
+
+  hb_draw_funcs_t *funcs = hb_gpu_draw_get_funcs (draw);
+  hb_draw_state_t st = HB_DRAW_STATE_DEFAULT;
+
+  hb_draw_move_to (funcs, draw, &st, 0.f, 0.f);
+  hb_draw_line_to (funcs, draw, &st, NAN, 500.f);
+  hb_draw_line_to (funcs, draw, &st, 1.f, 1.f);
+  hb_draw_close_path (funcs, draw, &st);
+
+  g_assert_null (hb_gpu_draw_encode (draw, nullptr));
+
+  /* The failed encode leaves the encoder usable. */
+  st = HB_DRAW_STATE_DEFAULT;
+  hb_draw_move_to (funcs, draw, &st, 0.f, 0.f);
+  hb_draw_line_to (funcs, draw, &st, 1.f, 0.f);
+  hb_draw_line_to (funcs, draw, &st, 0.f, 1.f);
+  hb_draw_close_path (funcs, draw, &st);
+
+  hb_blob_t *blob = hb_gpu_draw_encode (draw, nullptr);
+  g_assert_nonnull (blob);
+  g_assert_cmpuint (hb_blob_get_length (blob), >, 0);
+  hb_blob_destroy (blob);
+
+  hb_gpu_draw_destroy (draw);
+}
+
+static void
+test_encode_non_finite_sum (void)
+{
+  /* The encoder tests the sum of a curve's coordinates for
+   * finiteness, not each coordinate.  Infinities of opposite sign
+   * sum to NaN and must still be rejected.  The largest floats sum
+   * to a finite double and must not be: their outline fails to
+   * encode for being out of range, with its extents saturated as in
+   * test_extents_saturate_overflow, where a rejected point would
+   * leave them zero. */
+  hb_gpu_draw_t *draw = hb_gpu_draw_create_or_fail ();
+  g_assert_nonnull (draw);
+
+  hb_draw_funcs_t *funcs = hb_gpu_draw_get_funcs (draw);
+  hb_draw_state_t st = HB_DRAW_STATE_DEFAULT;
+  hb_glyph_extents_t ext;
+
+  hb_draw_move_to (funcs, draw, &st, 0.f, 0.f);
+  hb_draw_line_to (funcs, draw, &st, INFINITY, -INFINITY);
+  hb_draw_line_to (funcs, draw, &st, 1.f, 1.f);
+  hb_draw_close_path (funcs, draw, &st);
+
+  g_assert_null (hb_gpu_draw_encode (draw, &ext));
+  g_assert_cmpint (ext.width, ==, 0);
+  g_assert_cmpint (ext.height, ==, 0);
+
+  st = HB_DRAW_STATE_DEFAULT;
+  hb_draw_move_to (funcs, draw, &st, G_MAXFLOAT, G_MAXFLOAT);
+  hb_draw_line_to (funcs, draw, &st, 0.f, G_MAXFLOAT);
+  hb_draw_line_to (funcs, draw, &st, G_MAXFLOAT, 0.f);
+  hb_draw_close_path (funcs, draw, &st);
+
+  g_assert_null (hb_gpu_draw_encode (draw, &ext));
+  g_assert_cmpint (ext.x_bearing, ==, 0);
+  g_assert_cmpint (ext.y_bearing, ==, G_MAXINT32);
+  g_assert_cmpint (ext.width, ==, G_MAXINT32);
+  g_assert_cmpint (ext.height, ==, G_MININT32);
 
   hb_gpu_draw_destroy (draw);
 }
@@ -723,6 +998,53 @@ test_paint_recycle_blob (void)
 
 
 static void
+test_paint_group_depth_reset (void)
+{
+  /* Groups left open by an abandoned paint must not count against
+   * the group-depth limit of the next encode, whether the encoder
+   * was reset, cleared, or auto-cleared by a successful encode. */
+  hb_face_t *face = hb_test_open_font_file (FONT_FILE);
+  hb_font_t *font = hb_font_create (face);
+  hb_codepoint_t gid;
+  g_assert_true (hb_font_get_nominal_glyph (font, 'a', &gid));
+
+  for (unsigned mode = 0; mode < 3; mode++)
+  {
+    hb_gpu_paint_t *p = hb_gpu_paint_create_or_fail ();
+    g_assert_nonnull (p);
+    hb_paint_funcs_t *pf = hb_gpu_paint_get_funcs (p);
+
+    /* Leave three groups open. */
+    for (unsigned i = 0; i < 3; i++)
+      hb_paint_push_group (pf, p);
+    hb_gpu_paint_glyph (p, font, gid);
+
+    if (mode == 0)
+      hb_gpu_paint_reset (p);
+    else if (mode == 1)
+      hb_gpu_paint_clear (p);
+    else
+      hb_blob_destroy (hb_gpu_paint_encode (p, nullptr));
+
+    /* Two balanced groups are within the limit. */
+    for (unsigned i = 0; i < 2; i++)
+      hb_paint_push_group (pf, p);
+    hb_gpu_paint_glyph (p, font, gid);
+    for (unsigned i = 0; i < 2; i++)
+      hb_paint_pop_group (pf, p, HB_PAINT_COMPOSITE_MODE_SRC_OVER);
+    hb_blob_t *blob = hb_gpu_paint_encode (p, nullptr);
+    g_assert_nonnull (blob);
+    g_assert_cmpuint (hb_blob_get_length (blob), >, 0);
+    hb_blob_destroy (blob);
+
+    hb_gpu_paint_destroy (p);
+  }
+
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
+static void
 test_paint_clip_path_depth_overflow (void)
 {
   /* push_clip_path_end must honor the same clip-depth cap as
@@ -758,6 +1080,45 @@ test_paint_clip_path_depth_overflow (void)
   hb_blob_t *blob = hb_gpu_paint_encode (p, nullptr);
   g_assert_null (blob);
 
+  hb_gpu_paint_destroy (p);
+}
+
+static void
+test_paint_clip_rectangle_only (void)
+{
+  /* Rectangle clips are not encoded, with one exception.  A layer
+   * whose only clip is a rectangle (a COLRv1 PaintSolid under a
+   * ClipBox, with no PaintGlyph) has nothing else to give it a
+   * shape, and used to be dropped.  The rectangle is its outline. */
+  hb_gpu_paint_t *p = hb_gpu_paint_create_or_fail ();
+  g_assert_nonnull (p);
+  hb_gpu_paint_set_scale (p, 1000, 1000);
+
+  hb_paint_funcs_t *pf = hb_gpu_paint_get_funcs (p);
+
+  hb_paint_push_clip_rectangle (pf, p, 100.f, 200.f, 600.f, 800.f);
+  hb_paint_color (pf, p, false, HB_COLOR (0, 0, 255, 255));
+  hb_paint_pop_clip (pf, p);
+
+  /* Outside every clip: this layer is still dropped. */
+  hb_paint_color (pf, p, false, HB_COLOR (255, 0, 0, 255));
+
+  hb_glyph_extents_t extents;
+  hb_blob_t *blob = hb_gpu_paint_encode (p, &extents);
+  g_assert_nonnull (blob);
+  unsigned texel_count;
+  const hb_gpu_test_texel_t *texels = blob_as_texels (blob, &texel_count);
+  g_assert_cmpuint (texel_count, >, 1);
+  /* Header texel 1 .r holds num_ops. */
+  g_assert_cmpint (texels[1].r, ==, 1);
+
+  /* The layer covers the rectangle. */
+  g_assert_cmpint (extents.x_bearing, ==, 100);
+  g_assert_cmpint (extents.x_bearing + extents.width, ==, 600);
+  g_assert_cmpint (MIN (extents.y_bearing, extents.y_bearing + extents.height), ==, 200);
+  g_assert_cmpint (MAX (extents.y_bearing, extents.y_bearing + extents.height), ==, 800);
+
+  hb_blob_destroy (blob);
   hb_gpu_paint_destroy (p);
 }
 
@@ -799,8 +1160,13 @@ test_paint_clip_rectangle_pop_balance (void)
   unsigned texel_count;
   const hb_gpu_test_texel_t *texels = blob_as_texels (blob, &texel_count);
   g_assert_cmpuint (texel_count, >, 0);
-  /* Header texel 0 .r holds num_ops. */
-  g_assert_cmpint (texels[0].r, ==, 1);
+  /* Header texel 1 holds num_ops, the offset of the ops, and the
+   * font scale in the slots where a draw blob has it, so that the
+   * shader's hb_gpu_ppem() reads it from either kind of blob. */
+  g_assert_cmpint (texels[1].r, ==, 1);
+  g_assert_cmpint (texels[1].g, ==, 2);
+  g_assert_cmpint (texels[1].b, ==, 1000);
+  g_assert_cmpint (texels[1].a, ==, 1000);
   hb_blob_destroy (blob);
 
   hb_gpu_paint_destroy (p);
@@ -1001,12 +1367,13 @@ test_paint_empty_clip (void)
   g_assert_nonnull (blob);
   unsigned texel_count;
   const hb_gpu_test_texel_t *texels = blob_as_texels (blob, &texel_count);
-  g_assert_cmpuint (texel_count, >, 6);
-  g_assert_cmpint (texels[0].r, ==, 1); /* num_ops */
-  g_assert_cmpint (texels[3].r, ==, 0); /* LAYER_SOLID */
+  g_assert_cmpuint (texel_count, >, 5);
+  g_assert_cmpint (texels[1].r, ==, 1); /* num_ops */
+  g_assert_cmpint (texels[1].g, ==, 2); /* ops_offset */
+  g_assert_cmpint (texels[2].r, ==, 0); /* LAYER_SOLID */
   /* The layer references a real outline after the op stream. */
-  unsigned clip_offset = (uint16_t) texels[3].a;
-  g_assert_cmpuint (clip_offset, ==, 6);
+  unsigned clip_offset = (uint16_t) texels[2].a;
+  g_assert_cmpuint (clip_offset, ==, 5);
   g_assert_cmpuint (clip_offset + 2, <, texel_count);
   g_assert_cmpint (texels[clip_offset + 1].r, >, 0); /* horizontal bands */
   g_assert_cmpint (texels[clip_offset + 1].g, >, 0); /* vertical bands */
@@ -1133,13 +1500,19 @@ main (int argc, char **argv)
   hb_test_add (test_reset);
   hb_test_add (test_budget);
   hb_test_add (test_budget_cubic);
+  hb_test_add (test_cubic_unencodable);
+  hb_test_add (test_cubic_control_on_end);
+  hb_test_add (test_cubic_single_quadratic);
   hb_test_add (test_draw_funcs);
   hb_test_add (test_shader_sources);
   hb_test_add (test_encode_quantizes_extents_outward);
   hb_test_add (test_encode_preserves_touching_contours);
   hb_test_add (test_recycle_blob);
+  hb_test_add (test_recycle_blob_immutable);
   hb_test_add (test_encode_band_membership);
   hb_test_add (test_extents_saturate_overflow);
+  hb_test_add (test_encode_rejects_nan_point);
+  hb_test_add (test_encode_non_finite_sum);
   hb_test_add (test_shapes);
 
   hb_test_add (test_paint_create_destroy);
@@ -1151,7 +1524,9 @@ main (int argc, char **argv)
   hb_test_add (test_paint_auto_clear_on_encode);
   hb_test_add (test_paint_reset);
   hb_test_add (test_paint_recycle_blob);
+  hb_test_add (test_paint_group_depth_reset);
   hb_test_add (test_paint_clip_path_depth_overflow);
+  hb_test_add (test_paint_clip_rectangle_only);
   hb_test_add (test_paint_clip_rectangle_pop_balance);
   hb_test_add (test_paint_layers_under_shared_clip);
   hb_test_add (test_paint_gradient_overflow_transform);

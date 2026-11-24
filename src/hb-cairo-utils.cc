@@ -84,6 +84,28 @@ hb_cairo_read_blob (void *closure,
 
   return CAIRO_STATUS_SUCCESS;
 }
+
+/* The longest side of an image that cairo makes a surface of. */
+#define HB_CAIRO_MAX_IMAGE_SIZE 32767u
+
+/* Whether the PNG image in @blob says that it is larger than that.
+ * cairo finds out only after it has allocated the whole image, which
+ * a font can make four billion pixels a side. */
+static bool
+hb_cairo_png_too_large (hb_blob_t *blob)
+{
+  unsigned int size;
+  const uint8_t *d = (const uint8_t *) hb_blob_get_data (blob, &size);
+
+  /* The signature, then the IHDR chunk: its length, its type, and the
+   * width and the height of the image. */
+  if (size < 24 || hb_memcmp (d + 12, "IHDR", 4))
+    return false;
+
+  uint32_t width = ((uint32_t) d[16] << 24) | (d[17] << 16) | (d[18] << 8) | d[19];
+  uint32_t height = ((uint32_t) d[20] << 24) | (d[21] << 16) | (d[22] << 8) | d[23];
+  return width > HB_CAIRO_MAX_IMAGE_SIZE || height > HB_CAIRO_MAX_IMAGE_SIZE;
+}
 #endif
 
 static const cairo_user_data_key_t *_hb_cairo_surface_blob_user_data_key = {0};
@@ -139,6 +161,9 @@ _hb_cairo_paint_glyph_image (hb_cairo_context_t *c,
 #ifdef CAIRO_HAS_PNG_FUNCTIONS
   if (format == HB_PAINT_IMAGE_FORMAT_PNG)
   {
+    if (unlikely (hb_cairo_png_too_large (blob)))
+      return false;
+
     hb_cairo_read_blob_data_t r;
     r.blob = blob;
     r.offset = 0;
@@ -147,7 +172,7 @@ _hb_cairo_paint_glyph_image (hb_cairo_context_t *c,
     /* For PNG, width,height can be unreliable, as is the case for NotoColorEmoji :(.
      * Just pull them out of the surface. */
     width = cairo_image_surface_get_width (surface);
-    height = cairo_image_surface_get_width (surface);
+    height = cairo_image_surface_get_height (surface);
   }
   else
 #endif
@@ -195,6 +220,17 @@ _hb_cairo_paint_glyph_image (hb_cairo_context_t *c,
 
   if (!surface)
     return false;
+
+  /* cairo refuses a surface that could not be made of the image, and
+   * the scales of an image or of extents that have no size; a context
+   * that has refused anything draws nothing more.  There is nothing to
+   * paint of any of these. */
+  if (unlikely (cairo_surface_status (surface) != CAIRO_STATUS_SUCCESS ||
+		!width || !height || !extents->width || !extents->height))
+  {
+    cairo_surface_destroy (surface);
+    return false;
+  }
 
   cairo_save (cr);
   /* this clip is here to work around recording surface limitations */
@@ -270,6 +306,33 @@ _hb_cairo_get_color_stops (hb_cairo_context_t *c,
   return true;
 }
 
+/* Gives @pattern the color stops @stops, which are sorted.  COLR
+ * interpolates colors with alpha multiplied into them, and cairo the
+ * color and the alpha of its stops apart, so the stops are rewritten
+ * for cairo to come to the same. */
+static void
+_hb_cairo_add_color_stops (cairo_pattern_t *pattern,
+			   const hb_color_stop_t *stops,
+			   unsigned int len)
+{
+  hb_vector_t<hb_color_stop_t> premultiplied;
+  if (hb_paint_premultiply_color_stops (stops, len, premultiplied))
+  {
+    stops = premultiplied.arrayZ;
+    len = premultiplied.length;
+  }
+
+  for (unsigned int i = 0; i < len; i++)
+    {
+      double r, g, b, a;
+      r = hb_color_get_red (stops[i].color) / 255.;
+      g = hb_color_get_green (stops[i].color) / 255.;
+      b = hb_color_get_blue (stops[i].color) / 255.;
+      a = hb_color_get_alpha (stops[i].color) / 255.;
+      cairo_pattern_add_color_stop_rgba (pattern, (double) stops[i].offset, r, g, b, a);
+    }
+}
+
 void
 _hb_cairo_paint_linear_gradient (hb_cairo_context_t *c,
 				 hb_color_line_t *color_line,
@@ -289,9 +352,25 @@ _hb_cairo_paint_linear_gradient (hb_cairo_context_t *c,
 
   if (unlikely (!_hb_cairo_get_color_stops (c, color_line, &len, &stops)))
     return;
+  /* A color line of no length paints nothing unless it pads. */
+  if (!hb_paint_color_line_give_length (stops, &len,
+					hb_color_line_get_extend (color_line)))
+    {
+      if (stops != stops_)
+	hb_free (stops);
+      return;
+    }
   hb_paint_normalize_color_line (stops, len, &min, &max);
 
   hb_paint_reduce_linear_anchors (x0, y0, x1, y1, x2, y2, &xx0, &yy0, &xx1, &yy1);
+
+  /* Nor does a gradient along no line; cairo would paint it. */
+  if (xx0 == xx1 && yy0 == yy1)
+    {
+      if (stops != stops_)
+	hb_free (stops);
+      return;
+    }
 
   xxx0 = xx0 + min * (xx1 - xx0);
   yyy0 = yy0 + min * (yy1 - yy0);
@@ -300,15 +379,7 @@ _hb_cairo_paint_linear_gradient (hb_cairo_context_t *c,
 
   pattern = cairo_pattern_create_linear ((double) xxx0, (double) yyy0, (double) xxx1, (double) yyy1);
   cairo_pattern_set_extend (pattern, hb_cairo_extend (hb_color_line_get_extend (color_line)));
-  for (unsigned int i = 0; i < len; i++)
-    {
-      double r, g, b, a;
-      r = hb_color_get_red (stops[i].color) / 255.;
-      g = hb_color_get_green (stops[i].color) / 255.;
-      b = hb_color_get_blue (stops[i].color) / 255.;
-      a = hb_color_get_alpha (stops[i].color) / 255.;
-      cairo_pattern_add_color_stop_rgba (pattern, (double) stops[i].offset, r, g, b, a);
-    }
+  _hb_cairo_add_color_stops (pattern, stops, len);
 
   cairo_set_source (cr, pattern);
   cairo_paint (cr);
@@ -337,6 +408,14 @@ _hb_cairo_paint_radial_gradient (hb_cairo_context_t *c,
 
   if (unlikely (!_hb_cairo_get_color_stops (c, color_line, &len, &stops)))
     return;
+  /* A color line of no length paints nothing unless it pads. */
+  if (!hb_paint_color_line_give_length (stops, &len,
+					hb_color_line_get_extend (color_line)))
+    {
+      if (stops != stops_)
+	hb_free (stops);
+      return;
+    }
   hb_paint_normalize_color_line (stops, len, &min, &max);
 
   xx0 = x0 + min * (x1 - x0);
@@ -346,18 +425,20 @@ _hb_cairo_paint_radial_gradient (hb_cairo_context_t *c,
   rr0 = r0 + min * (r1 - r0);
   rr1 = r0 + max * (r1 - r0);
 
+  /* cairo takes a negative radius for a positive one. */
+  if (!hb_paint_radial_gradient_circles (stops, &len,
+					 hb_color_line_get_extend (color_line),
+					 &xx0, &yy0, &rr0, &xx1, &yy1, &rr1))
+    {
+      if (stops != stops_)
+	hb_free (stops);
+      return;
+    }
+
   pattern = cairo_pattern_create_radial ((double) xx0, (double) yy0, (double) rr0, (double) xx1, (double) yy1, (double) rr1);
   cairo_pattern_set_extend (pattern, hb_cairo_extend (hb_color_line_get_extend (color_line)));
 
-  for (unsigned int i = 0; i < len; i++)
-    {
-      double r, g, b, a;
-      r = hb_color_get_red (stops[i].color) / 255.;
-      g = hb_color_get_green (stops[i].color) / 255.;
-      b = hb_color_get_blue (stops[i].color) / 255.;
-      a = hb_color_get_alpha (stops[i].color) / 255.;
-      cairo_pattern_add_color_stop_rgba (pattern, (double) stops[i].offset, r, g, b, a);
-    }
+  _hb_cairo_add_color_stops (pattern, stops, len);
 
   cairo_set_source (cr, pattern);
   cairo_paint (cr);
@@ -398,16 +479,17 @@ _hb_cairo_unpremultiply (hb_cairo_color_t *c)
 }
 
 static void
-_hb_cairo_interpolate_colors (hb_cairo_color_t *c0, hb_cairo_color_t *c1, float k, hb_cairo_color_t *c)
+_hb_cairo_interpolate_colors (const hb_cairo_color_t *c0, const hb_cairo_color_t *c1, float k, hb_cairo_color_t *c)
 {
   // According to the COLR specification, gradients
   // should be interpolated in premultiplied form
-  _hb_cairo_premultiply (c0);
-  _hb_cairo_premultiply (c1);
-  c->r = c0->r + k * (c1->r - c0->r);
-  c->g = c0->g + k * (c1->g - c0->g);
-  c->b = c0->b + k * (c1->b - c0->b);
-  c->a = c0->a + k * (c1->a - c0->a);
+  hb_cairo_color_t p0 = *c0, p1 = *c1;
+  _hb_cairo_premultiply (&p0);
+  _hb_cairo_premultiply (&p1);
+  c->r = p0.r + k * (p1.r - p0.r);
+  c->g = p0.g + k * (p1.g - p0.g);
+  c->b = p0.b + k * (p1.b - p0.b);
+  c->a = p0.a + k * (p1.a - p0.a);
   _hb_cairo_unpremultiply (c);
 }
 
@@ -483,6 +565,7 @@ _hb_cairo_add_patch (cairo_pattern_t *pattern, hb_cairo_point_t *center, hb_cair
 }
 
 #define MAX_ANGLE (HB_PI / 8.f)
+#define MIN_ANGLE (MAX_ANGLE / 16)
 
 static void
 _hb_cairo_add_sweep_gradient_patches1 (float cx, float cy, float radius,
@@ -493,11 +576,43 @@ _hb_cairo_add_sweep_gradient_patches1 (float cx, float cy, float radius,
   hb_cairo_point_t center = hb_cairo_point_t { cx, cy };
   int num_splits;
   hb_cairo_point_t p0;
+  hb_cairo_color_t end0 = *c0, end1 = *c1;
   hb_cairo_color_t color0, color1;
 
   num_splits = ceilf (fabsf (a1 - a0) / MAX_ANGLE);
+
+  /* cairo interpolates the colors at the corners of a patch apart from
+   * their alpha, and COLR with alpha multiplied into them.  The two
+   * are the same if the colors are, so a transparent end, which has no
+   * color of its own, takes that of the other.  Between two other ends
+   * that differ in alpha they are not: midway they are apart by a
+   * quarter of the difference in color times the difference in alpha.
+   * Split the tile into patches enough to keep that to a level or two,
+   * though none narrower than MIN_ANGLE; the colors between them are
+   * interpolated here, as COLR has it. */
+  if (end0.a == 0.f)
+  {
+    end0.r = end1.r;
+    end0.g = end1.g;
+    end0.b = end1.b;
+  }
+  else if (end1.a == 0.f)
+  {
+    end1.r = end0.r;
+    end1.g = end0.g;
+    end1.b = end0.b;
+  }
+  else if (end0.a != end1.a)
+  {
+    float dc = hb_max (hb_max (fabsf (end0.r - end1.r), fabsf (end0.g - end1.g)),
+		       fabsf (end0.b - end1.b));
+    float splits = ceilf (dc * fabsf (end0.a - end1.a) * (255.f * 255.f / 2040.f));
+    float finest = ceilf (fabsf (a1 - a0) / MIN_ANGLE);
+    num_splits = hb_max (num_splits, (int) hb_min (splits, finest));
+  }
+
   p0 = hb_cairo_point_t { cosf (a0), sinf (a0) };
-  color0 = *c0;
+  color0 = end0;
 
   for (int a = 0; a < num_splits; a++)
     {
@@ -509,7 +624,10 @@ _hb_cairo_add_sweep_gradient_patches1 (float cx, float cy, float radius,
       hb_cairo_patch_t patch;
 
       angle1 = _hb_cairo_interpolate (a0, a1, k);
-      _hb_cairo_interpolate_colors (c0, c1, k, &color1);
+      if (a + 1 < num_splits)
+	_hb_cairo_interpolate_colors (&end0, &end1, k, &color1);
+      else
+	color1 = end1;
 
       patch.color0 = color0;
       patch.color1 = color1;
@@ -603,10 +721,7 @@ _hb_cairo_paint_sweep_gradient (hb_cairo_context_t *c,
   if (unlikely (!_hb_cairo_get_color_stops (c, color_line, &len, &stops)))
     return;
 
-  hb_array_t<hb_color_stop_t> (stops, len)
-    .qsort ([] (const hb_color_stop_t &a, const hb_color_stop_t &b) {
-      return (a.offset > b.offset) - (a.offset < b.offset);
-    });
+  hb_color_stops_sort (stops, len);
 
   cairo_clip_extents (cr, &x1, &y1, &x2, &y2);
   max_x = (float) hb_max ((x1 - (double) cx) * (x1 - (double) cx), (x2 - (double) cx) * (x2 - (double) cx));

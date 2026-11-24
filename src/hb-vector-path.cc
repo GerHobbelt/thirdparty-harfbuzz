@@ -41,6 +41,8 @@ hb_vector_svg_path_append_xy (hb_vector_path_sink_t *s, float x, float y)
   s->path->append_num (x / s->x_scale, s->precision);
   s->path->append_c (',');
   s->path->append_num (y / s->y_scale, s->precision);
+  if (s->extents)
+    s->extents->add_point (x / s->x_scale, y / s->y_scale);
 }
 
 static void
@@ -112,6 +114,8 @@ hb_vector_pdf_path_append_xy (hb_vector_path_sink_t *s, float x, float y)
   s->path->append_num (x / s->x_scale, s->precision);
   s->path->append_c (' ');
   s->path->append_num (y / s->y_scale, s->precision);
+  if (s->extents)
+    s->extents->add_point (x / s->x_scale, y / s->y_scale);
 }
 
 static void
@@ -179,11 +183,11 @@ static struct hb_vector_svg_path_draw_funcs_lazy_loader_t
   static hb_draw_funcs_t *create ()
   {
     hb_draw_funcs_t *funcs = hb_draw_funcs_create ();
-    hb_draw_funcs_set_move_to_func (funcs, (hb_draw_move_to_func_t) hb_vector_svg_path_move_to, nullptr, nullptr);
-    hb_draw_funcs_set_line_to_func (funcs, (hb_draw_line_to_func_t) hb_vector_svg_path_line_to, nullptr, nullptr);
-    hb_draw_funcs_set_quadratic_to_func (funcs, (hb_draw_quadratic_to_func_t) hb_vector_svg_path_quadratic_to, nullptr, nullptr);
-    hb_draw_funcs_set_cubic_to_func (funcs, (hb_draw_cubic_to_func_t) hb_vector_svg_path_cubic_to, nullptr, nullptr);
-    hb_draw_funcs_set_close_path_func (funcs, (hb_draw_close_path_func_t) hb_vector_svg_path_close_path, nullptr, nullptr);
+    hb_draw_funcs_set_move_to_func (funcs, hb_vector_svg_path_move_to, nullptr, nullptr);
+    hb_draw_funcs_set_line_to_func (funcs, hb_vector_svg_path_line_to, nullptr, nullptr);
+    hb_draw_funcs_set_quadratic_to_func (funcs, hb_vector_svg_path_quadratic_to, nullptr, nullptr);
+    hb_draw_funcs_set_cubic_to_func (funcs, hb_vector_svg_path_cubic_to, nullptr, nullptr);
+    hb_draw_funcs_set_close_path_func (funcs, hb_vector_svg_path_close_path, nullptr, nullptr);
     hb_draw_funcs_set_get_budget_remaining_func (funcs, hb_vector_path_get_budget_remaining, nullptr, nullptr);
     hb_draw_funcs_make_immutable (funcs);
     hb_atexit (free_static_vector_svg_path_draw_funcs);
@@ -207,11 +211,11 @@ static struct hb_vector_pdf_path_draw_funcs_lazy_loader_t
   static hb_draw_funcs_t *create ()
   {
     hb_draw_funcs_t *funcs = hb_draw_funcs_create ();
-    hb_draw_funcs_set_move_to_func (funcs, (hb_draw_move_to_func_t) hb_vector_pdf_path_move_to, nullptr, nullptr);
-    hb_draw_funcs_set_line_to_func (funcs, (hb_draw_line_to_func_t) hb_vector_pdf_path_line_to, nullptr, nullptr);
+    hb_draw_funcs_set_move_to_func (funcs, hb_vector_pdf_path_move_to, nullptr, nullptr);
+    hb_draw_funcs_set_line_to_func (funcs, hb_vector_pdf_path_line_to, nullptr, nullptr);
     /* No quadratic_to: the null fallback auto-promotes to cubic. */
-    hb_draw_funcs_set_cubic_to_func (funcs, (hb_draw_cubic_to_func_t) hb_vector_pdf_path_cubic_to, nullptr, nullptr);
-    hb_draw_funcs_set_close_path_func (funcs, (hb_draw_close_path_func_t) hb_vector_pdf_path_close_path, nullptr, nullptr);
+    hb_draw_funcs_set_cubic_to_func (funcs, hb_vector_pdf_path_cubic_to, nullptr, nullptr);
+    hb_draw_funcs_set_close_path_func (funcs, hb_vector_pdf_path_close_path, nullptr, nullptr);
     hb_draw_funcs_set_get_budget_remaining_func (funcs, hb_vector_path_get_budget_remaining, nullptr, nullptr);
     hb_draw_funcs_make_immutable (funcs);
     hb_atexit (free_static_vector_pdf_path_draw_funcs);

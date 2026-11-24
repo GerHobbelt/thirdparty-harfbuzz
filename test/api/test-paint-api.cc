@@ -212,7 +212,7 @@ paint_image (hb_paint_funcs_t *funcs HB_UNUSED,
   char buf[5] = { 0, };
 
   hb_tag_to_string (format, buf);
-  print (data, "image type %s size %u %u slant %.3g extents %d %d %d %d\n",
+  print (data, "image type %s size %u %u slant %.3g extents %d %d %d %d",
          buf, width, height, slant,
          extents->x_bearing, extents->y_bearing, extents->width, extents->height);
 
@@ -394,6 +394,7 @@ typedef struct {
 #define BAD_COLRV1  "fonts/bad_colrv1.ttf"
 #define ROCHER_ABC  "fonts/RocherColorGX.abc.ttf"
 #define SHORT_COLORLINE "fonts/colr-short-colorline.ttf"
+#define ILL_FORMED_LINEAR "fonts/colr-color-line-no-length.ttf"
 
 /* To verify the rendering visually, use
  *
@@ -432,6 +433,15 @@ static paint_test_t paint_tests[] = {
   { ROCHER_ABC, 0.3f, 1,   0, "rocher-1" },
   { ROCHER_ABC, 0.3f, 2,   2, "rocher-2" },
   { ROCHER_ABC, 0,    3, 200, "rocher-3" },
+};
+
+/* Exercise the OT PNG path; FreeType returns decoded BGRA images instead. */
+static paint_test_t bitmap_paint_tests[] = {
+  { "fonts/cbdt-format19-index2.ttf", 0, 1, 0, "cbdt-format19-index2-a" },
+  { "fonts/cbdt-format19-index2.ttf", 0, 2, 0, "cbdt-format19-index2-b" },
+  { "fonts/cbdt-format19-index5.ttf", 0, 1, 0, "cbdt-format19-index5-a" },
+  { "fonts/cbdt-format19-index5.ttf", 0, 2, 0, "cbdt-format19-index5-gap" },
+  { "fonts/cbdt-format19-index5.ttf", 0, 3, 0, "cbdt-format19-index5-c" },
 };
 
 static void
@@ -762,6 +772,69 @@ test_color_stops_short_ft (void)
 
   hb_paint_funcs_destroy (funcs);
   hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
+static void
+count_linear_gradient (hb_paint_funcs_t *funcs HB_UNUSED,
+		       void *paint_data,
+		       hb_color_line_t *color_line HB_UNUSED,
+		       float x0 HB_UNUSED, float y0 HB_UNUSED,
+		       float x1 HB_UNUSED, float y1 HB_UNUSED,
+		       float x2 HB_UNUSED, float y2 HB_UNUSED,
+		       void *user_data HB_UNUSED)
+{
+  unsigned int *count = paint_data;
+  (*count)++;
+}
+
+/* COLR says of a linear gradient that it is ill-formed, and must not
+ * be rendered, if its P1 or P2 is at its P0.  No such gradient gets to
+ * the paint callbacks, whichever font functions paint the glyph. */
+static void
+test_linear_gradient_ill_formed (void)
+{
+  static const struct {
+    char unicode;
+    float wght;
+    unsigned int gradients;
+  } tests[] = {
+    {'b', 0, 1}, /* P0, P1 and P2 apart */
+    {'g', 0, 0}, /* P1 at P0 */
+    {'j', 0, 0}, /* P2 at P0 */
+    /* The anchors are where the variation deltas put them: at the end
+     * of the font's axis, P2 of k is at its P0, and that of l is not. */
+    {'k', 0, 1},
+    {'k', 1, 0},
+    {'l', 0, 0},
+    {'l', 1, 1},
+  };
+  hb_face_t *face = hb_test_open_font_file (ILL_FORMED_LINEAR);
+  hb_paint_funcs_t *funcs = hb_paint_funcs_create ();
+  hb_paint_funcs_set_linear_gradient_func (funcs, count_linear_gradient, NULL, NULL);
+
+  for (unsigned int use_ft = 0; use_ft <= (unsigned int) have_ft_colrv1 (); use_ft++)
+    for (unsigned int i = 0; i < G_N_ELEMENTS (tests); i++)
+    {
+      hb_font_t *font = hb_font_create (face);
+      hb_variation_t wght = {HB_TAG ('w','g','h','t'), tests[i].wght};
+      hb_codepoint_t glyph;
+      unsigned int count = 0;
+
+      hb_font_set_variations (font, &wght, 1);
+#ifdef HB_HAS_FREETYPE
+      if (use_ft)
+	hb_ft_font_set_funcs (font);
+#endif
+
+      g_assert_true (hb_font_get_nominal_glyph (font, tests[i].unicode, &glyph));
+      hb_font_paint_glyph (font, glyph, funcs, &count, 0, HB_COLOR (0, 0, 0, 255));
+      g_assert_cmpuint (count, ==, tests[i].gradients);
+
+      hb_font_destroy (font);
+    }
+
+  hb_paint_funcs_destroy (funcs);
   hb_face_destroy (face);
 }
 
@@ -1261,6 +1334,8 @@ test_hb_paint_color_stops_budget (void)
     colr_data[50 + 4 + i * 4 + 3] = 20;
   colr_data[50 + 20] = 4; /* PaintLinearGradient */
   colr_data[50 + 23] = 16;
+  colr_data[50 + 29] = 1; /* x1: P1 and P2 are not at P0, */
+  colr_data[50 + 35] = 1; /* y2: or it would not be painted */
   colr_data[50 + 36 + 2] = 100; /* ColorLine */
   colr_data[689] = 1; /* ClipList: glyph 0 */
   colr_data[689 + 4] = 1;
@@ -1319,6 +1394,40 @@ check_sweep_tile (float a0, hb_color_t c0,
 }
 
 static void
+test_hb_paint_reduce_linear_anchors_on_a_line (void)
+{
+  float x0, y0, x1, y1;
+
+  /* P1 on the line through P0 and P2: the gradient is along no line,
+   * and is ill-formed.  It is found by its two ends being the same,
+   * which they are to be exactly: this one used to end a hair below
+   * where it starts. */
+  hb_paint_reduce_linear_anchors (450, 200, 450, 400, 450, 900,
+				  &x0, &y0, &x1, &y1);
+  g_assert_cmpfloat (x0, ==, 450);
+  g_assert_cmpfloat (y0, ==, 200);
+  g_assert_cmpfloat (x1, ==, 450);
+  g_assert_cmpfloat (y1, ==, 200);
+
+  hb_paint_reduce_linear_anchors (0, 0, 300, 100, 900, 300,
+				  &x0, &y0, &x1, &y1);
+  g_assert_cmpfloat (x1, ==, 0);
+  g_assert_cmpfloat (y1, ==, 0);
+
+  /* P1 on the other side of P0 from P2. */
+  hb_paint_reduce_linear_anchors (10, 20, -290, -80, 910, 320,
+				  &x0, &y0, &x1, &y1);
+  g_assert_cmpfloat (x1, ==, 10);
+  g_assert_cmpfloat (y1, ==, 20);
+
+  /* Not on the line. */
+  hb_paint_reduce_linear_anchors (0, 0, 100, 50, 0, 100,
+				  &x0, &y0, &x1, &y1);
+  g_assert_cmpfloat (x1, ==, 100);
+  g_assert_cmpfloat (y1, ==, 0);
+}
+
+static void
 test_hb_paint_sweep_gradient_tiles_clipped (void)
 {
   /* Variation deltas can put the angles far outside the circle.  The
@@ -1367,6 +1476,170 @@ test_hb_paint_sweep_gradient_tiles_clipped (void)
   }
 }
 
+typedef struct {
+  hb_bool_t seen;
+  hb_color_t color;
+} sweep_seam_data_t;
+
+static void
+record_sweep_seam (float a0, hb_color_t c0,
+		   float a1 HB_UNUSED, hb_color_t c1 HB_UNUSED,
+		   void *user_data)
+{
+  sweep_seam_data_t *data = (sweep_seam_data_t *) user_data;
+
+  if (a0 == 0.f)
+  {
+    data->seen = TRUE;
+    data->color = c0;
+  }
+}
+
+static void
+test_hb_paint_sweep_gradient_tiles_alpha (void)
+{
+  /* A sweep from -180° to 180° reaches 0° halfway from its first stop
+   * to its second.  Colors are interpolated with alpha multiplied into
+   * them, so halfway from opaque red to transparent blue is red at a
+   * half, with no blue in it: a transparent stop has no color to
+   * give. */
+  {
+    hb_color_stop_t stops[2] = {
+      { 0.f, FALSE, HB_COLOR (0, 0, 255, 255) },   /* red */
+      { 1.f, FALSE, HB_COLOR (255, 0, 0, 0) },     /* transparent blue */
+    };
+    sweep_seam_data_t data = {FALSE, 0};
+
+    hb_paint_sweep_gradient_tiles (stops, 2, HB_PAINT_EXTEND_PAD,
+				   (float) -G_PI, (float) G_PI,
+				   record_sweep_seam, &data);
+
+    g_assert_true (data.seen);
+    g_assert_cmpint (hb_color_get_red (data.color), ==, 255);
+    g_assert_cmpint (hb_color_get_green (data.color), ==, 0);
+    g_assert_cmpint (hb_color_get_blue (data.color), ==, 0);
+    g_assert_cmpint (hb_color_get_alpha (data.color), >=, 127);
+    g_assert_cmpint (hb_color_get_alpha (data.color), <=, 128);
+  }
+
+  /* Halfway to blue at a quarter there is a fifth of blue in it, not a
+   * half: (255, 0, 0) at 255 and (0, 0, 255) at 64 meet at
+   * (204, 0, 51) at 160. */
+  {
+    hb_color_stop_t stops[2] = {
+      { 0.f, FALSE, HB_COLOR (0, 0, 255, 255) },
+      { 1.f, FALSE, HB_COLOR (255, 0, 0, 64) },
+    };
+    sweep_seam_data_t data = {FALSE, 0};
+
+    hb_paint_sweep_gradient_tiles (stops, 2, HB_PAINT_EXTEND_REPEAT,
+				   (float) -G_PI, (float) G_PI,
+				   record_sweep_seam, &data);
+
+    g_assert_true (data.seen);
+    g_assert_cmpint (hb_color_get_red (data.color), >=, 203);
+    g_assert_cmpint (hb_color_get_red (data.color), <=, 205);
+    g_assert_cmpint (hb_color_get_green (data.color), ==, 0);
+    g_assert_cmpint (hb_color_get_blue (data.color), >=, 50);
+    g_assert_cmpint (hb_color_get_blue (data.color), <=, 52);
+    g_assert_cmpint (hb_color_get_alpha (data.color), >=, 159);
+    g_assert_cmpint (hb_color_get_alpha (data.color), <=, 160);
+  }
+
+  /* A sweep that repeats more often than can be drawn is filled with
+   * the average of its colors, which is red at a half as well. */
+  {
+    hb_color_stop_t stops[2] = {
+      { 0.f, FALSE, HB_COLOR (0, 0, 255, 255) },
+      { 1.f, FALSE, HB_COLOR (255, 0, 0, 0) },
+    };
+    sweep_tiles_data_t data = {0, 0.f, 0, 0};
+
+    hb_paint_sweep_gradient_tiles (stops, 2, HB_PAINT_EXTEND_REPEAT,
+				   0.f, 1e-4f,
+				   check_sweep_tile, &data);
+
+    g_assert_cmpuint (data.tiles, ==, 1);
+    g_assert_cmphex (data.c0, ==, data.c1);
+    g_assert_cmpint (hb_color_get_red (data.c0), ==, 255);
+    g_assert_cmpint (hb_color_get_green (data.c0), ==, 0);
+    g_assert_cmpint (hb_color_get_blue (data.c0), ==, 0);
+    g_assert_cmpint (hb_color_get_alpha (data.c0), >=, 127);
+    g_assert_cmpint (hb_color_get_alpha (data.c0), <=, 128);
+  }
+}
+
+static void
+test_hb_paint_sweep_gradient_tiles_seam_color (void)
+{
+  /* A sweep from -90° to 270° reaches 0° a quarter of the way from
+   * its first stop to its second.  The color there is interpolated,
+   * and must keep each channel in its own place. */
+  hb_color_stop_t stops[2] = {
+    { 0.f, FALSE, HB_COLOR (0, 0, 255, 255) },   /* red */
+    { 1.f, FALSE, HB_COLOR (255, 0, 0, 255) },   /* blue */
+  };
+  sweep_seam_data_t data = {FALSE, 0};
+
+  hb_paint_sweep_gradient_tiles (stops, 2, HB_PAINT_EXTEND_PAD,
+				 (float) (-G_PI / 2), (float) (3 * G_PI / 2),
+				 record_sweep_seam, &data);
+
+  g_assert_true (data.seen);
+  g_assert_cmpint (hb_color_get_red (data.color), >=, 190);
+  g_assert_cmpint (hb_color_get_red (data.color), <=, 192);
+  g_assert_cmpint (hb_color_get_green (data.color), ==, 0);
+  g_assert_cmpint (hb_color_get_blue (data.color), >=, 63);
+  g_assert_cmpint (hb_color_get_blue (data.color), <=, 65);
+  g_assert_cmpint (hb_color_get_alpha (data.color), ==, 255);
+}
+
+static void
+test_hb_paint_normalize_color_line_hard_stops (void)
+{
+  /* Two stops that share an offset are a hard stop: the first is the
+   * color before the offset and the second the color after it.
+   * Sorting has to leave them in that order however many stops there
+   * are; these are stripes, each a pair of stops of one color. */
+#define STRIPES 40
+  hb_color_stop_t stops[2 * STRIPES + 1];
+  float min, max;
+
+  for (unsigned extra = 0; extra < 2; extra++)
+  {
+    unsigned len = 0;
+    for (unsigned i = 0; i < STRIPES; i++)
+      for (unsigned end = 0; end < 2; end++)
+      {
+	stops[len].offset = (float) (i + end) / STRIPES;
+	stops[len].is_foreground = FALSE;
+	stops[len].color = HB_COLOR (i, 0, 0, 255);
+	len++;
+      }
+    if (extra)
+    {
+      /* Out of order: one more stop of the first stripe, at the end. */
+      stops[len].offset = .5f / STRIPES;
+      stops[len].is_foreground = FALSE;
+      stops[len].color = HB_COLOR (0, 0, 0, 255);
+      len++;
+    }
+
+    hb_paint_normalize_color_line (stops, len, &min, &max);
+
+    g_assert_cmpfloat (min, ==, 0.f);
+    g_assert_cmpfloat (max, ==, 1.f);
+    for (unsigned i = 0; i < len; i++)
+    {
+      unsigned stripe = i < extra ? 0 : (i - extra) / 2;
+      if (i)
+	g_assert_cmpfloat (stops[i - 1].offset, <=, stops[i].offset);
+      g_assert_cmpuint (hb_color_get_blue (stops[i].color), ==, stripe);
+    }
+  }
+#undef STRIPES
+}
+
 
 #if defined(BUILD_MONOLITHIC)
 #define main(cnt, arr) hb_test_paint_main (cnt, arr)
@@ -1387,13 +1660,19 @@ main (int argc, char **argv)
   hb_test_add (test_color_glyph_user_data);
   hb_test_add (test_hb_paint_budget);
   hb_test_add (test_hb_paint_color_stops_budget);
+  hb_test_add (test_hb_paint_reduce_linear_anchors_on_a_line);
   hb_test_add (test_hb_paint_sweep_gradient_tiles_clipped);
+  hb_test_add (test_hb_paint_sweep_gradient_tiles_alpha);
+  hb_test_add (test_hb_paint_sweep_gradient_tiles_seam_color);
+  hb_test_add (test_hb_paint_normalize_color_line_hard_stops);
 
   for (unsigned int i = 0; i < G_N_ELEMENTS (paint_tests); i++)
   {
     hb_test_add_data_flavor (&paint_tests[i], paint_tests[i].output, test_hb_paint_ot);
     hb_test_add_data_flavor (&paint_tests[i], paint_tests[i].output, test_hb_paint_ft);
   }
+  for (unsigned int i = 0; i < G_N_ELEMENTS (bitmap_paint_tests); i++)
+    hb_test_add_data_flavor (&bitmap_paint_tests[i], bitmap_paint_tests[i].output, test_hb_paint_ot);
 
   hb_face_t *face = hb_test_open_font_file (TEST_GLYPHS);
   unsigned glyph_count = hb_face_get_glyph_count (face);
@@ -1418,6 +1697,7 @@ main (int argc, char **argv)
   hb_test_add (test_color_stops_ft);
   hb_test_add (test_ft_reentrant_paint);
   hb_test_add (test_color_stops_short_ft);
+  hb_test_add (test_linear_gradient_ill_formed);
 
   status = hb_test_run();
 

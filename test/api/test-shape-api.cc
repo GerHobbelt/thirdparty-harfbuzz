@@ -139,6 +139,78 @@ test_shape (void)
 }
 
 static void
+test_shape_not_found (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
+  hb_font_t *font = hb_font_create (face);
+  hb_font_funcs_t *funcs = hb_font_funcs_create ();
+  hb_font_funcs_set_nominal_glyph_func (funcs, glyph_func, NULL, NULL);
+  hb_font_funcs_set_glyph_h_advance_func (funcs, glyph_h_advance_func, NULL, NULL);
+  hb_font_set_funcs (font, funcs, NULL, NULL);
+  hb_font_funcs_destroy (funcs);
+
+  hb_buffer_t *buffer = hb_buffer_create ();
+  const hb_codepoint_t not_found[] = {42, 65536, HB_CODEPOINT_INVALID, 0};
+  for (unsigned i = 0; i < G_N_ELEMENTS (not_found); i++)
+  {
+    hb_buffer_clear_contents (buffer);
+    hb_buffer_set_not_found_glyph (buffer, not_found[i]);
+    hb_buffer_add_utf8 (buffer, "Tx", -1, 0, -1);
+    hb_buffer_guess_segment_properties (buffer);
+    hb_shape (font, buffer, NULL, 0);
+
+    g_assert_cmpuint (hb_buffer_get_length (buffer), ==, 2);
+    hb_glyph_info_t *info = hb_buffer_get_glyph_infos (buffer, NULL);
+    g_assert_cmpuint (info[0].codepoint, ==, 1);
+    g_assert_cmpuint (info[1].codepoint, ==, not_found[i]);
+    g_assert_cmpuint (info[0].cluster, ==, 0);
+    g_assert_cmpuint (info[1].cluster, ==, 1);
+    hb_glyph_position_t *pos = hb_buffer_get_glyph_positions (buffer, NULL);
+    g_assert_cmpint (pos[0].x_advance, ==, 10);
+    g_assert_cmpint (pos[1].x_advance, ==, 0);
+  }
+
+  hb_buffer_destroy (buffer);
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
+static void
+test_shape_not_found_variation_selector (void)
+{
+  hb_face_t *face = hb_face_create (NULL, 0);
+  hb_font_t *font = hb_font_create (face);
+  hb_font_funcs_t *funcs = hb_font_funcs_create ();
+  hb_font_funcs_set_nominal_glyph_func (funcs, glyph_func, NULL, NULL);
+  hb_font_set_funcs (font, funcs, NULL, NULL);
+  hb_font_funcs_destroy (funcs);
+
+  const hb_codepoint_t texts[][4] = {
+    {'x', 0, 0, 0},
+    {'x', 0xFE00, 0, 0},
+    {'x', 0xFE00, 0xFE01, 0},
+    {'x', 0x0301, 0xFE00, 0},
+  };
+  for (unsigned i = 0; i < G_N_ELEMENTS (texts); i++)
+  {
+    unsigned len = 0;
+    while (texts[i][len]) len++;
+    hb_buffer_t *buffer = hb_buffer_create ();
+    hb_buffer_set_not_found_glyph (buffer, 42);
+    hb_buffer_add_utf32 (buffer, texts[i], len, 0, len);
+    hb_buffer_guess_segment_properties (buffer);
+    hb_shape (font, buffer, NULL, 0);
+    hb_glyph_info_t *info = hb_buffer_get_glyph_infos (buffer, NULL);
+    g_assert_cmpuint (hb_buffer_get_length (buffer), >, 0);
+    g_assert_cmpuint (info[0].codepoint, ==, 42);
+    hb_buffer_destroy (buffer);
+  }
+
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
+static void
 test_shape_clusters (void)
 {
   hb_face_t *face;
@@ -220,11 +292,11 @@ test_shape_overlong_cluster_remerge (void)
   hb_buffer_t *buffer = hb_buffer_create ();
 
   hb_buffer_set_content_type (buffer, HB_BUFFER_CONTENT_TYPE_UNICODE);
-  for (unsigned i = 0; i < 20000; i++)
+  for (unsigned i = 0; i < 50000; i++)
     hb_buffer_add (buffer, 0x00AD, i);
-  hb_buffer_add (buffer, 'a', 20000);
-  for (unsigned i = 0; i < 20000; i++)
-    hb_buffer_add (buffer, 0x0301, 20001 + i);
+  hb_buffer_add (buffer, 'a', 50000);
+  for (unsigned i = 0; i < 50000; i++)
+    hb_buffer_add (buffer, 0x0301, 50001 + i);
   hb_buffer_guess_segment_properties (buffer);
   hb_buffer_set_direction (buffer, HB_DIRECTION_RTL);
 
@@ -315,11 +387,86 @@ test_shape_kerx_control_point_actions_are_charged (void)
 
   /* 131074 before the budget was charged. */
   g_assert_cmpuint (calls, >=, 2);
-  g_assert_cmpuint (calls, <=, 256);
+  g_assert_cmpuint (calls, <=, 2048);
 
   hb_buffer_destroy (buffer);
   hb_font_destroy (font);
   hb_font_destroy (parent);
+  hb_face_destroy (face);
+}
+
+static hb_face_t *
+create_morx_loop_face (void)
+{
+  /* A three-glyph font whose morx has one Contextual subtable.  On 'a',
+   * glyph 1, its machine substitutes the glyph by itself and goes from
+   * the start state back to the start state without advancing: a loop
+   * that only the buffer's work budget ends.  'b', glyph 2, is out of the
+   * machine's classes. */
+  static const char maxp[] = {0x00, 0x00, 0x50, 0x00,  0x00, 0x03};
+  static const char cmap[] = {0, 0,  0, 1,  0, 3,  0, 10,  0, 0, 0, 12,
+			      0, 12,  0, 0,  0, 0, 0, 28,  0, 0, 0, 0,  0, 0, 0, 1,
+			      0, 0, 0, 'a',  0, 0, 0, 'b',  0, 0, 0, 1};
+  static const unsigned char morx[] = {
+    0, 2, 0, 0,  0, 0, 0, 1,			/* version 2, one chain */
+    0, 0, 0, 1,  0, 0, 0, 104,  0, 0, 0, 0,  0, 0, 0, 1, /* default flags, length, no features, one subtable */
+    0, 0, 0, 88,  0x20, 0, 0, 1,  0, 0, 0, 1,	/* length, Contextual in any direction, flags */
+    0, 0, 0, 5,  0, 0, 0, 20,  0, 0, 0, 28,  0, 0, 0, 48, /* nClasses, class, state, entry offsets */
+    0, 0, 0, 64,				/* substitution tables at 64 */
+    0, 8,  0, 1,  0, 1,  0, 4,			/* class lookup format 8: glyph 1 is class 4 */
+    0, 0,  0, 0,  0, 0,  0, 0,  0, 1,		/* state 0: class 4 takes entry 1 */
+    0, 0,  0, 0,  0, 0,  0, 0,  0, 1,		/* state 1: class 4 takes entry 1 */
+    0, 0,  0x00, 0,  0xFF, 0xFF,  0xFF, 0xFF,	/* entry 0: to state 0 */
+    0, 0,  0x40, 0,  0xFF, 0xFF,  0, 0,		/* entry 1: to state 0, DontAdvance, substitute current by table 0 */
+    0, 0, 0, 4,					/* substitution table 0 at 4 */
+    0, 8,  0, 1,  0, 1,  0, 1			/* lookup format 8: glyph 1 becomes glyph 1 */
+  };
+
+  hb_face_t *builder = hb_face_builder_create ();
+  hb_blob_t *blob = hb_blob_create (maxp, sizeof (maxp), HB_MEMORY_MODE_READONLY, NULL, NULL);
+  hb_face_builder_add_table (builder, HB_TAG ('m','a','x','p'), blob);
+  hb_blob_destroy (blob);
+  blob = hb_blob_create (cmap, sizeof (cmap), HB_MEMORY_MODE_READONLY, NULL, NULL);
+  hb_face_builder_add_table (builder, HB_TAG ('c','m','a','p'), blob);
+  hb_blob_destroy (blob);
+  blob = hb_blob_create ((const char *) morx, sizeof (morx), HB_MEMORY_MODE_READONLY, NULL, NULL);
+  hb_face_builder_add_table (builder, HB_TAG ('m','o','r','x'), blob);
+  hb_blob_destroy (blob);
+  blob = hb_face_reference_blob (builder);
+  hb_face_destroy (builder);
+  hb_face_t *face = hb_face_create (blob, 0);
+  hb_blob_destroy (blob);
+  return face;
+}
+
+static void
+test_shape_aat_loop_budget (void)
+{
+  /* A state machine that stops advancing spends the buffer's work budget.
+   * The buffer must then report failure, as it does when OpenType lookups
+   * run the budget out, so that the caller can tell. */
+  static const char *shapers[] = {"ot", NULL};
+  hb_face_t *face = create_morx_loop_face ();
+  hb_font_t *font = hb_font_create (face);
+
+  hb_buffer_t *buffer = hb_buffer_create ();
+  hb_buffer_add_utf8 (buffer, "b", -1, 0, -1);
+  hb_buffer_guess_segment_properties (buffer);
+  hb_shape_full (font, buffer, NULL, 0, shapers);
+  g_assert_true (hb_buffer_allocation_successful (buffer));
+  g_assert_cmpuint (hb_buffer_get_length (buffer), ==, 1);
+  hb_buffer_destroy (buffer);
+
+  buffer = hb_buffer_create ();
+  hb_buffer_add_utf8 (buffer, "ab", -1, 0, -1);
+  hb_buffer_guess_segment_properties (buffer);
+  hb_shape_full (font, buffer, NULL, 0, shapers);
+  g_assert_false (hb_buffer_allocation_successful (buffer));
+  /* The glyphs are kept. */
+  g_assert_cmpuint (hb_buffer_get_length (buffer), ==, 2);
+  hb_buffer_destroy (buffer);
+
+  hb_font_destroy (font);
   hb_face_destroy (face);
 }
 #endif
@@ -352,7 +499,7 @@ test_shape_harfrust_budget (void)
 
   /* One ranged feature per entry; count times the text length exceeds the
    * per-text op budget, which HarfRust charges in setup_masks(). */
-  const unsigned num_features = 20000;
+  const unsigned num_features = 100000;
   hb_feature_t *features = g_new0 (hb_feature_t, num_features);
   for (unsigned i = 0; i < num_features; i++)
   {
@@ -478,7 +625,7 @@ test_shape_lookup_budget (void)
    * the buffer far beyond the text, so a small font can make the shaper
    * walk a long buffer thousands of times for one character.  Those passes
    * must be charged to the buffer's work budget, which one character sizes
-   * at 65536, and cut off when it runs out; each costs 65025 / 16. */
+   * at 524288, and cut off when it runs out; each costs 65025 / 16. */
   hb_face_t *face;
   hb_font_t *font;
   hb_buffer_t *buffer;
@@ -507,6 +654,55 @@ test_shape_lookup_budget (void)
   g_assert_false (hb_buffer_allocation_successful (buffer));
   /* The glyphs made so far are kept. */
   g_assert_cmpuint (hb_buffer_get_length (buffer), ==, 65025);
+  hb_buffer_destroy (buffer);
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
+static void
+test_shape_complex_font_budget (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("fonts/Duployan-Regular.dist.otf");
+  hb_font_t *font = hb_font_create (face);
+  hb_buffer_t *buffer = hb_buffer_create ();
+  const char *shapers[] = {"ot", NULL};
+
+  /* The dist lookups of this reduced monster font skip long runs of
+   * glyphs.  Charging each skipped glyph a full unit of work exhausted
+   * the allowance, even for this short sentence. */
+  const hb_codepoint_t text[] = {
+    0x1BC47, 0x1BC23, 0x20, 0x1BC02, 0x1BC46, 0x20, 0x1BC06,
+    0x1BC44, 0x1BC09, 0x1BC05, 0x1BC0B, 0x1BC41, 0x1BC04, 0x1BC03
+  };
+  hb_buffer_add_codepoints (buffer, text, G_N_ELEMENTS (text), 0, -1);
+  hb_buffer_guess_segment_properties (buffer);
+  g_assert_true (hb_shape_full (font, buffer, NULL, 0, shapers));
+  g_assert_true (hb_buffer_allocation_successful (buffer));
+
+  hb_buffer_destroy (buffer);
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
+static void
+test_shape_large_work_budget (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
+  hb_font_t *font = hb_font_create (face);
+  hb_buffer_t *buffer = hb_buffer_create ();
+  const char *shapers[] = {"ot", NULL};
+
+  /* The per-character allowance exceeds both signed and unsigned 32-bit
+   * arithmetic here.  It is clamped before assigning to the signed
+   * counter. */
+  hb_buffer_set_content_type (buffer, HB_BUFFER_CONTENT_TYPE_UNICODE);
+  for (unsigned i = 0; i < 70000; i++)
+    hb_buffer_add (buffer, 'a', i);
+  hb_buffer_guess_segment_properties (buffer);
+  g_assert_true (hb_shape_full (font, buffer, NULL, 0, shapers));
+  g_assert_true (hb_buffer_allocation_successful (buffer));
+  g_assert_cmpuint (hb_buffer_get_length (buffer), ==, 70000);
+
   hb_buffer_destroy (buffer);
   hb_font_destroy (font);
   hb_face_destroy (face);
@@ -564,14 +760,19 @@ main (int argc, const char **argv)
   hb_test_init (&argc, &argv);
 
   hb_test_add (test_shape);
+  hb_test_add (test_shape_not_found);
+  hb_test_add (test_shape_not_found_variation_selector);
   hb_test_add (test_shape_clusters);
   hb_test_add (test_shape_overlong_mark_cluster);
   hb_test_add (test_shape_overlong_cluster_remerge);
   hb_test_add (test_shape_harfrust_budget);
 #ifndef HB_NO_AAT
   hb_test_add (test_shape_kerx_control_point_actions_are_charged);
+  hb_test_add (test_shape_aat_loop_budget);
 #endif
   hb_test_add (test_shape_lookup_budget);
+  hb_test_add (test_shape_complex_font_budget);
+  hb_test_add (test_shape_large_work_budget);
   /* TODO test fallback shaper */
   /* TODO test shaper_full */
   hb_test_add (test_shape_list);

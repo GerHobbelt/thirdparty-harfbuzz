@@ -27,6 +27,7 @@
 #include "hb-test.h"
 #include "hb-raster.h"
 #include <hb-ot.h>
+#include <cmath>
 
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
@@ -368,6 +369,131 @@ test_budget (void)
   hb_face_destroy (face);
 }
 
+/* ── Test 9b: curves through NaN or infinity are not subdivided ──── */
+
+/* A transform that overflows turns the points of an outline into NaN and
+ * infinity.  No depth of subdivision flattens a curve through NaN, and
+ * none of its segments becomes an edge, so neither the clip box nor the
+ * edge cap stops it: it must cost nothing, not the 65,535 subdivisions
+ * of the depth cap.  A curve through infinity costs at most one
+ * subdivision per level. */
+static void
+test_budget_nonfinite_curve (void)
+{
+  hb_raster_draw_t *draw = hb_raster_draw_create_or_fail ();
+  hb_draw_funcs_t *funcs = hb_raster_draw_get_funcs (draw);
+
+  /* With the extents left to the outline, and with a clip box. */
+  for (unsigned fixed = 0; fixed < 2; fixed++)
+  {
+    hb_raster_draw_reset (draw);
+    if (fixed)
+    {
+      hb_raster_extents_t extents = {0, 0, 32, 32, 0};
+      hb_raster_draw_set_extents (draw, &extents);
+    }
+    g_assert_true (hb_draw_set_budget (funcs, draw, 256));
+
+    hb_draw_state_t st = HB_DRAW_STATE_DEFAULT;
+    hb_draw_move_to (funcs, draw, &st, NAN, NAN);
+    hb_draw_quadratic_to (funcs, draw, &st, NAN, NAN, NAN, NAN);
+    hb_draw_cubic_to (funcs, draw, &st, NAN, NAN, NAN, NAN, NAN, NAN);
+    /* NaN in one coordinate only, the other one flat. */
+    hb_draw_move_to (funcs, draw, &st, 1.f, 2.f);
+    hb_draw_quadratic_to (funcs, draw, &st, NAN, 3.f, 4.f, 4.f);
+    hb_draw_cubic_to (funcs, draw, &st, 6.f, 5.f, 8.f, NAN, 10.f, 7.f);
+    g_assert_cmpint (hb_draw_get_budget_remaining (funcs, draw), ==, 256);
+
+    hb_draw_move_to (funcs, draw, &st, 1.f, 2.f);
+    hb_draw_quadratic_to (funcs, draw, &st, 3.f, INFINITY, 4.f, 5.f);
+    hb_draw_quadratic_to (funcs, draw, &st, 6.f, 7.f, -INFINITY, 8.f);
+    hb_draw_cubic_to (funcs, draw, &st, INFINITY, 9.f, 10.f, -INFINITY, 11.f, 12.f);
+    hb_draw_cubic_to (funcs, draw, &st, 13.f, 14.f, 15.f, 16.f, INFINITY, INFINITY);
+    hb_draw_close_path (funcs, draw, &st);
+    g_assert_cmpint (hb_draw_get_budget_remaining (funcs, draw), >, 0);
+
+    hb_raster_image_destroy (hb_raster_draw_render (draw));
+  }
+
+  hb_raster_draw_destroy (draw);
+}
+
+/* ── Test 9c: a curve too large to flatten ends the outline ──────── */
+
+/* A curve is halved until it is flat, twelve times at most.  One that is
+ * still not flat then, as when a transform puts an outline astronomically
+ * far away, ends the outline: it costs a subdivision per level, and
+ * nothing that follows it is flattened. */
+static void
+test_budget_curve_too_large (void)
+{
+  hb_raster_draw_t *draw = hb_raster_draw_create_or_fail ();
+  hb_draw_funcs_t *funcs = hb_raster_draw_get_funcs (draw);
+  const int64_t budget = 1 << 20;
+
+  /* With the extents left to the outline, and with a clip box. */
+  for (unsigned fixed = 0; fixed < 2; fixed++)
+  {
+    /* A hundred thousand pixels across is within reach, here from a
+     * point within the clip box: the curve is flattened in full, and so
+     * is one after it. */
+    hb_raster_draw_reset (draw);
+    if (fixed)
+    {
+      hb_raster_extents_t extents = {0, 0, 32, 32, 0};
+      hb_raster_draw_set_extents (draw, &extents);
+    }
+    g_assert_true (hb_draw_set_budget (funcs, draw, budget));
+    hb_draw_state_t st = HB_DRAW_STATE_DEFAULT;
+    hb_draw_move_to (funcs, draw, &st, 0.f, 0.f);
+    hb_draw_quadratic_to (funcs, draw, &st, 1e5f, 0.f, 1e5f, 1e5f);
+    int64_t left = hb_draw_get_budget_remaining (funcs, draw);
+    g_assert_cmpint (left, <, budget);
+    hb_draw_move_to (funcs, draw, &st, 0.f, 0.f);
+    hb_draw_cubic_to (funcs, draw, &st, 20.f, 0.f, 30.f, 10.f, 30.f, 30.f);
+    g_assert_cmpint (hb_draw_get_budget_remaining (funcs, draw), <, left);
+
+    /* 1e30 pixels across is not. */
+    hb_raster_draw_reset (draw);
+    if (fixed)
+    {
+      hb_raster_extents_t extents = {0, 0, 32, 32, 0};
+      hb_raster_draw_set_extents (draw, &extents);
+    }
+    g_assert_true (hb_draw_set_budget (funcs, draw, budget));
+    st = HB_DRAW_STATE_DEFAULT;
+    hb_draw_move_to (funcs, draw, &st, 0.f, 0.f);
+    hb_draw_quadratic_to (funcs, draw, &st, 1e30f, 0.f, 1e30f, 1e30f);
+    left = hb_draw_get_budget_remaining (funcs, draw);
+    g_assert_cmpint (left, >=, budget - 12);
+    hb_draw_move_to (funcs, draw, &st, 0.f, 0.f);
+    hb_draw_cubic_to (funcs, draw, &st, 20.f, 0.f, 30.f, 10.f, 30.f, 30.f);
+    hb_draw_quadratic_to (funcs, draw, &st, 1e30f, 0.f, 1e30f, 1e30f);
+    g_assert_cmpint (hb_draw_get_budget_remaining (funcs, draw), ==, left);
+
+    /* Nor is a cubic that size. */
+    hb_raster_draw_reset (draw);
+    if (fixed)
+    {
+      hb_raster_extents_t extents = {0, 0, 32, 32, 0};
+      hb_raster_draw_set_extents (draw, &extents);
+    }
+    g_assert_true (hb_draw_set_budget (funcs, draw, budget));
+    st = HB_DRAW_STATE_DEFAULT;
+    hb_draw_move_to (funcs, draw, &st, 0.f, 0.f);
+    hb_draw_cubic_to (funcs, draw, &st, 1e30f, 0.f, 1e30f, 1e30f, 0.f, 1e30f);
+    left = hb_draw_get_budget_remaining (funcs, draw);
+    g_assert_cmpint (left, >=, budget - 12);
+    hb_draw_move_to (funcs, draw, &st, 0.f, 0.f);
+    hb_draw_cubic_to (funcs, draw, &st, 20.f, 0.f, 30.f, 10.f, 30.f, 30.f);
+    g_assert_cmpint (hb_draw_get_budget_remaining (funcs, draw), ==, left);
+
+    hb_raster_image_destroy (hb_raster_draw_render (draw));
+  }
+
+  hb_raster_draw_destroy (draw);
+}
+
 /* ── Test 10: outline budget bounds a real COLR walk, apart from pixels ─ */
 
 /* The paint session's outline and pixel budgets are separate.  A 1x1
@@ -551,6 +677,195 @@ test_paint_reset (void)
 /* Changing extents while a paint is in progress must not shrink group
  * surfaces below the root surface and initial clip they composite onto. */
 static void
+test_paint_recycle_null (void)
+{
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  g_assert_nonnull (paint);
+
+  /* A render that fails gives no image.  Recycling that does nothing,
+   * and leaves nothing for the next render to trip over. */
+  hb_raster_image_t *image = hb_raster_paint_render (paint);
+  g_assert_null (image);
+  hb_raster_paint_recycle_image (paint, image);
+
+  hb_raster_extents_t ext = {0, 0, 1, 1, 0};
+  hb_raster_paint_set_extents (paint, &ext);
+  image = hb_raster_paint_render (paint);
+  g_assert_nonnull (image);
+  hb_raster_image_destroy (image);
+
+  hb_raster_paint_destroy (paint);
+}
+
+/* The HSL modes take their luminosity weights from the W3C
+ * Compositing and Blending specification: 0.3, 0.59, 0.11. */
+static void
+test_paint_hsl_luminosity_weights (void)
+{
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  g_assert_nonnull (paint);
+  hb_paint_funcs_t *funcs = hb_raster_paint_get_funcs (paint);
+
+  hb_raster_extents_t ext = {0, 0, 1, 1, 0};
+  hb_raster_paint_set_extents (paint, &ext);
+  hb_paint_color (funcs, paint, true, HB_COLOR (255, 0, 0, 255)); /* blue */
+  hb_paint_push_group (funcs, paint);
+  hb_paint_color (funcs, paint, true, HB_COLOR (0, 0, 255, 255)); /* red */
+  hb_paint_pop_group (funcs, paint, HB_PAINT_COMPOSITE_MODE_HSL_LUMINOSITY);
+
+  hb_raster_image_t *img = hb_raster_paint_render (paint);
+  g_assert_nonnull (img);
+  const uint8_t *pixel = hb_raster_image_get_buffer (img);
+  /* Red's luminosity, 0.3, put on blue: (0.19, 0.19, 1.19), clipped
+   * to (0.2135, 0.2135, 1). */
+  g_assert_cmpuint (pixel[0], ==, 255); /* blue */
+  g_assert_cmpuint (pixel[1], ==, 54);  /* green */
+  g_assert_cmpuint (pixel[2], ==, 54);  /* red */
+  g_assert_cmpuint (pixel[3], ==, 255); /* alpha */
+
+  hb_raster_image_destroy (img);
+  hb_raster_paint_destroy (paint);
+}
+
+/* ── Test: a radial gradient ends at the tip of its cone ─────────── */
+
+static unsigned
+two_color_stops (hb_color_line_t *, void *,
+		 unsigned start, unsigned *count,
+		 hb_color_stop_t *stops, void *)
+{
+  static const hb_color_stop_t line[2] = {
+    {0.f, false, HB_COLOR (0, 0, 255, 255)},
+    {1.f, false, HB_COLOR (255, 0, 0, 255)},
+  };
+  if (count)
+  {
+    unsigned n = 0;
+    for (; n < *count && start + n < 2; n++)
+      stops[n] = line[start + n];
+    *count = n;
+  }
+  return 2;
+}
+
+static hb_paint_extend_t
+pad_extend (hb_color_line_t *, void *, void *)
+{ return HB_PAINT_EXTEND_PAD; }
+
+static void
+test_paint_radial_gradient_tip (void)
+{
+  /* A circle of radius 10 at x = 60 and one of radius 30 at x = 100:
+   * the radius is zero at x = 40, the tip of the cone they sweep.
+   * Past the tip the radius is negative, and a circle of negative
+   * radius is not painted: no mirror image of the cone. */
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  g_assert_nonnull (paint);
+  hb_paint_funcs_t *funcs = hb_raster_paint_get_funcs (paint);
+  hb_raster_extents_t extents = {0, 0, 120, 100, 0};
+  hb_raster_paint_set_extents (paint, &extents);
+
+  hb_color_line_t line = {};
+  line.get_color_stops = two_color_stops;
+  line.get_extend = pad_extend;
+
+  hb_paint_push_clip_rectangle (funcs, paint, 0, 0, 120, 100);
+  hb_paint_radial_gradient (funcs, paint, &line, 60, 50, 10, 100, 50, 30);
+  hb_paint_pop_clip (funcs, paint);
+
+  hb_raster_image_t *img = hb_raster_paint_render (paint);
+  g_assert_nonnull (img);
+  hb_raster_extents_t ext;
+  hb_raster_image_get_extents (img, &ext);
+  const uint8_t *buf = hb_raster_image_get_buffer (img);
+  /* Alpha along the axis of the cone. */
+  auto alpha = [&] (unsigned x) -> unsigned { return buf[50 * ext.stride + x * 4 + 3]; };
+  g_assert_cmpuint (alpha (110), ==, 255);
+  g_assert_cmpuint (alpha (80), ==, 255);
+  g_assert_cmpuint (alpha (45), ==, 255);
+  g_assert_cmpuint (alpha (35), ==, 0);
+  g_assert_cmpuint (alpha (10), ==, 0);
+
+  hb_raster_image_destroy (img);
+  hb_raster_paint_destroy (paint);
+}
+
+static hb_paint_extend_t
+extend_from_user_data (hb_color_line_t *, void *, void *user_data)
+{ return *(hb_paint_extend_t *) user_data; }
+
+/* Paints a radial gradient on 8 by 3 pixels, the middle row of which
+ * has its pixel centers on the line through the two centers; returns
+ * how many pixels of that row and of the other two are painted. */
+static void
+paint_radial_gradient_rows (float x0, float r0, float x1, float r1,
+			    hb_paint_extend_t extend,
+			    unsigned *middle, unsigned *others)
+{
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  g_assert_nonnull (paint);
+  hb_paint_funcs_t *funcs = hb_raster_paint_get_funcs (paint);
+  hb_raster_extents_t extents = {0, 0, 8, 3, 0};
+  hb_raster_paint_set_extents (paint, &extents);
+
+  hb_color_line_t line = {};
+  line.get_color_stops = two_color_stops;
+  line.get_extend = extend_from_user_data;
+  line.get_extend_user_data = &extend;
+
+  hb_paint_push_clip_rectangle (funcs, paint, 0, 0, 8, 3);
+  hb_paint_radial_gradient (funcs, paint, &line, x0, 1.5f, r0, x1, 1.5f, r1);
+  hb_paint_pop_clip (funcs, paint);
+
+  hb_raster_image_t *img = hb_raster_paint_render (paint);
+  g_assert_nonnull (img);
+  hb_raster_extents_t ext;
+  hb_raster_image_get_extents (img, &ext);
+  const uint8_t *buf = hb_raster_image_get_buffer (img);
+  *middle = *others = 0;
+  for (unsigned y = 0; y < 3; y++)
+    for (unsigned x = 0; x < 8; x++)
+      if (buf[y * ext.stride + x * 4 + 3])
+	(*(y == 1 ? middle : others))++;
+
+  hb_raster_image_destroy (img);
+  hb_raster_paint_destroy (paint);
+}
+
+/* If the radius is zero at both ends of a radial gradient it is zero
+ * all along, and circles of radius zero are not painted: nothing is,
+ * not even on the line through the two centers, where they are. */
+static void
+test_paint_radial_gradient_zero_radii (void)
+{
+  const hb_paint_extend_t extends[] = {HB_PAINT_EXTEND_PAD,
+				       HB_PAINT_EXTEND_REPEAT,
+				       HB_PAINT_EXTEND_REFLECT};
+  for (hb_paint_extend_t extend : extends)
+  {
+    unsigned middle, others;
+
+    /* Two centers, and one. */
+    paint_radial_gradient_rows (0.f, 0.f, 8.f, 0.f, extend, &middle, &others);
+    g_assert_cmpuint (middle, ==, 0);
+    g_assert_cmpuint (others, ==, 0);
+    paint_radial_gradient_rows (4.f, 0.f, 4.f, 0.f, extend, &middle, &others);
+    g_assert_cmpuint (middle, ==, 0);
+    g_assert_cmpuint (others, ==, 0);
+
+    /* A radius of zero at one end alone is the tip of a cone, or the
+     * middle of rings: those are painted, the pixel centered there
+     * too. */
+    paint_radial_gradient_rows (0.5f, 0.f, 7.5f, 3.f, extend, &middle, &others);
+    g_assert_cmpuint (middle, ==, 8);
+    g_assert_cmpuint (others, >, 0);
+    paint_radial_gradient_rows (4.5f, 0.f, 4.5f, 3.f, extend, &middle, &others);
+    g_assert_cmpuint (middle, ==, 8);
+    g_assert_cmpuint (others, ==, 16);
+  }
+}
+
+static void
 test_set_extents_while_painting (void)
 {
   hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
@@ -648,6 +963,118 @@ test_clip_rectangle_transformed (void)
     }
 }
 
+/* ── Test: color lines of no length, and ill-formed gradients ─────── */
+
+/* Paints the glyph of @unicode at 64 pixels to the em, which it fills,
+ * and returns the 64 by 64 picture. */
+static hb_raster_image_t *
+paint_em_square (hb_font_t *font, hb_codepoint_t unicode)
+{
+  hb_codepoint_t glyph;
+  g_assert_true (hb_font_get_nominal_glyph (font, unicode, &glyph));
+
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  g_assert_nonnull (paint);
+  hb_raster_extents_t ext = {0, 0, 64, 64, 0};
+  hb_raster_paint_set_extents (paint, &ext);
+  hb_raster_paint_glyph (paint, font, glyph);
+  hb_raster_image_t *img = hb_raster_paint_render (paint);
+  g_assert_nonnull (img);
+  hb_raster_paint_destroy (paint);
+  return img;
+}
+
+/* Whether the pixel of @img at (@x, @y) is red, blue, or not painted:
+ * 'r', 'b' or '-', and '?' for anything else. */
+static char
+em_square_pixel (hb_raster_image_t *img, unsigned x, unsigned y)
+{
+  hb_raster_extents_t ext;
+  hb_raster_image_get_extents (img, &ext);
+  const uint8_t *p = hb_raster_image_get_buffer (img) + (size_t) y * ext.stride + x * 4;
+  /* Blue, green, red, alpha; the font's blue has a little green. */
+  if (p[3] == 0) return '-';
+  if (p[3] != 255) return '?';
+  if (p[2] == 255 && p[1] == 0 && p[0] == 0) return 'r';
+  if (p[2] == 0 && p[1] < 80 && p[0] == 255) return 'b';
+  return '?';
+}
+
+/* What is painted along the row across the middle of @img, at 4, 21,
+ * 23, 32, 39 and 42 of its 64 pixels, and in a corner. */
+static void
+em_square_pixels (hb_raster_image_t *img, char pixels[8])
+{
+  static const unsigned at[7][2] = {{4, 32}, {21, 32}, {23, 32}, {32, 32},
+				    {39, 32}, {42, 32}, {60, 4}};
+  for (unsigned i = 0; i < 7; i++)
+    pixels[i] = em_square_pixel (img, at[i][0], at[i][1]);
+  pixels[7] = 0;
+}
+
+/* A color line whose stops all share one offset has no length.  If it
+ * pads it paints the first stop's color before that offset and the
+ * last stop's from it on, which is one color if it has one stop; if
+ * it repeats or reflects, nothing.  A gradient along no line, or of
+ * two circles that are one, is ill-formed and paints nothing; so is a
+ * linear gradient whose P1 or P2 is at its P0. */
+static void
+test_paint_color_line_no_length (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("fonts/colr-color-line-no-length.ttf");
+  hb_font_t *font = hb_font_create (face);
+  hb_font_set_scale (font, 64, 64);
+
+  const struct {
+    char unicode;
+    const char *pixels;
+  } tests[] = {
+    {'a', "rrrrrrr"}, /* linear, one red stop */
+    {'b', "rrbbbbb"}, /* linear, red and blue at one offset: they meet at 22.4 */
+    {'c', "bbrrrbb"}, /* radial, the same: red within 9.6 of the center */
+    {'d', "-------"}, /* as b, repeating */
+    {'e', "-------"}, /* as c, reflecting */
+    {'f', "rrrrrrr"}, /* radial, one red stop */
+    {'g', "-------"}, /* linear, along no line: P1 at P0 */
+    {'h', "-------"}, /* radial, of one circle */
+    {'i', "rrbbbbb"}, /* as b, with a green stop between the two */
+    {'j', "-------"}, /* linear, P2 at P0 */
+    {'k', "r?????b"}, /* linear, from red at 12.8 to blue at 51.2 */
+    {'l', "-------"}, /* the same, P2 at P0 */
+  };
+  for (const auto &t : tests)
+  {
+    hb_raster_image_t *img = paint_em_square (font, t.unicode);
+    char pixels[8];
+    em_square_pixels (img, pixels);
+    g_assert_cmpstr (pixels, ==, t.pixels);
+    hb_raster_image_destroy (img);
+  }
+
+  /* The anchors are where the variation deltas put them: at the end
+   * of the font's axis, P2 of k is at its P0, and that of l is not. */
+  hb_variation_t wght = {HB_TAG ('w','g','h','t'), 1.f};
+  hb_font_set_variations (font, &wght, 1);
+  const struct {
+    char unicode;
+    const char *pixels;
+  } varied[] = {
+    {'k', "-------"},
+    {'l', "r?????b"},
+  };
+  for (const auto &t : varied)
+  {
+    hb_raster_image_t *img = paint_em_square (font, t.unicode);
+    char pixels[8];
+    em_square_pixels (img, pixels);
+    g_assert_cmpstr (pixels, ==, t.pixels);
+    hb_raster_image_destroy (img);
+  }
+
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
 /* Raw BGRA input and SRC_OVER must use the same byte order, including
  * on rows that are not word-aligned. */
 static void
@@ -661,7 +1088,7 @@ test_image_bgra (void)
                          16, 32, 48, (char) 128, 16, 32, 48, (char) 128};
   hb_blob_t *blob = hb_blob_create (pixels, sizeof (pixels),
                                   HB_MEMORY_MODE_READONLY, nullptr, nullptr);
-  hb_glyph_extents_t gext = {0, 1, 2, -2};
+  hb_glyph_extents_t gext = {0, 2, 2, -2};
   hb_paint_funcs_t *funcs = hb_raster_paint_get_funcs (paint);
   hb_paint_push_group (funcs, paint);
   hb_paint_image (funcs, paint, blob, 2, 2,
@@ -678,6 +1105,186 @@ test_image_bgra (void)
   hb_raster_image_destroy (img);
   hb_blob_destroy (blob);
   hb_raster_paint_destroy (paint);
+}
+
+/* An image is painted over all of its extents, each of its pixels over
+ * its own share of them: the left pixels of this one, red, over the left
+ * half and the right ones, blue, over the right half, one color going
+ * over into the other between their centers. */
+static void
+test_image_extents (void)
+{
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  hb_raster_extents_t ext = {0, 0, 8, 8, 0};
+  hb_raster_paint_set_extents (paint, &ext);
+  const uint8_t red[] = {0, 0, 255, 255}, blue[] = {255, 0, 0, 255};
+  uint8_t pixels[2 * 2 * 4];
+  for (unsigned i = 0; i < 4; i++)
+    memcpy (pixels + i * 4, i % 2 ? blue : red, 4);
+  hb_blob_t *blob = hb_blob_create ((const char *) pixels, sizeof (pixels),
+				    HB_MEMORY_MODE_READONLY, nullptr, nullptr);
+  hb_glyph_extents_t gext = {0, 8, 8, -8};
+  hb_paint_funcs_t *funcs = hb_raster_paint_get_funcs (paint);
+  hb_paint_image (funcs, paint, blob, 2, 2,
+		  HB_PAINT_IMAGE_FORMAT_BGRA, 0.f, &gext);
+  hb_raster_image_t *img = hb_raster_paint_render (paint);
+  g_assert_nonnull (img);
+  hb_raster_image_get_extents (img, &ext);
+  g_assert_cmpuint (ext.width, ==, 8);
+  g_assert_cmpuint (ext.height, ==, 8);
+  for (unsigned y = 0; y < ext.height; y++)
+  {
+    const uint8_t *row = hb_raster_image_get_buffer (img) + y * ext.stride;
+    for (unsigned x = 0; x < ext.width; x++)
+      g_assert_cmpuint (row[x * 4 + 3], ==, 255);
+    /* The centers of the two pixels are at 2 and at 6. */
+    g_assert_cmpmem (row + 0 * 4, 4, red, 4);
+    g_assert_cmpmem (row + 1 * 4, 4, red, 4);
+    g_assert_cmpuint (row[3 * 4 + 2], >, row[4 * 4 + 2]);
+    g_assert_cmpuint (row[3 * 4 + 0], <, row[4 * 4 + 0]);
+    g_assert_cmpmem (row + 6 * 4, 4, blue, 4);
+    g_assert_cmpmem (row + 7 * 4, 4, blue, 4);
+  }
+  hb_raster_image_destroy (img);
+  hb_blob_destroy (blob);
+  hb_raster_paint_destroy (paint);
+}
+
+/* The rows of raw image data go down from where the extents of the
+ * image start, as those of a FreeType bitmap do: this one is red at the
+ * top and blue at the bottom. */
+static void
+test_image_bgra_rows (void)
+{
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  hb_raster_extents_t ext = {0, 0, 8, 8, 0};
+  hb_raster_paint_set_extents (paint, &ext);
+  const uint8_t red[] = {0, 0, 255, 255}, blue[] = {255, 0, 0, 255};
+  uint8_t pixels[2 * 2 * 4];
+  for (unsigned i = 0; i < 4; i++)
+    memcpy (pixels + i * 4, i < 2 ? red : blue, 4);
+  hb_blob_t *blob = hb_blob_create ((const char *) pixels, sizeof (pixels),
+				    HB_MEMORY_MODE_READONLY, nullptr, nullptr);
+  hb_glyph_extents_t gext = {0, 8, 8, -8};
+  hb_paint_funcs_t *funcs = hb_raster_paint_get_funcs (paint);
+  hb_paint_image (funcs, paint, blob, 2, 2,
+		  HB_PAINT_IMAGE_FORMAT_BGRA, 0.f, &gext);
+  hb_raster_image_t *img = hb_raster_paint_render (paint);
+  g_assert_nonnull (img);
+  hb_raster_image_get_extents (img, &ext);
+  g_assert_cmpuint (ext.height, ==, 8);
+  /* The rows of an hb_raster_image_t go up. */
+  const uint8_t *buffer = hb_raster_image_get_buffer (img);
+  for (unsigned x = 0; x < ext.width; x++)
+  {
+    g_assert_cmpmem (buffer + 7 * ext.stride + x * 4, 4, red, 4);
+    g_assert_cmpmem (buffer + 6 * ext.stride + x * 4, 4, red, 4);
+    g_assert_cmpmem (buffer + 1 * ext.stride + x * 4, 4, blue, 4);
+    g_assert_cmpmem (buffer + 0 * ext.stride + x * 4, 4, blue, 4);
+  }
+  hb_raster_image_destroy (img);
+  hb_blob_destroy (blob);
+  hb_raster_paint_destroy (paint);
+}
+
+/* An image that is shrunk is averaged, not read at one place for each
+ * pixel painted: this one has every fourth column red and the rest blue,
+ * and each pixel painted covers eight columns of it. */
+static void
+test_image_shrunk (void)
+{
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  hb_raster_extents_t ext = {0, 0, 2, 2, 0};
+  hb_raster_paint_set_extents (paint, &ext);
+  const uint8_t red[] = {0, 0, 255, 255}, blue[] = {255, 0, 0, 255};
+  uint8_t pixels[16 * 16 * 4];
+  for (unsigned i = 0; i < 16 * 16; i++)
+    memcpy (pixels + i * 4, i % 4 ? blue : red, 4);
+  hb_blob_t *blob = hb_blob_create ((const char *) pixels, sizeof (pixels),
+				    HB_MEMORY_MODE_READONLY, nullptr, nullptr);
+  hb_glyph_extents_t gext = {0, 2, 2, -2};
+  hb_paint_funcs_t *funcs = hb_raster_paint_get_funcs (paint);
+  hb_paint_image (funcs, paint, blob, 16, 16,
+		  HB_PAINT_IMAGE_FORMAT_BGRA, 0.f, &gext);
+  hb_raster_image_t *img = hb_raster_paint_render (paint);
+  g_assert_nonnull (img);
+  hb_raster_image_get_extents (img, &ext);
+  g_assert_cmpuint (ext.width, ==, 2);
+  g_assert_cmpuint (ext.height, ==, 2);
+  for (unsigned y = 0; y < ext.height; y++)
+    for (unsigned x = 0; x < ext.width; x++)
+    {
+      /* A quarter red and three quarters blue.  Read at its center
+       * alone, where a red column meets a blue one, it would be half
+       * of each. */
+      const uint8_t *pixel = hb_raster_image_get_buffer (img) + y * ext.stride + x * 4;
+      g_assert_cmpuint (pixel[0], >=, 189);
+      g_assert_cmpuint (pixel[0], <=, 193);
+      g_assert_cmpuint (pixel[1], ==, 0);
+      g_assert_cmpuint (pixel[2], >=, 62);
+      g_assert_cmpuint (pixel[2], <=, 66);
+      g_assert_cmpuint (pixel[3], ==, 255);
+    }
+  hb_raster_image_destroy (img);
+  hb_blob_destroy (blob);
+  hb_raster_paint_destroy (paint);
+}
+
+/* Paints four images of one translucent color, each of @texels by
+ * @texels pixels over @size by @size units, two by two from the origin,
+ * moved by @shift to the right and down.  Each is to paint the places
+ * on its left and top edges and none on its right and bottom ones. */
+static void
+paint_images_side_by_side (unsigned texels, int size, float shift)
+{
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  hb_raster_extents_t ext = {0, 0, 2 * (unsigned) size + 2, 2 * (unsigned) size + 2, 0};
+  hb_raster_paint_set_extents (paint, &ext);
+  const uint8_t color[] = {16, 32, 48, 128}, clear[] = {0, 0, 0, 0};
+  uint8_t pixels[16 * 16 * 4];
+  g_assert_cmpuint (texels, <=, 16);
+  for (unsigned i = 0; i < texels * texels; i++)
+    memcpy (pixels + i * 4, color, 4);
+  hb_blob_t *blob = hb_blob_create ((const char *) pixels, texels * texels * 4,
+				    HB_MEMORY_MODE_READONLY, nullptr, nullptr);
+  hb_paint_funcs_t *funcs = hb_raster_paint_get_funcs (paint);
+  hb_paint_push_transform (funcs, paint, 1.f, 0.f, 0.f, 1.f, shift, -shift);
+  for (int y = 0; y < 2; y++)
+    for (int x = 0; x < 2; x++)
+    {
+      hb_glyph_extents_t gext = {x * size, (y + 1) * size, size, -size};
+      hb_paint_image (funcs, paint, blob, texels, texels,
+		      HB_PAINT_IMAGE_FORMAT_BGRA, 0.f, &gext);
+    }
+  hb_paint_pop_transform (funcs, paint);
+  hb_raster_image_t *img = hb_raster_paint_render (paint);
+  g_assert_nonnull (img);
+  hb_raster_image_get_extents (img, &ext);
+  for (unsigned y = 0; y < ext.height; y++)
+    for (unsigned x = 0; x < ext.width; x++)
+      g_assert_cmpmem (hb_raster_image_get_buffer (img) + y * ext.stride + x * 4, 4,
+		       x < 2 * (unsigned) size && y < 2 * (unsigned) size ? color : clear, 4);
+  hb_raster_image_destroy (img);
+  hb_blob_destroy (blob);
+  hb_raster_paint_destroy (paint);
+}
+
+/* Images side by side share the edge between them.  What is read on
+ * that edge is painted by one of them: by both it would be painted
+ * twice, more opaque than the images are, and by neither there would
+ * be a seam.  So an image is not painted on the two edges across from
+ * where its extents start, and the four here paint as many pixels as
+ * they cover. */
+static void
+test_image_edges (void)
+{
+  /* Pixels are centered on the edges. */
+  paint_images_side_by_side (1, 1, .5f);
+  /* The same, with a scale that is not exact in floating point. */
+  paint_images_side_by_side (11, 47, .5f);
+  /* Shrunk, with places that are read from a pixel on the edges. */
+  paint_images_side_by_side (4, 1, .25f);
+  paint_images_side_by_side (7, 1, .125f);
 }
 
 static void
@@ -810,6 +1417,123 @@ test_budget_sweep (void)
   hb_raster_paint_destroy (paint);
 }
 
+/* ── Test: a glyph of many clipped layers renders in full ──────────── */
+
+static hb_raster_image_t *
+paint_with_budget (hb_font_t *font, hb_codepoint_t glyph, int64_t budget)
+{
+  hb_raster_paint_t *paint = hb_raster_paint_create_or_fail ();
+  g_assert_nonnull (paint);
+  g_assert_true (hb_paint_set_budget (hb_raster_paint_get_funcs (paint), paint, budget));
+  hb_raster_paint_glyph (paint, font, glyph);
+  hb_raster_image_t *img = hb_raster_paint_render (paint);
+  hb_raster_paint_destroy (paint);
+  return img;
+}
+
+/* Bitcount Ink paints a glyph from hundreds of layers, each clipped to a
+ * small element of it.  A layer costs what it can show, not a pass over
+ * the surface, so even where the surface is large the glyph renders in
+ * full within the default budget: just as it does with none. */
+static void
+test_paint_clipped_layers (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("fonts/BitcountInk.H.ttf");
+  hb_font_t *font = hb_font_create (face);
+  hb_font_set_scale (font, 1024, 1024);
+  hb_codepoint_t glyph;
+  g_assert_true (hb_font_get_nominal_glyph (font, 'H', &glyph));
+
+  hb_variation_t variations[] = {{HB_TAG ('E','L','X','P'), 0.f},
+				 {HB_TAG ('E','L','X','P'), 100.f}};
+  for (unsigned i = 0; i < G_N_ELEMENTS (variations); i++)
+  {
+    hb_font_set_variations (font, &variations[i], 1);
+
+    hb_raster_image_t *img = paint_with_budget (font, glyph, HB_BUDGET_DEFAULT);
+    hb_raster_image_t *full = paint_with_budget (font, glyph, HB_BUDGET_UNLIMITED);
+    g_assert_nonnull (img);
+    g_assert_nonnull (full);
+
+    hb_raster_extents_t ext, full_ext;
+    hb_raster_image_get_extents (img, &ext);
+    hb_raster_image_get_extents (full, &full_ext);
+    g_assert_cmpuint (ext.width, >, 400);
+    g_assert_cmpuint (ext.height, >, 400);
+    g_assert_cmpuint (ext.stride * ext.height, ==, full_ext.stride * full_ext.height);
+    g_assert_true (!memcmp (hb_raster_image_get_buffer (img),
+			    hb_raster_image_get_buffer (full),
+			    ext.stride * ext.height));
+
+    hb_raster_image_destroy (img);
+    hb_raster_image_destroy (full);
+  }
+
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
+/* ── Test: a sweep whose color line has no length ──────────────────── */
+
+/* Count the opaque blue and opaque red pixels of a painted glyph. */
+static void
+count_blue_red (hb_font_t *font, hb_codepoint_t unicode,
+		unsigned *blue, unsigned *red)
+{
+  hb_codepoint_t glyph;
+  g_assert_true (hb_font_get_nominal_glyph (font, unicode, &glyph));
+  hb_raster_image_t *img = paint_with_budget (font, glyph, HB_BUDGET_DEFAULT);
+
+  *blue = *red = 0;
+  if (!img) return;
+  hb_raster_extents_t ext;
+  hb_raster_image_get_extents (img, &ext);
+  const uint8_t *buf = hb_raster_image_get_buffer (img);
+  for (unsigned y = 0; y < ext.height; y++)
+    for (unsigned x = 0; x < ext.width; x++)
+    {
+      uint32_t px;
+      memcpy (&px, buf + y * ext.stride + x * 4, 4);
+      if (px == 0xFF0000FFu) (*blue)++;
+      if (px == 0xFFFF0000u) (*red)++;
+    }
+  hb_raster_image_destroy (img);
+}
+
+/* With equal start and end angles, or all stops at one offset, a sweep's
+ * color line has no length.  Padded, it still paints: the first color up
+ * to the angle and the last from it on.  Repeated or reflected, it paints
+ * nothing. */
+static void
+test_paint_sweep_coincident (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("fonts/test_glyphs-glyf_colr_1.ttf");
+  hb_font_t *font = hb_font_create (face);
+  unsigned blue, red;
+
+  /* sweep_coincident_{angles,stops}_{forward,reverse}_blue_red_pad:
+   * a quarter of a circle in one color, the rest in the other. */
+  const hb_codepoint_t pad[] = {0xF1300, 0xF1306, 0xF130C, 0xF1312};
+  for (unsigned i = 0; i < G_N_ELEMENTS (pad); i++)
+  {
+    count_blue_red (font, pad[i], &blue, &red);
+    g_assert_cmpuint (MIN (blue, red), >, 10000);
+    g_assert_cmpuint (MAX (blue, red), >, 2 * MIN (blue, red));
+  }
+
+  /* ..._reflect and ..._repeat */
+  const hb_codepoint_t empty[] = {0xF1301, 0xF1302, 0xF130D, 0xF130E};
+  for (unsigned i = 0; i < G_N_ELEMENTS (empty); i++)
+  {
+    count_blue_red (font, empty[i], &blue, &red);
+    g_assert_cmpuint (blue, ==, 0);
+    g_assert_cmpuint (red, ==, 0);
+  }
+
+  hb_font_destroy (font);
+  hb_face_destroy (face);
+}
+
 /* ── main ────────────────────────────────────────────────────────── */
 
 #if defined(BUILD_MONOLITHIC)
@@ -830,16 +1554,29 @@ main (int argc, const char **argv)
   hb_test_add (test_image_nonfinite_transform);
   hb_test_add (test_set_glyph_extents_overflow);
   hb_test_add (test_budget);
+  hb_test_add (test_budget_nonfinite_curve);
+  hb_test_add (test_budget_curve_too_large);
   hb_test_add (test_budget_colr_outline);
   hb_test_add (test_background_premultiplied);
   hb_test_add (test_background_stride);
   hb_test_add (test_paint_reset);
+  hb_test_add (test_paint_recycle_null);
   hb_test_add (test_set_extents_while_painting);
   hb_test_add (test_clip_rectangle_transformed);
+  hb_test_add (test_paint_radial_gradient_tip);
+  hb_test_add (test_paint_radial_gradient_zero_radii);
   hb_test_add (test_image_bgra);
+  hb_test_add (test_image_extents);
+  hb_test_add (test_image_bgra_rows);
+  hb_test_add (test_image_shrunk);
+  hb_test_add (test_image_edges);
   hb_test_add (test_image_png_byte_order);
   hb_test_add (test_image_png_size);
+  hb_test_add (test_paint_color_line_no_length);
   hb_test_add (test_budget_sweep);
+  hb_test_add (test_paint_clipped_layers);
+  hb_test_add (test_paint_hsl_luminosity_weights);
+  hb_test_add (test_paint_sweep_coincident);
 
   return hb_test_run ();
 }

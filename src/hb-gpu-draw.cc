@@ -61,6 +61,21 @@ acc_emit (hb_gpu_draw_t *g,
     return;
   }
 
+  /* hb_gpu_draw_encode() bounds every point by the extents before
+   * quantizing to int16, but a NaN point (an overflowed transform
+   * gives inf - inf) does not show in the extents.  Infinite points
+   * fail that check anyway.
+   *
+   * The sum is not finite if any coordinate is not, which makes this
+   * one test instead of six.  Finite coordinates could only make it
+   * infinite by overflowing double, and a point that far out fails
+   * to encode anyway. */
+  if (unlikely (!std::isfinite ((p1x + p1y) + (p2x + p2y) + (p3x + p3y))))
+  {
+    g->success = false;
+    return;
+  }
+
   hb_gpu_curve_t c = {p1x, p1y, p2x, p2y, p3x, p3y, contour_start};
   if (unlikely (!g->curves.push_or_fail (c)))
   {
@@ -172,7 +187,7 @@ hb_gpu_draw_t::acc_cubic_to (double c1x, double c1y,
   hb_gpu_cubic_to_quadratics (this,
 			      {c0x, c0y}, {c1x, c1y},
 			      {c2x, c2y}, {x, y},
-			      HB_GPU_CU2QU_TOLERANCE, 0);
+			      HB_GPU_CU2QU_TOLERANCE);
 }
 
 
@@ -433,9 +448,10 @@ _hb_gpu_draw_get_extents (hb_gpu_draw_t      *draw,
  * RGBA16I texels (8 bytes each) to be uploaded to a texture
  * buffer object.
  *
- * The returned blob owns its own copy of the data.  On success
- * @draw is auto-cleared so it can be reused for the next glyph;
- * user configuration (font scale) is preserved.
+ * The returned blob owns its own copy of the data.  @draw is
+ * auto-cleared, whether or not encoding succeeds, so it can be
+ * reused for the next glyph; user configuration (font scale) is
+ * preserved.
  *
  * Return value: (transfer full):
  * An #hb_blob_t containing the encoded data, or `NULL` if encoding
@@ -1157,9 +1173,15 @@ hb_gpu_draw_reset (hb_gpu_draw_t *draw)
  * Returns a blob to the encoder for potential reuse.
  * The caller transfers ownership of @blob.
  *
- * Currently this simply destroys the blob.  A future version
- * may reclaim the underlying buffer to avoid allocation on the
- * next hb_gpu_draw_encode() call.
+ * If @blob came from hb_gpu_draw_encode() its underlying buffer
+ * will be reused by the next call to hb_gpu_draw_encode(),
+ * avoiding a malloc / blob allocation per glyph.
+ *
+ * Finish accessing @blob and its data before recycling, and do
+ * not keep other references to it: later encodes may reuse the
+ * blob and overwrite its data.  An immutable blob, such as one
+ * that a sub-blob was created from, is not reused; it is simply
+ * destroyed.
  *
  * Since: 14.0.0
  **/

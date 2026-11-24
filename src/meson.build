@@ -528,7 +528,7 @@ if conf.get('HAVE_GDI', 0) == 1
   harfbuzz_deps += gdi_uniscribe_deps
 endif
 
-if conf.get('HAVE_GRAPHITE2', 0) == 1
+if conf.get('HAVE_GRAPHITE', 0) == 1
   hb_sources += hb_graphite2_sources
   hb_headers += hb_graphite2_headers
   harfbuzz_deps += [graphite2_dep, graphite_dep]
@@ -651,6 +651,12 @@ if cpp_is_microsoft_compiler
   endif
   hb_so_version = ''
 else
+  # GNU-style toolchains export every global symbol of a DLL unless some
+  # symbol is marked for export. Not for default_library=both, where the
+  # static library is made of the same objects.
+  if host_machine.system() == 'windows' and get_option('default_library') == 'shared'
+    extra_hb_cpp_args += '-DHB_DLL_EXPORT'
+  endif
   hb_so_version = '0'
 endif
 
@@ -744,6 +750,7 @@ hb_vector_sources = files(
   'hb-vector-paint.cc',
   'hb-vector-paint-svg.cc',
   'hb-vector-paint-pdf.cc',
+  'hb-vector-paint-pdf-image.hh',
   'hb-vector-path.hh',
   'hb-vector-buf.hh',
   'hb-static.cc',
@@ -973,7 +980,6 @@ if get_option('tests').enabled()
   # error LNK2019: unresolved external symbol "unsigned __int64 const * const _hb_NullPool"
   if not cpp_is_microsoft_compiler
     noinst_programs = {
-      'main': 'main.cc',
       'test-basics': 'test.cc',
       'test-buffer-serialize': 'test-buffer-serialize.cc',
       'test-ot-meta': 'test-ot-meta.cc',
@@ -999,6 +1005,7 @@ if get_option('tests').enabled()
     'test-array': ['test-array.cc'],
     'test-bimap': ['test-bimap.cc', 'hb-static.cc'],
     'test-bit-vector': ['test-bit-vector.cc', 'hb-static.cc'],
+    'test-buffer': ['test-buffer.cc', 'hb-static.cc'],
     'test-gdef-cache': ['test-gdef-cache.cc', 'hb-static.cc'],
     'test-cache': ['test-cache.cc'],
     'test-cff': ['test-cff.cc', 'hb-static.cc'],
@@ -1043,6 +1050,14 @@ if get_option('tests').enabled()
   endforeach
 
   if not cpp_is_microsoft_compiler and not get_option('subset').disabled()
+    test('test-subset-glyf-budget', executable('test-subset-glyf-budget', ['test-subset-glyf-budget.cc', 'hb-static.cc'],
+      include_directories: incconfig,
+      cpp_args: cpp_args + ['-UNDEBUG'],
+      dependencies: [libharfbuzz_dep, libharfbuzz_subset_dep],
+      install: false,
+    ),
+      args: [meson.project_source_root() / 'test/subset/data/fonts/Handjet.ttf'],
+      suite: ['src', 'subset'])
     test('test-cbdt-cache', executable('test-cbdt-cache', ['test-cbdt-cache.cc', 'hb-static.cc'],
       include_directories: incconfig,
       cpp_args: cpp_args + ['-UNDEBUG'],
@@ -1060,7 +1075,7 @@ if get_option('tests').enabled()
       suite: ['src', 'subset'])
   endif
 
-  if not cpp_is_microsoft_compiler and conf.get('HAVE_GRAPHITE2', 0) == 1
+  if not cpp_is_microsoft_compiler and conf.get('HAVE_GRAPHITE', 0) == 1
     test('test-graphite2-buffer', executable('test-graphite2-buffer', ['test-graphite2-buffer.cc', 'hb-static.cc'],
       include_directories: incconfig,
       cpp_args: cpp_args + ['-UNDEBUG'],
