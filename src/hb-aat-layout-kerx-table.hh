@@ -256,6 +256,7 @@ struct KerxSubTableFormat1
 	 * other subtables in kerx.  Discovered via testing. */
 	kernAction (&table->machine + table->kernAction),
 	depth (0),
+	stack_pos (0),
 	crossStream (table->header.coverage & table->header.CrossStream) {}
 
     HB_AAT_TRANSITION_INLINE
@@ -265,12 +266,16 @@ struct KerxSubTableFormat1
     {
       unsigned int flags = entry.flags;
 
-      if (flags & Format1EntryT::Reset)
-	depth = 0;
-
+      /* CoreText ignores the kerx Reset flag. */
       if (flags & Format1EntryT::Push)
       {
-	if (likely (depth < ARRAY_LENGTH (stack)))
+	if (Types::extended)
+	{
+	  stack[stack_pos] = buffer->idx;
+	  stack_pos = (stack_pos + 1) % ARRAY_LENGTH (stack);
+	  depth = hb_min (depth + 1, (unsigned) ARRAY_LENGTH (stack));
+	}
+	else if (likely (depth < ARRAY_LENGTH (stack)))
 	  stack[depth++] = buffer->idx;
 	else
 	  depth = 0; /* Probably not what CoreText does, but better? */
@@ -281,9 +286,9 @@ struct KerxSubTableFormat1
 	unsigned int tuple_count = hb_max (1u, table->header.tuple_count ());
 
 	unsigned int kern_idx = Format1EntryT::kernActionIndex (entry);
-	kern_idx = Types::byteOffsetToIndex (kern_idx, &table->machine, kernAction.arrayZ);
+	kern_idx = Types::offsetToIndex (kern_idx, &table->machine, kernAction.arrayZ);
 	const FWORD *actions = &kernAction[kern_idx];
-	if (!c->sanitizer.check_array (actions, depth, tuple_count))
+	if (!Types::extended && !c->sanitizer.check_array (actions, depth, tuple_count))
 	{
 	  depth = 0;
 	  return;
@@ -292,20 +297,57 @@ struct KerxSubTableFormat1
 
 	hb_mask_t kern_mask = c->plan->kern_mask;
 
-	/* From Apple 'kern' spec:
-	 * "Each pops one glyph from the kerning stack and applies the kerning value to it.
-	 * The end of the list is marked by an odd value... */
+	/* Contrary to the kerx spec's destructive pops, CoreText retains an
+	 * eight-slot circular history and walks it anew for each action list.
+	 * See test/shape/data/in-house/tests/aat-kerx.tests for native cases. */
+	unsigned int cursor = stack_pos;
 	bool last = false;
 	while (!last && depth)
 	{
-	  unsigned int idx = stack[--depth];
+	  if (Types::extended)
+	  {
+	    if (unlikely (buffer->max_ops-- <= 0))
+	    {
+	      buffer->successful = false;
+	      return;
+	    }
+	    if (!actions->sanitize (&c->sanitizer))
+	    {
+	      depth = 0;
+	      return;
+	    }
+	    hb_barrier ();
+	    /* kerx ends a list with a single 0xFFFF, without popping a glyph. */
+	    if (*actions == -1)
+	      break;
+	    if (tuple_count > 1 && !c->sanitizer.check_array (actions, 1, tuple_count))
+	    {
+	      depth = 0;
+	      return;
+	    }
+	    hb_barrier ();
+	  }
+
+	  unsigned int idx;
+	  if (Types::extended)
+	  {
+	    cursor = (cursor + ARRAY_LENGTH (stack) - 1) % ARRAY_LENGTH (stack);
+	    idx = stack[cursor];
+	  }
+	  else
+	    idx = stack[--depth];
 	  int v = *actions;
 	  actions += tuple_count;
 	  if (idx >= buffer->len) continue;
+	  if (Types::extended)
+	    buffer->unsafe_to_break (idx, buffer->idx + 1);
 
-	  /* "The end of the list is marked by an odd value..." */
-	  last = v & 1;
-	  v &= ~1;
+	  /* kern uses the low bit of the final value as the list terminator. */
+	  if (!Types::extended)
+	  {
+	    last = v & 1;
+	    v &= ~1;
+	  }
 
 	  hb_glyph_position_t &o = buffer->pos[idx];
 
@@ -367,8 +409,9 @@ struct KerxSubTableFormat1
     const KerxSubTableFormat1 *table;
     private:
     const UnsizedArrayOf<FWORD> &kernAction;
-    unsigned int stack[8];
+    unsigned int stack[8] = {};
     unsigned int depth;
+    unsigned int stack_pos;
     bool crossStream;
   };
 
@@ -632,6 +675,13 @@ struct KerxSubTableFormat4
 	  }
 	  break;
 	}
+	hb_position_t base_offset = OT::Layout::GPOS_impl::resolve_cross_offset (buffer->pos, buffer->len, mark,
+										 buffer->props.direction,
+										 c->buffer_is_reversed);
+	if (HB_DIRECTION_IS_HORIZONTAL (buffer->props.direction))
+	  o.y_offset = hb_saturate_add (o.y_offset, base_offset);
+	else
+	  o.x_offset = hb_saturate_add (o.x_offset, base_offset);
 	o.attach_type() = OT::Layout::GPOS_impl::ATTACH_TYPE_MARK;
 	o.attach_chain() = (int) mark - (int) buffer->idx;
 	if (c->buffer_is_reversed)
