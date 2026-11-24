@@ -388,7 +388,7 @@ test_instance_cff2_nested_delta (void)
     hb_glyph_extents_t extents;
     g_assert_true (hb_font_get_nominal_glyph (font, mode == 4 ? 65 : 66, &glyph));
     g_assert_true (hb_font_get_glyph_extents (font, glyph, &extents));
-    g_assert_cmpint (extents.width, ==, mode == 4 ? 135 : 115);
+    g_assert_cmpint (extents.width, ==, (mode == 4 ? 135 : 115));
     hb_font_destroy (font);
     hb_face_destroy (subset);
   }
